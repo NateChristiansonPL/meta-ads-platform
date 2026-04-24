@@ -1,0 +1,696 @@
+import { trpc } from "@/lib/trpc";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Streamdown } from "streamdown";
+
+export interface SkillConfig {
+  skillId: string;
+  skillName: string;
+  description: string;
+  badge: string;
+  color: string;
+  hasDateRange?: boolean;
+  hasCompare?: boolean;
+  hasModules?: boolean;
+  modules?: Array<{ id: string; label: string; sub: string }>;
+  extraFields?: React.ReactNode;
+}
+
+interface SkillRunnerProps {
+  config: SkillConfig;
+}
+
+const DATE_PRESETS = [
+  { value: "last_7d", label: "Last 7 Days" },
+  { value: "last_14d", label: "Last 14 Days" },
+  { value: "last_30d", label: "Last 30 Days" },
+  { value: "last_90d", label: "Last 90 Days" },
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
+];
+
+export default function SkillRunner({ config }: SkillRunnerProps) {
+  const { data: activeTokens = [] } = trpc.tokens.listActive.useQuery();
+
+  const [tokenId, setTokenId] = useState<number | null>(null);
+  const [bmId, setBmId] = useState("");
+  const [adAccountId, setAdAccountId] = useState("");
+  const [adAccountName, setAdAccountName] = useState("");
+  const [datePreset, setDatePreset] = useState("last_7d");
+  const [campaignFilter, setCampaignFilter] = useState<"active" | "last_30d" | "inactive">("active");
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [enabledModules, setEnabledModules] = useState<string[]>(config.modules?.map((m) => m.id) ?? []);
+  const [additionalInstructions, setAdditionalInstructions] = useState("");
+  const [compare, setCompare] = useState(false);
+
+  const [runId, setRunId] = useState<number | null>(null);
+  const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [report, setReport] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
+
+  const selectedToken = activeTokens.find((t) => t.id === tokenId);
+
+  const { data: adAccounts = [], isLoading: loadingAccounts } = trpc.meta.getAdAccounts.useQuery(
+    { businessManagerId: bmId, tokenId: tokenId! },
+    { enabled: !!bmId && !!tokenId }
+  );
+
+  const { data: campaigns = [], isLoading: loadingCampaigns } = trpc.meta.getCampaigns.useQuery(
+    { adAccountId, tokenId: tokenId!, statusFilter: campaignFilter },
+    { enabled: !!adAccountId && !!tokenId }
+  );
+
+  const startRun = trpc.runs.start.useMutation();
+  const completeRun = trpc.runs.complete.useMutation();
+
+  const canRun = !!tokenId && !!adAccountId && status !== "running";
+
+  async function handleRun() {
+    if (!canRun) return;
+    setStatus("running");
+    setReport(null);
+    setErrorMsg(null);
+    setStartTime(Date.now());
+
+    try {
+      const { runId: id } = await startRun.mutateAsync({
+        skillId: config.skillId,
+        skillName: config.skillName,
+        adAccountId,
+        adAccountName,
+        businessManagerId: bmId,
+        datePreset,
+        campaignIds: selectedCampaigns,
+        extraParams: {
+          modules: enabledModules,
+          additionalInstructions,
+          compare,
+        },
+      });
+      setRunId(id);
+
+      // Simulate the skill running (in production this would call the Manus skill API)
+      await new Promise((r) => setTimeout(r, 1500));
+
+      const mockReport = generateMockReport(config, adAccountName || adAccountId, datePreset);
+      const durationMs = Date.now() - (startTime ?? Date.now());
+
+      await completeRun.mutateAsync({
+        runId: id,
+        status: "success",
+        reportMarkdown: mockReport,
+        durationMs,
+      });
+
+      setReport(mockReport);
+      setStatus("success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      if (runId) {
+        await completeRun.mutateAsync({ runId, status: "error", errorMessage: msg });
+      }
+      setErrorMsg(msg);
+      setStatus("error");
+    }
+  }
+
+  function handleReset() {
+    setStatus("idle");
+    setReport(null);
+    setErrorMsg(null);
+    setRunId(null);
+    setStartTime(null);
+  }
+
+  return (
+    <div className="flex gap-6 h-full">
+      {/* ── Config Panel ─────────────────────────────────────────────────── */}
+      <div
+        className="flex flex-col gap-4 shrink-0 overflow-y-auto"
+        style={{ width: 360 }}
+      >
+        {/* Account Selection */}
+        <Section title="Account Selection">
+          {/* Token */}
+          <FormField label="Business Manager Token">
+            {activeTokens.length === 0 ? (
+              <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(237,19,95,0.1)", color: "#ED135F", border: "1px solid rgba(237,19,95,0.2)" }}>
+                No tokens configured. Ask your admin to add a token in the Token Vault.
+              </div>
+            ) : (
+              <Select
+                value={tokenId?.toString() ?? ""}
+                onChange={(v) => {
+                  const t = activeTokens.find((x) => x.id === parseInt(v));
+                  setTokenId(t?.id ?? null);
+                  setBmId(t?.businessManagerId ?? "");
+                  setAdAccountId("");
+                  setAdAccountName("");
+                }}
+                placeholder="Select a Business Manager…"
+                options={activeTokens.map((t) => ({ value: t.id.toString(), label: t.label }))}
+              />
+            )}
+          </FormField>
+
+          {/* Ad Account */}
+          <FormField label="Ad Account">
+            {!tokenId ? (
+              <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                Select a Business Manager first
+              </div>
+            ) : loadingAccounts ? (
+              <div className="flex items-center gap-2 text-xs py-2 px-3" style={{ color: "rgba(255,255,255,0.4)" }}>
+                <Loader2 size={12} className="animate-spin" /> Loading accounts…
+              </div>
+            ) : (
+              <Select
+                value={adAccountId}
+                onChange={(v) => {
+                  const acc = adAccounts.find((a) => a.id === v);
+                  setAdAccountId(v);
+                  setAdAccountName(acc?.name ?? v);
+                }}
+                placeholder="Select an ad account…"
+                options={adAccounts.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` }))}
+              />
+            )}
+          </FormField>
+
+          {/* Campaigns */}
+          <FormField label={<span>Campaigns <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.7rem" }}>(optional — leave empty to analyze all active)</span></span>}>
+            <div className="flex gap-1.5 mb-2">
+              {(["active", "last_30d", "inactive"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => { setCampaignFilter(f); setSelectedCampaigns([]); }}
+                  className="text-xs px-2.5 py-1 rounded-full font-semibold transition-all"
+                  style={{
+                    background: campaignFilter === f ? config.color + "25" : "rgba(255,255,255,0.06)",
+                    color: campaignFilter === f ? config.color : "rgba(255,255,255,0.5)",
+                    border: `1px solid ${campaignFilter === f ? config.color + "40" : "transparent"}`,
+                  }}
+                >
+                  {f === "last_30d" ? "Last 30 Days" : f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+            {!adAccountId ? (
+              <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                Select an ad account first
+              </div>
+            ) : loadingCampaigns ? (
+              <div className="flex items-center gap-2 text-xs py-2 px-3" style={{ color: "rgba(255,255,255,0.4)" }}>
+                <Loader2 size={12} className="animate-spin" /> Loading campaigns…
+              </div>
+            ) : (
+              <MultiSelect
+                options={campaigns.map((c) => ({ value: c.id, label: c.name }))}
+                selected={selectedCampaigns}
+                onChange={setSelectedCampaigns}
+                color={config.color}
+                placeholder="Select campaigns (or leave empty for all)…"
+              />
+            )}
+          </FormField>
+        </Section>
+
+        {/* Analysis Period */}
+        <Section title="Analysis Period">
+          <FormField label="Date Range">
+            <Select
+              value={datePreset}
+              onChange={setDatePreset}
+              options={DATE_PRESETS.map((d) => ({ value: d.value, label: d.label }))}
+            />
+          </FormField>
+          {config.hasCompare && (
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <div
+                onClick={() => setCompare((c) => !c)}
+                className="w-9 h-5 rounded-full transition-all relative cursor-pointer"
+                style={{ background: compare ? config.color : "rgba(255,255,255,0.15)" }}
+              >
+                <div
+                  className="w-4 h-4 rounded-full absolute top-0.5 transition-all"
+                  style={{ background: "#fff", left: compare ? "calc(100% - 18px)" : "2px" }}
+                />
+              </div>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>
+                Compare to prior period
+                <span className="block" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.65rem" }}>(prior window auto-matched to selected date range)</span>
+              </span>
+            </label>
+          )}
+        </Section>
+
+        {/* Modules */}
+        {config.hasModules && config.modules && (
+          <Section title="Analysis Modules">
+            <div className="grid grid-cols-2 gap-2">
+              {config.modules.map((m) => {
+                const on = enabledModules.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setEnabledModules((prev) => on ? prev.filter((x) => x !== m.id) : [...prev, m.id])}
+                    className="flex items-start gap-2 p-2.5 rounded-lg text-left transition-all"
+                    style={{
+                      background: on ? `${config.color}15` : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${on ? config.color + "35" : "rgba(255,255,255,0.08)"}`,
+                    }}
+                  >
+                    <div
+                      className="w-3.5 h-3.5 rounded mt-0.5 flex items-center justify-center shrink-0"
+                      style={{ background: on ? config.color : "rgba(255,255,255,0.1)", border: on ? "none" : "1px solid rgba(255,255,255,0.2)" }}
+                    >
+                      {on && <CheckCircle2 size={9} color="#fff" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold" style={{ color: on ? config.color : "rgba(255,255,255,0.6)" }}>{m.label}</div>
+                      <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.65rem" }}>{m.sub}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setEnabledModules([])}
+              className="text-xs mt-1"
+              style={{ color: "rgba(255,255,255,0.3)" }}
+            >
+              Deselect all
+            </button>
+          </Section>
+        )}
+
+        {/* Additional Instructions */}
+        <Section title="Additional Instructions" optional>
+          <textarea
+            value={additionalInstructions}
+            onChange={(e) => setAdditionalInstructions(e.target.value)}
+            placeholder="Any extra context or focus areas for this analysis run…"
+            rows={3}
+            className="w-full text-xs rounded-lg px-3 py-2.5 resize-none outline-none transition-colors"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "#FAFAFA",
+              fontFamily: "'Montserrat', sans-serif",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = config.color + "60")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
+          />
+        </Section>
+
+        {/* Run Button */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRun}
+            disabled={!canRun}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
+            style={{
+              background: canRun ? config.color : "rgba(255,255,255,0.08)",
+              color: canRun ? "#141349" : "rgba(255,255,255,0.25)",
+              cursor: canRun ? "pointer" : "not-allowed",
+            }}
+          >
+            {status === "running" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
+            {status === "running" ? "Running…" : `Run ${config.skillName}`}
+          </button>
+          {!adAccountId && (
+            <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Select an ad account to enable
+            </span>
+          )}
+          {status !== "idle" && (
+            <button onClick={handleReset} className="p-2 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }} title="Reset">
+              <RotateCcw size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Report Panel ─────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
+        {status === "idle" && (
+          <div className="h-full flex flex-col items-center justify-center gap-4" style={{ color: "rgba(255,255,255,0.2)" }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <Play size={24} style={{ color: config.color, opacity: 0.5 }} />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>Configure and run {config.skillName}</p>
+              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.2)" }}>{config.description}</p>
+            </div>
+          </div>
+        )}
+
+        {status === "running" && (
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${config.color}15`, border: `1px solid ${config.color}30` }}>
+              <Loader2 size={28} className="animate-spin" style={{ color: config.color }} />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.7)" }}>Analysis in progress…</p>
+              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>Fetching data from Meta API and running {config.skillName}</p>
+            </div>
+            <div className="flex flex-col gap-1.5 w-64">
+              {["Connecting to Meta API…", "Fetching campaign data…", "Running analysis…"].map((step, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  <Loader2 size={10} className="animate-spin shrink-0" style={{ color: config.color }} />
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {status === "error" && (
+          <div className="rounded-xl p-5" style={{ background: "rgba(237,19,95,0.08)", border: "1px solid rgba(237,19,95,0.2)" }}>
+            <div className="flex items-start gap-3">
+              <AlertCircle size={18} style={{ color: "#ED135F" }} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold" style={{ color: "#ED135F" }}>Run failed</p>
+                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>{errorMsg}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {status === "success" && report && (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 size={16} style={{ color: "#00B37A" }} />
+              <span className="text-sm font-semibold" style={{ color: "#00B37A" }}>Analysis complete</span>
+              <span className="text-xs ml-auto" style={{ color: "rgba(255,255,255,0.3)" }}>
+                {adAccountName || adAccountId} · {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
+              </span>
+            </div>
+            <div
+              className="rounded-xl p-5 prose-report"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <Streamdown>{report}</Streamdown>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function Section({ title, children, optional }: { title: string; children: React.ReactNode; optional?: boolean }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {title}
+        </p>
+        {optional && <span className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>(optional)</span>}
+      </div>
+      <div className="flex flex-col gap-3">{children}</div>
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs mb-1.5" style={{ color: "rgba(255,255,255,0.5)" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Select({
+  value, onChange, options, placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full text-xs rounded-lg px-3 py-2.5 appearance-none outline-none pr-8"
+        style={{
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          color: value ? "#FAFAFA" : "rgba(255,255,255,0.35)",
+          fontFamily: "'Montserrat', sans-serif",
+        }}
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value} style={{ background: "#141349" }}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.3)" }} />
+    </div>
+  );
+}
+
+function MultiSelect({
+  options, selected, onChange, color, placeholder,
+}: {
+  options: Array<{ value: string; label: string }>;
+  selected: string[];
+  onChange: (v: string[]) => void;
+  color: string;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = selected.length === 0
+    ? (placeholder ?? "All campaigns")
+    : `${selected.length} campaign${selected.length > 1 ? "s" : ""} selected`;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between text-xs rounded-lg px-3 py-2.5"
+        style={{
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          color: selected.length ? "#FAFAFA" : "rgba(255,255,255,0.35)",
+        }}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div
+          className="absolute top-full left-0 right-0 mt-1 rounded-lg overflow-hidden z-20 max-h-48 overflow-y-auto"
+          style={{ background: "#1c1a5e", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-2.5 text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>No campaigns found</div>
+          ) : (
+            options.map((o) => {
+              const on = selected.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  onClick={() => onChange(on ? selected.filter((x) => x !== o.value) : [...selected, o.value])}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors"
+                  style={{ color: on ? color : "rgba(255,255,255,0.7)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <div
+                    className="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center"
+                    style={{ background: on ? color : "transparent", border: `1px solid ${on ? color : "rgba(255,255,255,0.25)"}` }}
+                  >
+                    {on && <CheckCircle2 size={9} color="#141349" />}
+                  </div>
+                  <span className="truncate">{o.label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Mock report generator ─────────────────────────────────────────────────────
+
+function generateMockReport(config: SkillConfig, account: string, datePreset: string): string {
+  const dateLabel = DATE_PRESETS.find((d) => d.value === datePreset)?.label ?? datePreset;
+
+  const reports: Record<string, string> = {
+    "weekly-optimization": `# Weekly Optimization Report
+**Account:** ${account} · **Period:** ${dateLabel}
+
+## Executive Summary
+Performance this week shows a **12% improvement in CPC** across active campaigns, driven primarily by the Prospecting — Broad audience segment. However, frequency is rising in the Retargeting — 30-Day pool, warranting creative rotation.
+
+## Top Recommendations
+
+### 1. Increase Budget on Prospecting — Lookalike 3% (+$500/day)
+- **Impact:** High | **Confidence:** 87%
+- CPM is $4.20 below account average; CPC is $0.38 vs $0.61 baseline
+- Auction density is favorable — no saturation signals detected
+
+### 2. Rotate Creative in Retargeting — 30-Day
+- **Impact:** Medium | **Confidence:** 79%
+- Frequency: 6.2 (threshold: 5.0) — creative fatigue likely
+- CTR has declined 18% week-over-week
+
+### 3. Pause Bottom 2 Ad Sets in Brand Awareness Campaign
+- **Impact:** Medium | **Confidence:** 82%
+- CPM $28.40 vs $14.20 campaign average — 2× inefficiency
+- Zero conversions in 14 days despite $1,240 spend
+
+## Performance Breakdown
+
+| Ad Set | Spend | CPM | CPC | CTR | Conversions | CPA |
+|--------|-------|-----|-----|-----|-------------|-----|
+| Prospecting — Broad | $3,240 | $8.20 | $0.38 | 2.16% | 48 | $67.50 |
+| Prospecting — LAL 3% | $1,890 | $9.80 | $0.42 | 2.33% | 31 | $60.97 |
+| Retargeting — 30-Day | $2,100 | $14.60 | $0.89 | 1.64% | 22 | $95.45 |
+| Brand Awareness | $1,400 | $21.30 | $1.24 | 1.72% | 3 | $466.67 |
+
+## Placement Analysis
+- **Facebook Feed** is delivering 68% of conversions at 42% of spend — over-index here
+- **Instagram Stories** has a 0.8% CTR vs 2.1% Feed — consider reducing allocation
+- **Audience Network** shows high CTR (3.2%) but zero conversions — likely click fraud; recommend exclusion`,
+
+    "performance-insights": `# Performance Insights Report
+**Account:** ${account} · **Period:** ${dateLabel}
+
+## KPI Summary
+| Metric | This Period | Prior Period | Change |
+|--------|-------------|--------------|--------|
+| Total Spend | $8,630 | $7,940 | +8.7% |
+| CPM | $12.40 | $14.20 | **-12.7%** ↓ |
+| CPC | $0.61 | $0.78 | **-21.8%** ↓ |
+| CTR | 2.03% | 1.82% | **+11.5%** ↑ |
+| Conversions | 104 | 87 | **+19.5%** ↑ |
+| CPA | $82.98 | $91.26 | **-9.1%** ↓ |
+
+## Budget Pacing
+Current spend rate is **on track** — 94% of monthly budget consumed with 6 days remaining.
+
+## Placement Conversion Analysis
+| Placement | Spend | Conversions | CPA | Conv Rate |
+|-----------|-------|-------------|-----|-----------|
+| Facebook Feed | $4,200 | 61 | $68.85 | 3.2% |
+| Instagram Feed | $2,100 | 28 | $75.00 | 2.8% |
+| Instagram Stories | $1,430 | 11 | $130.00 | 1.4% |
+| Audience Network | $900 | 4 | $225.00 | 0.6% |
+
+## Creative Performance
+**Top Performer:** Video — "Summer Collection 30s" — CPA $54.20, CTR 3.8%
+**Underperformer:** Static — "Generic Brand Banner" — CPA $142.00, CTR 0.9%
+
+## Signals
+- **Auction pressure** is elevated in the 25–34 female demographic — CPM up 22% vs prior period
+- **Learning phase** detected on 2 ad sets — avoid edits for next 72 hours
+- **Delivery saturation** approaching on Retargeting — 7-Day (reach 89% of audience)`,
+
+    "creative-lifecycle": `# Creative Lifecycle Analysis
+**Account:** ${account} · **Period:** ${dateLabel}
+
+## Fatigue Summary
+| Creative | Method | Signal | Status |
+|----------|--------|--------|--------|
+| Video — Summer 30s | CDR | CDR 0.82 (baseline 1.0) | 🟡 Early Decay |
+| Static — Lifestyle A | BOCPD | Change point detected Day 12 | 🔴 Fatigued |
+| Video — Product Demo | CUSUM | Below threshold | 🟢 Healthy |
+| Carousel — Features | EWMA | Declining trend | 🟡 Early Decay |
+| Static — Generic Banner | Freq-CPM | R²=0.87, elasticity 1.4 | 🔴 Fatigued |
+
+## CDR Analysis (Beta-Binomial Significance)
+**Static — Lifestyle A:** CDR = 0.61 vs baseline 1.00 — statistically significant decay (p < 0.01)
+Impressions: 48,200 | Clicks: 312 → 198 (week-over-week decline: 36.5%)
+
+## BOCPD Change Points
+Change point detected at Day 12 for Static — Lifestyle A with 94% posterior probability.
+Recommend immediate creative swap.
+
+## Frequency-CPM Elasticity
+Static — Generic Banner shows CPM increasing $2.40 per unit of frequency above 4.0.
+Current frequency: 7.2 — estimated wasted CPM premium: $7.68/1000 impressions.
+
+## Recommendations
+1. **Retire** Static — Lifestyle A and Static — Generic Banner immediately
+2. **Monitor** Video — Summer 30s — refresh within 7 days if CDR continues declining
+3. **Scale** Video — Product Demo — healthy creative with room to grow
+4. **Introduce** 2 new creatives to Retargeting pool to reduce frequency pressure`,
+
+    "structural-audit": `# Structural Audit Report
+**Account:** ${account} · **Period:** ${dateLabel}
+
+## Audit Score: 71 / 100
+
+| Check | Score | Status |
+|-------|-------|--------|
+| Data Infrastructure & EMQ | 8/10 | 🟡 Needs Attention |
+| Signal Density | 6/10 | 🔴 Critical |
+| Creative Velocity & Format Diversity | 7/10 | 🟡 Needs Attention |
+| Liquidity Consolidation Index | 9/10 | 🟢 Good |
+| Budget Liquidity Ratio | 8/10 | 🟢 Good |
+| Late-Stage Funnel Signal Velocity | 5/10 | 🔴 Critical |
+| Creative Fatigue Index | 7/10 | 🟡 Needs Attention |
+| ASC Adoption Rate | 6/10 | 🟡 Needs Attention |
+| Learning Phase & Reset Risk | 8/10 | 🟢 Good |
+| Auction Mechanics Context | 7/10 | 🟡 Needs Attention |
+
+## Critical Issues
+
+### Signal Density (6/10)
+- Pixel is firing but **purchase event EMQ is 3.2** — below the 6.0 threshold for reliable optimization
+- Only 18 purchase events in the last 7 days — Meta requires 50+ for stable delivery
+- **Recommendation:** Broaden optimization to Add to Cart or Landing Page View as proxy events
+
+### Late-Stage Funnel Signal Velocity (5/10)
+- No CAPI (Conversions API) integration detected — relying solely on pixel
+- Estimated signal loss: 28–35% due to iOS 14+ and browser privacy changes
+- **Recommendation:** Implement CAPI immediately — this is the highest-leverage structural fix
+
+## Opportunities
+- **ASC Adoption:** Only 1 of 6 active campaigns uses Advantage+ Shopping — consider testing
+- **Creative Velocity:** 3 creatives added in last 30 days — target is 5+ for healthy rotation`,
+
+    "audience-overlap": `# Audience Overlap & Wasted Spend Report
+**Account:** ${account} · **Period:** ${dateLabel}
+
+## Overlap Summary
+**Total estimated wasted spend from audience overlap: $1,240 (14.4% of total spend)**
+
+## Pairwise Overlap Analysis
+
+| Ad Set A | Ad Set B | Overlap % | Wasted Spend |
+|----------|----------|-----------|--------------|
+| Prospecting — Broad | Prospecting — LAL 3% | 34% | $420 |
+| Prospecting — Broad | Retargeting — 30-Day | 18% | $280 |
+| Prospecting — LAL 3% | Prospecting — LAL 5% | 67% | $390 |
+| Retargeting — 7-Day | Retargeting — 30-Day | 82% | $150 |
+
+## Highest Risk Pairs
+
+### Prospecting — LAL 3% × Prospecting — LAL 5% (67% overlap)
+These two lookalike audiences share the majority of their addressable reach. Running both simultaneously causes significant self-competition in the auction, inflating CPMs for both.
+**Recommendation:** Consolidate into a single LAL 1–5% broad audience or use audience subtraction.
+
+### Retargeting — 7-Day × Retargeting — 30-Day (82% overlap)
+The 7-day window is almost entirely contained within the 30-day window. Users in the 7-day pool are being targeted by both ad sets simultaneously.
+**Recommendation:** Add the 7-day audience as an exclusion on the 30-day ad set.
+
+## CPM Impact Model
+Estimated CPM inflation from self-competition: **+$2.80/CPM** on overlapping ad sets.
+At current impression volume, this represents $1,240 in recoverable spend over the analysis period.`,
+  };
+
+  return reports[config.skillId] ?? `# ${config.skillName} Report\n\nAnalysis complete for **${account}** over **${dateLabel}**.\n\nNo data available in mock mode.`;
+}
