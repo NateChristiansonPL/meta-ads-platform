@@ -1,6 +1,6 @@
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
 export interface SkillConfig {
@@ -36,6 +36,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [bmId, setBmId] = useState("");
   const [adAccountId, setAdAccountId] = useState("");
   const [adAccountName, setAdAccountName] = useState("");
+  const [adAccountSearch, setAdAccountSearch] = useState("");
   const [datePreset, setDatePreset] = useState("last_7d");
   const [campaignFilter, setCampaignFilter] = useState<"active" | "last_30d" | "inactive">("active");
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
@@ -165,15 +166,24 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
                 <Loader2 size={12} className="animate-spin" /> Loading accounts…
               </div>
             ) : (
-              <Select
+              <SearchableSelect
                 value={adAccountId}
+                selectedLabel={adAccountId ? `${adAccountName} (${adAccountId})` : ""}
+                search={adAccountSearch}
+                onSearchChange={(q) => { setAdAccountSearch(q); }}
                 onChange={(v) => {
                   const acc = adAccounts.find((a) => a.id === v);
                   setAdAccountId(v);
                   setAdAccountName(acc?.name ?? v);
+                  setAdAccountSearch("");
                 }}
-                placeholder="Select an ad account…"
-                options={adAccounts.map((a) => ({ value: a.id, label: `${a.name} (${a.id})` }))}
+                placeholder="Search ad accounts…"
+                options={adAccounts
+                  .filter((a) => {
+                    const q = adAccountSearch.toLowerCase();
+                    return !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
+                  })
+                  .map((a) => ({ value: a.id, label: `${a.name} (${a.id})` }))}
               />
             )}
           </FormField>
@@ -458,6 +468,77 @@ function Select({
   );
 }
 
+function SearchableSelect({
+  value, selectedLabel, search, onSearchChange, onChange, options, placeholder,
+}: {
+  value: string;
+  selectedLabel: string;
+  search: string;
+  onSearchChange: (q: string) => void;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        className="flex items-center rounded-lg px-3 py-2 gap-2"
+        style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${open ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.12)"}` }}
+      >
+        <Search size={11} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <input
+          type="text"
+          value={open ? search : (value ? selectedLabel : "")}
+          onChange={(e) => { onSearchChange(e.target.value); if (!open) setOpen(true); }}
+          onFocus={() => { setOpen(true); onSearchChange(""); }}
+          placeholder={value ? selectedLabel : (placeholder ?? "Search…")}
+          className="flex-1 text-xs bg-transparent outline-none min-w-0"
+          style={{ color: value && !open ? "#FAFAFA" : "rgba(255,255,255,0.7)", fontFamily: "'Montserrat', sans-serif" }}
+        />
+        {value && (
+          <button onClick={(e) => { e.stopPropagation(); onChange(""); onSearchChange(""); setOpen(false); }} style={{ color: "rgba(255,255,255,0.3)" }}>
+            <X size={11} />
+          </button>
+        )}
+        <ChevronDown size={11} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+      </div>
+      {open && (
+        <div
+          className="absolute top-full left-0 right-0 mt-1 rounded-lg z-30 overflow-hidden"
+          style={{ background: "#1c1a5e", border: "1px solid rgba(255,255,255,0.15)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: 220, overflowY: "auto" }}
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-3 text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>No results found</div>
+          ) : (
+            options.map((o) => (
+              <button
+                key={o.value}
+                onMouseDown={(e) => { e.preventDefault(); onChange(o.value); setOpen(false); onSearchChange(""); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors"
+                style={{ color: o.value === value ? "#00BEEF" : "rgba(255,255,255,0.75)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                {o.value === value && <CheckCircle2 size={10} style={{ color: "#00BEEF", flexShrink: 0 }} />}
+                <span className="truncate">{o.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MultiSelect({
   options, selected, onChange, color, placeholder,
 }: {
@@ -468,54 +549,108 @@ function MultiSelect({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+  const filtered = options.filter((o) => !search || o.label.toLowerCase().includes(search.toLowerCase()));
   const label = selected.length === 0
     ? (placeholder ?? "All campaigns")
     : `${selected.length} campaign${selected.length > 1 ? "s" : ""} selected`;
-
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between text-xs rounded-lg px-3 py-2.5"
         style={{
           background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: `1px solid ${open ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.12)"}`,
           color: selected.length ? "#FAFAFA" : "rgba(255,255,255,0.35)",
         }}
       >
         <span className="truncate">{label}</span>
-        <ChevronDown size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          {selected.length > 0 && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onChange([]); }}
+              className="flex items-center justify-center w-4 h-4 rounded-full"
+              style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)" }}
+            >
+              <X size={9} />
+            </span>
+          )}
+          <ChevronDown size={12} style={{ color: "rgba(255,255,255,0.3)" }} />
+        </div>
       </button>
       {open && (
         <div
-          className="absolute top-full left-0 right-0 mt-1 rounded-lg overflow-hidden z-20 max-h-48 overflow-y-auto"
-          style={{ background: "#1c1a5e", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
+          className="absolute top-full left-0 right-0 mt-1 rounded-lg z-30"
+          style={{ background: "#1c1a5e", border: "1px solid rgba(255,255,255,0.15)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}
         >
-          {options.length === 0 ? (
-            <div className="px-3 py-2.5 text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>No campaigns found</div>
-          ) : (
-            options.map((o) => {
-              const on = selected.includes(o.value);
-              return (
-                <button
-                  key={o.value}
-                  onClick={() => onChange(on ? selected.filter((x) => x !== o.value) : [...selected, o.value])}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors"
-                  style={{ color: on ? color : "rgba(255,255,255,0.7)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <div
-                    className="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center"
-                    style={{ background: on ? color : "transparent", border: `1px solid ${on ? color : "rgba(255,255,255,0.25)"}` }}
+          {/* Search bar */}
+          <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <Search size={11} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search campaigns…"
+              autoFocus
+              className="flex-1 text-xs bg-transparent outline-none"
+              style={{ color: "rgba(255,255,255,0.8)", fontFamily: "'Montserrat', sans-serif" }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{ color: "rgba(255,255,255,0.3)" }}><X size={10} /></button>
+            )}
+          </div>
+          {/* Select all / deselect all */}
+          <div className="flex items-center justify-between px-3 py-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <button
+              onClick={() => onChange(filtered.map((o) => o.value))}
+              className="text-xs font-semibold"
+              style={{ color: color }}
+            >
+              Select all{search ? " filtered" : ""} ({filtered.length})
+            </button>
+            {selected.length > 0 && (
+              <button onClick={() => onChange([])} className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                Clear ({selected.length})
+              </button>
+            )}
+          </div>
+          {/* Campaign list */}
+          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+            {filtered.length === 0 ? (
+              <div className="px-3 py-3 text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>No campaigns match</div>
+            ) : (
+              filtered.map((o) => {
+                const on = selected.includes(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    onClick={() => onChange(on ? selected.filter((x) => x !== o.value) : [...selected, o.value])}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors"
+                    style={{ color: on ? color : "rgba(255,255,255,0.7)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
-                    {on && <CheckCircle2 size={9} color="#141349" />}
-                  </div>
-                  <span className="truncate">{o.label}</span>
-                </button>
-              );
-            })
-          )}
+                    <div
+                      className="w-3.5 h-3.5 rounded shrink-0 flex items-center justify-center"
+                      style={{ background: on ? color : "transparent", border: `1px solid ${on ? color : "rgba(255,255,255,0.25)"}` }}
+                    >
+                      {on && <CheckCircle2 size={9} color="#141349" />}
+                    </div>
+                    <span className="truncate">{o.label}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
