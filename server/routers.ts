@@ -302,10 +302,15 @@ export const appRouter = router({
             knowledgeContext: relevantKnowledge || undefined,
           });
 
+          const statusLog: Array<{ ts: number; msg: string }> = [];
           const result = await runManusSkillTask({
             apiKey,
             skillId: input.skillId,
             prompt,
+            onProgress: (msg: string) => {
+              statusLog.push({ ts: Date.now(), msg });
+              console.log(`[Run ${runId}] ${msg}`);
+            },
           });
 
           const durationMs = Date.now() - startedAt;
@@ -314,6 +319,9 @@ export const appRouter = router({
             status: result.status,
             reportMarkdown: result.report || result.errorMessage,
             errorMessage: result.errorMessage,
+            taskUrl: result.taskUrl,
+            attachments: result.attachments,
+            statusLog,
             durationMs,
           });
 
@@ -359,6 +367,30 @@ export const appRouter = router({
     myRuns: protectedProcedure
       .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }))
       .query(async ({ ctx, input }) => getRunsByUser(ctx.user.id, input.limit)),
+
+    /**
+     * getRunStatus: Lightweight poll for a running task's current status.
+     * Returns status, elapsed time, statusLog entries, and result when done.
+     */
+    getRunStatus: protectedProcedure
+      .input(z.object({ runId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const run = await getRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return {
+          runId: run.id,
+          status: run.status,
+          statusLog: (run.statusLog as Array<{ ts: number; msg: string }> | null) ?? [],
+          taskUrl: run.taskUrl ?? null,
+          attachments: (run.attachments as Array<{ filename: string; url: string; contentType: string }> | null) ?? [],
+          reportMarkdown: run.reportMarkdown ?? null,
+          errorMessage: run.errorMessage ?? null,
+          durationMs: run.durationMs ?? null,
+          startedAt: run.startedAt,
+          completedAt: run.completedAt ?? null,
+        };
+      }),
 
     getReport: protectedProcedure
       .input(z.object({ runId: z.number().int().positive() }))

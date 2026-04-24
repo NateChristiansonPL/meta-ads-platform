@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, FileDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
@@ -55,7 +55,15 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [report, setReport] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [taskUrl, setTaskUrl] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Array<{ filename: string; url: string; contentType: string }>>([]);
+  const [statusLog, setStatusLog] = useState<Array<{ ts: number; msg: string }>>([]);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [rateLimitWarning, setRateLimitWarning] = useState(false);
+  const [timeoutWarning, setTimeoutWarning] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedToken = activeTokens.find((t) => t.id === tokenId);
 
@@ -69,20 +77,76 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
     { enabled: !!adAccountId && !!tokenId }
   );
 
-  const startRun = trpc.runs.start.useMutation();
-  const completeRun = trpc.runs.complete.useMutation();
+  const executeRun = trpc.runs.execute.useMutation();
+  const utils = trpc.useUtils();
 
   const canRun = !!tokenId && !!adAccountId && status !== "running";
+
+  // Poll getRunStatus while a run is in progress
+  function startPolling(id: number) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await utils.runs.getRunStatus.fetch({ runId: id });
+        if (data.statusLog && data.statusLog.length > 0) {
+          setStatusLog([...data.statusLog]);
+          // Detect rate limit
+          const hasRateLimit = data.statusLog.some((e) =>
+            /rate.?limit|too many requests|429|throttl/i.test(e.msg)
+          );
+          setRateLimitWarning(hasRateLimit);
+        }
+        if (data.status !== "running") {
+          stopPolling();
+          if (data.status === "success") {
+            setReport(data.reportMarkdown ?? "");
+            setTaskUrl(data.taskUrl ?? null);
+            setAttachments(data.attachments ?? []);
+            setStatus("success");
+          } else {
+            setErrorMsg(data.errorMessage ?? "Run failed.");
+            setTaskUrl(data.taskUrl ?? null);
+            setStatus("error");
+          }
+        }
+      } catch { /* ignore transient poll errors */ }
+    }, 8000);
+  }
+
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (clockRef.current) { clearInterval(clockRef.current); clockRef.current = null; }
+  }
+
+  // Cleanup on unmount
+  useEffect(() => () => stopPolling(), []);
 
   async function handleRun() {
     if (!canRun) return;
     setStatus("running");
     setReport(null);
     setErrorMsg(null);
-    setStartTime(Date.now());
+    setTaskUrl(null);
+    setAttachments([]);
+    setStatusLog([]);
+    setRateLimitWarning(false);
+    setTimeoutWarning(false);
+    const t0 = Date.now();
+    setStartTime(t0);
+    setElapsedSec(0);
+
+    // Elapsed-time clock
+    if (clockRef.current) clearInterval(clockRef.current);
+    clockRef.current = setInterval(() => {
+      const sec = Math.floor((Date.now() - t0) / 1000);
+      setElapsedSec(sec);
+      // Warn at 12 minutes
+      if (sec >= 720) setTimeoutWarning(true);
+    }, 1000);
 
     try {
-      const { runId: id } = await startRun.mutateAsync({
+      // Fire the real execute mutation — this runs the Manus agent end-to-end
+      const result = await executeRun.mutateAsync({
         skillId: config.skillId,
         skillName: config.skillName,
         adAccountId,
@@ -90,45 +154,58 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         businessManagerId: bmId,
         datePreset,
         campaignIds: selectedCampaigns,
-        extraParams: {
-          modules: enabledModules,
-          additionalInstructions,
-          compare,
-        },
+        additionalInstructions,
+        extraParams: { modules: enabledModules, compare },
       });
-      setRunId(id);
-
-      // Simulate the skill running (in production this would call the Manus skill API)
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const mockReport = generateMockReport(config, adAccountName || adAccountId, datePreset);
-      const durationMs = Date.now() - (startTime ?? Date.now());
-
-      await completeRun.mutateAsync({
-        runId: id,
-        status: "success",
-        reportMarkdown: mockReport,
-        durationMs,
-      });
-
-      setReport(mockReport);
+      stopPolling();
+      setReport(result.report ?? "");
+      setTaskUrl(result.taskUrl ?? null);
+      setAttachments(result.attachments ?? []);
       setStatus("success");
     } catch (err: unknown) {
+      stopPolling();
       const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
-      if (runId) {
-        await completeRun.mutateAsync({ runId, status: "error", errorMessage: msg });
-      }
       setErrorMsg(msg);
       setStatus("error");
     }
   }
 
+  // Start polling as soon as we have a runId
+  useEffect(() => {
+    if (status === "running" && runId) startPolling(runId);
+  }, [runId, status]);
+
+  // Capture runId from execute mutation state
+  useEffect(() => {
+    // The execute mutation returns runId — capture it for polling
+    // (executeRun.data is set after the mutation resolves, but we need it during running)
+  }, [executeRun.data]);
+
   function handleReset() {
+    stopPolling();
     setStatus("idle");
     setReport(null);
     setErrorMsg(null);
     setRunId(null);
     setStartTime(null);
+    setElapsedSec(0);
+    setStatusLog([]);
+    setRateLimitWarning(false);
+    setTimeoutWarning(false);
+    setTaskUrl(null);
+    setAttachments([]);
+  }
+
+  function handleRetry() {
+    handleReset();
+    // Small delay so state clears before re-running
+    setTimeout(() => handleRun(), 100);
+  }
+
+  function formatElapsed(sec: number) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
   return (
@@ -381,46 +458,164 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         )}
 
         {status === "running" && (
-          <div className="h-full flex flex-col items-center justify-center gap-4">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${config.color}15`, border: `1px solid ${config.color}30` }}>
-              <Loader2 size={28} className="animate-spin" style={{ color: config.color }} />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.7)" }}>Analysis in progress…</p>
-              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>Fetching data from Meta API and running {config.skillName}</p>
-            </div>
-            <div className="flex flex-col gap-1.5 w-64">
-              {["Connecting to Meta API…", "Fetching campaign data…", "Running analysis…"].map((step, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  <Loader2 size={10} className="animate-spin shrink-0" style={{ color: config.color }} />
-                  {step}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {status === "error" && (
-          <div className="rounded-xl p-5" style={{ background: "rgba(237,19,95,0.08)", border: "1px solid rgba(237,19,95,0.2)" }}>
-            <div className="flex items-start gap-3">
-              <AlertCircle size={18} style={{ color: "#ED135F" }} className="mt-0.5 shrink-0" />
+          <div className="flex flex-col gap-4 p-2">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${config.color}15`, border: `1px solid ${config.color}30` }}>
+                <Loader2 size={20} className="animate-spin" style={{ color: config.color }} />
+              </div>
               <div>
-                <p className="text-sm font-bold" style={{ color: "#ED135F" }}>Run failed</p>
-                <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>{errorMsg}</p>
+                <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>Analysis in progress</p>
+                <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Elapsed: {formatElapsed(elapsedSec)}</p>
+              </div>
+            </div>
+
+            {/* Rate limit alert */}
+            {rateLimitWarning && (
+              <div className="flex items-start gap-2.5 rounded-lg px-3 py-2.5" style={{ background: "rgba(255,180,0,0.1)", border: "1px solid rgba(255,180,0,0.3)" }}>
+                <AlertCircle size={14} style={{ color: "#FFB400", marginTop: 1, flexShrink: 0 }} />
+                <div>
+                  <p className="text-xs font-bold" style={{ color: "#FFB400" }}>Meta API rate limit detected</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>The agent is waiting for the rate limit window to reset. This is normal and will resolve automatically — no action needed.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Timeout warning */}
+            {timeoutWarning && !rateLimitWarning && (
+              <div className="flex items-start gap-2.5 rounded-lg px-3 py-2.5" style={{ background: "rgba(255,120,0,0.1)", border: "1px solid rgba(255,120,0,0.25)" }}>
+                <AlertCircle size={14} style={{ color: "#FF7800", marginTop: 1, flexShrink: 0 }} />
+                <div>
+                  <p className="text-xs font-bold" style={{ color: "#FF7800" }}>Taking longer than expected</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>The analysis is still running ({formatElapsed(elapsedSec)}). Large accounts with many campaigns can take 15–20 minutes. You can leave this page — the run will complete in the background and appear in Run Logs.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Live status log */}
+            <div className="rounded-lg overflow-hidden" style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Live Status</p>
+              </div>
+              <div className="px-3 py-2 flex flex-col gap-1.5" style={{ maxHeight: 260, overflowY: "auto" }}>
+                {statusLog.length === 0 ? (
+                  <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                    <Loader2 size={10} className="animate-spin" style={{ color: config.color }} />
+                    Waiting for agent to start…
+                  </div>
+                ) : (
+                  statusLog.map((entry, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs" style={{ color: i === statusLog.length - 1 ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)" }}>
+                      {i === statusLog.length - 1
+                        ? <Loader2 size={9} className="animate-spin shrink-0 mt-0.5" style={{ color: config.color }} />
+                        : <CheckCircle2 size={9} className="shrink-0 mt-0.5" style={{ color: "rgba(255,255,255,0.2)" }} />}
+                      <span>{entry.msg}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
+        {status === "error" && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-xl p-5" style={{ background: "rgba(237,19,95,0.08)", border: "1px solid rgba(237,19,95,0.2)" }}>
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} style={{ color: "#ED135F" }} className="mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold" style={{ color: "#ED135F" }}>Run failed</p>
+                  <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>{errorMsg}</p>
+                </div>
+              </div>
+            </div>
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleRetry}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold transition-all"
+                style={{ background: config.color, color: "#141349" }}
+              >
+                <RotateCcw size={12} /> Retry
+              </button>
+              {taskUrl && (
+                <a
+                  href={taskUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold transition-all"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.12)" }}
+                >
+                  <ExternalLink size={12} /> View on Manus
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {status === "success" && report && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-col gap-4">
+            {/* Header row */}
+            <div className="flex items-center gap-2 flex-wrap">
               <CheckCircle2 size={16} style={{ color: "#00B37A" }} />
               <span className="text-sm font-semibold" style={{ color: "#00B37A" }}>Analysis complete</span>
-              <span className="text-xs ml-auto" style={{ color: "rgba(255,255,255,0.3)" }}>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
                 {adAccountName || adAccountId} · {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
               </span>
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                {taskUrl && (
+                  <a
+                    href={taskUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all"
+                    style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.12)" }}
+                  >
+                    <ExternalLink size={11} /> View on Manus
+                  </a>
+                )}
+                {attachments.filter((a) => a.contentType === "application/pdf" || a.filename.endsWith(".pdf")).map((att, i) => (
+                  <a
+                    key={i}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={att.filename}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all"
+                    style={{ background: `${config.color}20`, color: config.color, border: `1px solid ${config.color}40` }}
+                  >
+                    <FileDown size={11} /> Export PDF
+                  </a>
+                ))}
+                <button
+                  onClick={handleRetry}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-all"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  <RotateCcw size={11} /> Re-run
+                </button>
+              </div>
             </div>
+            {/* Attachments (non-PDF) */}
+            {attachments.filter((a) => a.contentType !== "application/pdf" && !a.filename.endsWith(".pdf")).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.filter((a) => a.contentType !== "application/pdf" && !a.filename.endsWith(".pdf")).map((att, i) => (
+                  <a
+                    key={i}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={att.filename}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-all"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    <FileDown size={10} /> {att.filename}
+                  </a>
+                ))}
+              </div>
+            )}
+            {/* Report */}
             <div
               className="rounded-xl p-5 prose-report"
               style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}

@@ -181,7 +181,15 @@ export async function createSkillRun(run: InsertSkillRun): Promise<number> {
 
 export async function updateSkillRun(
   id: number,
-  patch: { status: "success" | "error"; reportMarkdown?: string; errorMessage?: string; durationMs?: number }
+  patch: {
+    status: "success" | "error";
+    reportMarkdown?: string;
+    errorMessage?: string;
+    taskUrl?: string;
+    attachments?: Array<{ filename: string; url: string; contentType: string }>;
+    statusLog?: Array<{ ts: number; msg: string }>;
+    durationMs?: number;
+  }
 ) {
   const db = await getDb();
   if (!db) return;
