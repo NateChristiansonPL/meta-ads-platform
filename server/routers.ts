@@ -111,9 +111,10 @@ export const appRouter = router({
             ...(owned.status === "fulfilled" ? owned.value : []),
             ...(client.status === "fulfilled" ? client.value : []),
           ];
-          // Deduplicate by id
+          // Deduplicate by id, then sort alphabetically by name
           const seen = new Set<string>();
-          return all.filter((a) => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+          const deduped = all.filter((a) => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
+          return deduped.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
         } catch { return []; }
       }),
     getCampaigns: protectedProcedure

@@ -32,10 +32,17 @@ const DATE_PRESETS = [
 export default function SkillRunner({ config }: SkillRunnerProps) {
   const { data: activeTokens = [] } = trpc.tokens.listActive.useQuery();
 
-  const [tokenId, setTokenId] = useState<number | null>(null);
-  const [bmId, setBmId] = useState("");
-  const [adAccountId, setAdAccountId] = useState("");
-  const [adAccountName, setAdAccountName] = useState("");
+  // Persist last-used account across sessions
+  const STORAGE_KEY = `pl_last_account_${config.skillId}`;
+  function loadSaved() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as { tokenId: number; bmId: string; adAccountId: string; adAccountName: string } | null; } catch { return null; }
+  }
+  const saved = loadSaved();
+
+  const [tokenId, setTokenId] = useState<number | null>(saved?.tokenId ?? null);
+  const [bmId, setBmId] = useState(saved?.bmId ?? "");
+  const [adAccountId, setAdAccountId] = useState(saved?.adAccountId ?? "");
+  const [adAccountName, setAdAccountName] = useState(saved?.adAccountName ?? "");
   const [adAccountSearch, setAdAccountSearch] = useState("");
   const [datePreset, setDatePreset] = useState("last_7d");
   const [campaignFilter, setCampaignFilter] = useState<"active" | "last_30d" | "inactive">("active");
@@ -176,6 +183,13 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
                   setAdAccountId(v);
                   setAdAccountName(acc?.name ?? v);
                   setAdAccountSearch("");
+                  setSelectedCampaigns([]);
+                  // Persist selection
+                  if (v && tokenId && bmId) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tokenId, bmId, adAccountId: v, adAccountName: acc?.name ?? v }));
+                  } else {
+                    localStorage.removeItem(STORAGE_KEY);
+                  }
                 }}
                 placeholder="Search ad accounts…"
                 options={adAccounts
@@ -189,7 +203,17 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
           </FormField>
 
           {/* Campaigns */}
-          <FormField label={<span>Campaigns <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.7rem" }}>(optional — leave empty to analyze all active)</span></span>}>
+          <FormField label={
+            <span className="flex items-center gap-2">
+              Campaigns
+              {adAccountId && !loadingCampaigns && campaigns.length > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-bold" style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}>
+                  {campaigns.length}
+                </span>
+              )}
+              <span style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.7rem", fontWeight: 400 }}>(optional — leave empty for all active)</span>
+            </span>
+          }>
             <div className="flex gap-1.5 mb-2">
               {(["active", "last_30d", "inactive"] as const).map((f) => (
                 <button

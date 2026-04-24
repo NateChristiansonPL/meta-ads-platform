@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import {
   BarChart2,
   BookOpen,
+  Bot,
   ChevronRight,
   Clock,
   Cpu,
@@ -216,19 +217,29 @@ export default function AppShell({ children, title, subtitle, badge }: AppShellP
             </div>
           </div>
 
-          {/* Campaign Builder — active tool */}
+          {/* Tools section */}
           <div className="px-3 pt-4">
             <p className="text-xs font-bold mb-2 px-2" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
               Tools
             </p>
-            <NavItem
-              icon={Hammer}
-              label="Campaign Builder"
-              sub="Create & launch"
-              path="/campaign-builder"
-              active={location === "/campaign-builder"}
-              color="#ED135F"
-            />
+            <div className="flex flex-col gap-0.5">
+              <NavItem
+                icon={Hammer}
+                label="Campaign Builder"
+                sub="Create & launch"
+                path="/campaign-builder"
+                active={location === "/campaign-builder"}
+                color="#ED135F"
+              />
+              <NavItem
+                icon={Bot}
+                label="Manus AI"
+                sub="Ask anything"
+                path="/manus-ai"
+                active={location === "/manus-ai"}
+                color="#00BEEF"
+              />
+            </div>
           </div>
 
           {/* Admin section */}

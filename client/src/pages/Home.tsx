@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { BarChart2, Cpu, RefreshCw, Shield, TrendingUp, Users, Zap } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 
 const SKILLS = [
@@ -12,9 +12,27 @@ const SKILLS = [
   { icon: Users, label: "Audience Overlap", color: "#a78bfa" },
 ];
 
+/** Build login URL with optional remember-me flag encoded in state */
+function getLoginUrlWithRemember(remember: boolean): string {
+  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
+  const appId = import.meta.env.VITE_APP_ID;
+  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+  // Encode remember flag into state so the server can read it after redirect
+  const statePayload = remember ? `${redirectUri}|remember=1` : redirectUri;
+  const state = btoa(statePayload);
+
+  const url = new URL(`${oauthPortalUrl}/app-auth`);
+  url.searchParams.set("appId", appId);
+  url.searchParams.set("redirectUri", redirectUri);
+  url.searchParams.set("state", state);
+  url.searchParams.set("type", "signIn");
+  return url.toString();
+}
+
 export default function Home() {
   const { isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
+  const [rememberDevice, setRememberDevice] = useState(false);
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -63,7 +81,6 @@ export default function Home() {
           <p className="text-sm leading-relaxed mb-8" style={{ color: "rgba(255,255,255,0.5)" }}>
             Five AI-powered skills for Meta Ads analysis — weekly optimization, performance insights, creative lifecycle, structural audits, and audience overlap — all in one platform.
           </p>
-
           {/* Skill pills */}
           <div className="flex flex-col gap-2">
             {SKILLS.map((s) => (
@@ -98,7 +115,7 @@ export default function Home() {
         <div className="w-full max-w-sm">
           {/* Card */}
           <div className="rounded-2xl p-8" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}>
-            {/* Shield icon */}
+            {/* Icon */}
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{ background: "rgba(0,190,239,0.12)", border: "1px solid rgba(0,190,239,0.25)" }}>
               <Zap size={26} style={{ color: "#00BEEF" }} />
             </div>
@@ -106,13 +123,42 @@ export default function Home() {
             <h2 className="text-xl font-black text-center mb-1.5" style={{ color: "#FAFAFA" }}>
               Welcome back
             </h2>
-            <p className="text-xs text-center mb-8" style={{ color: "rgba(255,255,255,0.4)" }}>
+            <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
               Sign in with your Manus account to access the platform
             </p>
 
+            {/* Remember this device */}
+            <label
+              className="flex items-center gap-3 cursor-pointer mb-6 px-1"
+              onClick={() => setRememberDevice((r) => !r)}
+            >
+              {/* Custom checkbox */}
+              <div
+                className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all"
+                style={{
+                  background: rememberDevice ? "#00BEEF" : "transparent",
+                  border: `1.5px solid ${rememberDevice ? "#00BEEF" : "rgba(255,255,255,0.25)"}`,
+                }}
+              >
+                {rememberDevice && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="#141349" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <span className="text-xs font-semibold block" style={{ color: "rgba(255,255,255,0.7)" }}>
+                  Remember this device
+                </span>
+                <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  {rememberDevice ? "Stay signed in for 1 year" : "Session expires after 8 hours"}
+                </span>
+              </div>
+            </label>
+
             {/* SSO Button */}
             <a
-              href={getLoginUrl()}
+              href={getLoginUrlWithRemember(rememberDevice)}
               className="flex items-center justify-center gap-3 w-full py-3.5 rounded-xl font-bold text-sm transition-all"
               style={{
                 background: "#00BEEF",
@@ -128,8 +174,8 @@ export default function Home() {
 
             <div className="mt-4 text-center">
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
-                Access is managed by your team admin.
-                <br />Contact your admin if you need an invite.
+                Access restricted to <strong style={{ color: "rgba(255,255,255,0.35)" }}>@pathlabs.com</strong> accounts.
+                <br />Contact your admin if you need access.
               </p>
             </div>
           </div>
