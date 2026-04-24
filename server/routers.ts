@@ -276,7 +276,9 @@ export const appRouter = router({
           .map((k) => `[${k.title}]\n${k.content}`)
           .join("\n\n");
 
-        // Create the run record
+        // Create the run record immediately so we can return the runId right away.
+        // The actual Manus agent call runs in the background — this prevents HTTP
+        // request timeouts on the deployed platform (which kills requests after ~60s).
         const runId = await createSkillRun({
           userId: ctx.user.id,
           skillId: input.skillId,
@@ -292,59 +294,64 @@ export const appRouter = router({
 
         const startedAt = Date.now();
 
-        try {
-          const prompt = buildSkillPrompt(input.skillId, {
-            adAccountId: input.adAccountId,
-            businessManagerId: input.businessManagerId,
-            campaignIds: input.campaignIds,
-            dateRange: input.datePreset,
-            additionalInstructions: input.additionalInstructions,
-            knowledgeContext: relevantKnowledge || undefined,
-          });
+        // ── Fire-and-forget background execution ──────────────────────────
+        // We intentionally do NOT await this. The HTTP response returns the
+        // runId immediately; the frontend polls getRunStatus for progress.
+        (async () => {
+          try {
+            const prompt = buildSkillPrompt(input.skillId, {
+              adAccountId: input.adAccountId,
+              businessManagerId: input.businessManagerId,
+              campaignIds: input.campaignIds,
+              dateRange: input.datePreset,
+              additionalInstructions: input.additionalInstructions,
+              knowledgeContext: relevantKnowledge || undefined,
+            });
 
-          const statusLog: Array<{ ts: number; msg: string }> = [];
-          const result = await runManusSkillTask({
-            apiKey,
-            skillId: input.skillId,
-            prompt,
-            onProgress: (msg: string) => {
-              statusLog.push({ ts: Date.now(), msg });
-              console.log(`[Run ${runId}] ${msg}`);
-            },
-          });
+            const statusLog: Array<{ ts: number; msg: string }> = [];
 
-          const durationMs = Date.now() - startedAt;
+            // Persist status log entries to DB every 5 progress messages so
+            // the polling endpoint can surface them to the frontend in real time.
+            let flushCounter = 0;
+            const flushStatusLog = async () => {
+              await updateSkillRun(runId, { statusLog }).catch(() => {});
+            };
 
-          await updateSkillRun(runId, {
-            status: result.status,
-            reportMarkdown: result.report || result.errorMessage,
-            errorMessage: result.errorMessage,
-            taskUrl: result.taskUrl,
-            attachments: result.attachments,
-            statusLog,
-            durationMs,
-          });
+            const result = await runManusSkillTask({
+              apiKey,
+              skillId: input.skillId,
+              prompt,
+              onProgress: async (msg: string) => {
+                statusLog.push({ ts: Date.now(), msg });
+                console.log(`[Run ${runId}] ${msg}`);
+                flushCounter++;
+                if (flushCounter % 3 === 0) await flushStatusLog();
+              },
+            });
 
-          return {
-            runId,
-            status: result.status,
-            report: result.report,
-            taskUrl: result.taskUrl,
-            attachments: result.attachments,
-            durationMs,
-          };
-        } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          await updateSkillRun(runId, {
-            status: "error",
-            errorMessage,
-            durationMs: Date.now() - startedAt,
-          });
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: errorMessage,
-          });
-        }
+            const durationMs = Date.now() - startedAt;
+            await updateSkillRun(runId, {
+              status: result.status,
+              reportMarkdown: result.report || result.errorMessage,
+              errorMessage: result.errorMessage,
+              taskUrl: result.taskUrl,
+              attachments: result.attachments,
+              statusLog,
+              durationMs,
+            });
+          } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error(`[Run ${runId}] Background execution failed:`, errorMessage);
+            await updateSkillRun(runId, {
+              status: "error",
+              errorMessage,
+              durationMs: Date.now() - startedAt,
+            }).catch(() => {});
+          }
+        })();
+
+        // Return immediately — frontend polls getRunStatus for updates.
+        return { runId, status: "running" as const };
       }),
 
     /**

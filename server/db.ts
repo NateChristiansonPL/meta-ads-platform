@@ -182,7 +182,7 @@ export async function createSkillRun(run: InsertSkillRun): Promise<number> {
 export async function updateSkillRun(
   id: number,
   patch: {
-    status: "success" | "error";
+    status?: "success" | "error" | "running";
     reportMarkdown?: string;
     errorMessage?: string;
     taskUrl?: string;
@@ -193,7 +193,12 @@ export async function updateSkillRun(
 ) {
   const db = await getDb();
   if (!db) return;
-  await db.update(skillRuns).set({ ...patch, completedAt: new Date() }).where(eq(skillRuns.id, id));
+  // Only set completedAt when the run is actually finishing (not for mid-run statusLog flushes)
+  const isFinishing = patch.status === "success" || patch.status === "error";
+  await db.update(skillRuns).set({
+    ...patch,
+    ...(isFinishing ? { completedAt: new Date() } : {}),
+  }).where(eq(skillRuns.id, id));
 }
 
 export async function getRecentRuns(limit = 50) {

@@ -157,11 +157,10 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         additionalInstructions,
         extraParams: { modules: enabledModules, compare },
       });
-      stopPolling();
-      setReport(result.report ?? "");
-      setTaskUrl(result.taskUrl ?? null);
-      setAttachments(result.attachments ?? []);
-      setStatus("success");
+      // execute now returns immediately with { runId, status: "running" }.
+      // The Manus agent runs in the background; we poll getRunStatus for updates.
+      setRunId(result.runId);
+      startPolling(result.runId);
     } catch (err: unknown) {
       stopPolling();
       const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
@@ -169,17 +168,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
       setStatus("error");
     }
   }
-
-  // Start polling as soon as we have a runId
-  useEffect(() => {
-    if (status === "running" && runId) startPolling(runId);
-  }, [runId, status]);
-
-  // Capture runId from execute mutation state
-  useEffect(() => {
-    // The execute mutation returns runId — capture it for polling
-    // (executeRun.data is set after the mutation resolves, but we need it during running)
-  }, [executeRun.data]);
 
   function handleReset() {
     stopPolling();
