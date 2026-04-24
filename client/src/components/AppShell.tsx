@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import {
   BarChart2,
@@ -107,7 +106,8 @@ export default function AppShell({ children, title, subtitle, badge }: AppShellP
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      window.location.href = getLoginUrl();
+      // Always redirect to the web app login page, not the Manus OAuth URL directly
+      window.location.href = "/";
     }
   }, [loading, isAuthenticated]);
 
@@ -166,7 +166,7 @@ export default function AppShell({ children, title, subtitle, badge }: AppShellP
             )}
           </div>
           <button
-            onClick={() => logout()}
+            onClick={async () => { await logout(); window.location.href = "/"; }}
             className="p-1.5 rounded-md transition-colors"
             style={{ color: "rgba(255,255,255,0.4)" }}
             title="Sign out"
