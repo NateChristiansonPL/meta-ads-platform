@@ -7,7 +7,8 @@
  * Flow:
  *  1. POST /v2/task.create  → get task_id
  *  2. Poll GET /v2/task.listMessages until agent_status === "stopped" | "error"
- *  3. Extract final assistant_message content as the report
+ *     - Paginate with cursor to collect ALL messages (not just last 20)
+ *  3. Extract ALL assistant_message content joined as the report
  */
 
 import axios from "axios";
@@ -24,9 +25,6 @@ export const SKILL_IDS: Record<string, string> = {
   "audience-overlap": "pl-audience-overlap-spend",
 };
 
-// Meta Marketing MCP connector UUID (from Manus connector list)
-export const META_MARKETING_CONNECTOR_ID = "meta-marketing";
-
 interface ManusTaskOptions {
   apiKey: string;
   skillId: string;
@@ -35,6 +33,7 @@ interface ManusTaskOptions {
 }
 
 interface ManusMessage {
+  id?: string;
   type: string;
   status_update?: {
     agent_status: "running" | "stopped" | "waiting" | "error";
@@ -68,7 +67,9 @@ interface ManusTaskResult {
 }
 
 /**
- * Build a structured prompt for a given skill and parameters.
+ * Build a precise, skill-specific prompt that mirrors how the skill is invoked
+ * natively on the Manus platform. Each skill has its own invocation pattern
+ * derived from its SKILL.md Quick Start section.
  */
 export function buildSkillPrompt(
   skillId: string,
@@ -81,34 +82,315 @@ export function buildSkillPrompt(
     knowledgeContext?: string;
   }
 ): string {
-  const skillNames: Record<string, string> = {
-    "weekly-optimization": "Weekly Optimization",
-    "performance-insights": "Performance Insights",
-    "creative-lifecycle": "Creative Lifecycle",
-    "structural-audit": "Structural Audit",
-    "audience-overlap": "Audience Overlap & Wasted Spend",
-  };
+  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext } = params;
 
-  const skillName = skillNames[skillId] ?? skillId;
-  const campaignFilter =
-    params.campaignIds && params.campaignIds.length > 0
-      ? `\nFocus on these specific campaign IDs: ${params.campaignIds.join(", ")}`
-      : "\nAnalyze all active campaigns.";
+  // Normalize account ID — ensure it has the act_ prefix
+  const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
 
-  const knowledgeSection = params.knowledgeContext
-    ? `\n\n--- ACCOUNT CONTEXT (from knowledge base) ---\n${params.knowledgeContext}\n---`
+  // Map human-readable date ranges to Meta date presets
+  const datePreset = mapDateRangeToPreset(dateRange);
+
+  // Campaign filter string
+  const campaignFilter = campaignIds && campaignIds.length > 0
+    ? campaignIds.join(",")
     : "";
 
-  const additionalSection = params.additionalInstructions
-    ? `\n\nAdditional instructions: ${params.additionalInstructions}`
+  const knowledgeSection = knowledgeContext
+    ? `\n\n--- ACCOUNT CONTEXT (from knowledge base) ---\n${knowledgeContext}\n---`
     : "";
 
-  return `Run the ${skillName} skill for the following Meta Ads account:
+  const additionalSection = additionalInstructions
+    ? `\n\nAdditional instructions from the user: ${additionalInstructions}`
+    : "";
 
-Ad Account ID: ${params.adAccountId}${params.businessManagerId ? `\nBusiness Manager ID: ${params.businessManagerId}` : ""}
-Date Range: ${params.dateRange}${campaignFilter}${knowledgeSection}${additionalSection}
+  switch (skillId) {
+    case "weekly-optimization":
+      return buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
 
-Please use the ${SKILL_IDS[skillId] ?? skillId} skill to perform this analysis. Provide a comprehensive report with actionable recommendations.`;
+    case "performance-insights":
+      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+
+    case "creative-lifecycle":
+      return buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+
+    case "structural-audit":
+      return buildStructuralAuditPrompt(accountId, campaignFilter, knowledgeSection, additionalSection);
+
+    case "audience-overlap":
+      return buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+
+    default:
+      return `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}${knowledgeSection}${additionalSection}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
+  }
+}
+
+function mapDateRangeToPreset(dateRange: string): string {
+  const lower = dateRange.toLowerCase().replace(/\s/g, "_");
+  // Direct preset passthrough
+  if (["last_7d","last_14d","last_30d","this_month","last_month","last_quarter","this_year","last_year","lifetime","today","yesterday"].includes(lower)) {
+    return lower;
+  }
+  // Human-readable mappings
+  if (lower.includes("7") || lower.includes("week")) return "last_7d";
+  if (lower.includes("14")) return "last_14d";
+  if (lower.includes("30") || lower.includes("month")) return "last_30d";
+  if (lower.includes("quarter")) return "last_quarter";
+  if (lower.includes("year")) return "last_year";
+  return "last_7d"; // safe default
+}
+
+function buildWeeklyOptPrompt(
+  accountId: string,
+  datePreset: string,
+  campaignFilter: string,
+  knowledgeSection: string,
+  additionalSection: string
+): string {
+  const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
+  return `Please run the **pl-weekly-optimization** skill for the following Meta Ads account.
+
+**Account ID:** ${accountId}
+**Date Preset:** ${datePreset}
+${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
+${knowledgeSection}${additionalSection}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-weekly-optimization/SKILL.md\` first, then execute:
+
+\`\`\`bash
+cd /home/ubuntu/skills/pl-weekly-optimization/scripts
+python3 run_weekly_analysis.py \\
+  --account-id ${accountId} \\
+  --date-preset ${datePreset} \\
+  ${campaignArg}--compare-prior \\
+  --output-dir /home/ubuntu/output/weekly-opt
+\`\`\`
+
+After the script completes:
+1. Read \`/home/ubuntu/output/weekly-opt/weekly_optimization.md\`
+2. Output the **full contents** of that file as your response — do not summarize or truncate
+3. If the file is large, output it in multiple messages but include every section
+4. Also note any key findings from \`recommendations.json\`
+
+The report must include: campaign overview table, all ranked recommendations per campaign, funnel drop-off issues, and all breakdown tables. Do not abbreviate.`;
+}
+
+function buildPerformanceInsightsPrompt(
+  accountId: string,
+  datePreset: string,
+  campaignFilter: string,
+  knowledgeSection: string,
+  additionalSection: string
+): string {
+  const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
+  return `Please run the **pl-performance-analysis-insights-v3** skill for the following Meta Ads account.
+
+**Account ID:** ${accountId}
+**Date Preset:** ${datePreset}
+${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
+${knowledgeSection}${additionalSection}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-performance-analysis-insights-v3/SKILL.md\` first, then execute the full analysis:
+
+\`\`\`bash
+cd /home/ubuntu/skills/pl-performance-analysis-insights-v3/scripts
+
+# If specific campaigns provided, use filtered run:
+${campaignFilter
+  ? `python3 run_filtered_analysis.py \\
+  --account-id ${accountId} \\
+  --date-preset ${datePreset} \\
+  ${campaignArg}--output-dir /home/ubuntu/output/perf-insights`
+  : `python3 run_full_analysis.py \\
+  --account-id ${accountId} \\
+  --date-preset ${datePreset} \\
+  --output-dir /home/ubuntu/output/perf-insights`}
+\`\`\`
+
+After the script completes:
+1. Read the master summary from \`/home/ubuntu/output/perf-insights/master_summary.md\` (or the individual module outputs if no master summary)
+2. Output the **full contents** of the report — do not summarize or truncate any section
+3. Include all module outputs: timing analysis, saturation, lifecycle enrichment, placement conversion data, and signals
+4. If converting to PDF is possible, do so and attach it
+
+The report must be comprehensive and include every section the skill produces. Do not abbreviate.`;
+}
+
+function buildCreativeLifecyclePrompt(
+  accountId: string,
+  datePreset: string,
+  campaignFilter: string,
+  knowledgeSection: string,
+  additionalSection: string
+): string {
+  const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}" ` : "";
+  return `Please run the **pl-creative-lifecycle-v3** skill for the following Meta Ads account.
+
+**Account ID:** ${accountId}
+**Date Preset:** ${datePreset}
+${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
+${knowledgeSection}${additionalSection}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-creative-lifecycle-v3/SKILL.md\` first, then execute:
+
+\`\`\`bash
+cd /home/ubuntu/skills/pl-creative-lifecycle-v3/scripts
+
+# Install dependencies if needed
+pip install scipy tabulate rapidfuzz 2>/dev/null || true
+
+python3 analyze_creative_lifecycle.py \\
+  --account-id ${accountId} \\
+  --date-preset ${datePreset} \\
+  ${campaignArg}--output-dir /home/ubuntu/output/creative-lifecycle
+\`\`\`
+
+After the script completes:
+1. Read the full Markdown report from the output directory
+2. Output the **complete report** — do not summarize or truncate
+3. Include all sections: CDR analysis, BOCPD change points, CUSUM alerts, EWMA alerts, composite fatigue assessment, and ad relevance diagnostics
+4. Note any ads flagged as fatigued and the recommended actions
+
+The report must include every section the skill produces. Do not abbreviate.`;
+}
+
+function buildStructuralAuditPrompt(
+  accountId: string,
+  campaignFilter: string,
+  knowledgeSection: string,
+  additionalSection: string
+): string {
+  const campaignArg = campaignFilter ? campaignFilter.split(",").join(" ") : "";
+  return `Please run the **meta-ads-audit** (Andromeda Structural Audit) skill for the following Meta Ads account.
+
+**Account ID:** ${accountId}
+${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns (select the most significant ones)"}
+${knowledgeSection}${additionalSection}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/meta-ads-audit/SKILL.md\` first, then execute both steps:
+
+\`\`\`bash
+cd /home/ubuntu/skills/meta-ads-audit/scripts
+
+# Step 1 — Fetch data
+python3 meta_ads_fetcher_v3.py \\
+  --account ${accountId} \\
+  ${campaignArg ? `--campaigns ${campaignArg} \\` : ""}
+  --output audit_data.json
+
+# Step 2 — Run mechanical checks
+python3 meta_ads_checker_v3.py \\
+  --input audit_data.json \\
+  --output mechanical_check_results.json
+\`\`\`
+
+After both scripts complete:
+1. Follow the SKILL.md report template exactly — you are a rendering engine, not an author
+2. Copy pre-computed data from \`mechanical_check_results.json\` into the template
+3. Output the **complete audit report** with all 9 checks: Data Infrastructure & EMQ, Signal Density, Creative Velocity & Format Diversity, Liquidity Consolidation Index, Budget Liquidity Ratio, Late-Stage Funnel Signal Velocity, Creative Fatigue Index, ASC Adoption Rate, Learning Phase & Reset Risk
+4. Include the health score, all check scores/verdicts, and the full recommendations section
+
+Do not skip any check. Do not abbreviate any section.`;
+}
+
+function buildAudienceOverlapPrompt(
+  accountId: string,
+  datePreset: string,
+  campaignFilter: string,
+  knowledgeSection: string,
+  additionalSection: string
+): string {
+  const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}"` : "";
+  return `Please run the **pl-audience-overlap-spend** skill for the following Meta Ads account.
+
+**Account ID:** ${accountId}
+**Date Preset:** ${datePreset}
+${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
+${knowledgeSection}${additionalSection}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-audience-overlap-spend/SKILL.md\` first, then execute all three steps:
+
+\`\`\`bash
+cd /home/ubuntu/skills/pl-audience-overlap-spend/scripts
+
+# Step 1 — Pull data
+python3 pull_data.py \\
+  --account ${accountId} \\
+  --date-preset ${datePreset} \\
+  ${campaignArg} \\
+  --output ./raw
+
+# Step 2 — Run overlap analysis
+python3 run_overlap.py \\
+  --account ${accountId} \\
+  ${campaignArg} \\
+  --adset-data ./raw/adset.json \\
+  --output ./output
+
+# Step 3 — Estimate wasted spend
+python3 estimate_waste.py \\
+  --account ${accountId} \\
+  --overlap-results ./output/overlap_results.json \\
+  --adset-data ./raw/adset.json \\
+  --output ./output
+\`\`\`
+
+After all scripts complete:
+1. Read the full Markdown reports from \`./output/\`
+2. Output the **complete overlap report and wasted spend report** — do not summarize or truncate
+3. Include all sections: pairwise overlap matrix, overlap heatmap description, wasted spend estimates per campaign, KPI impact of overlap, and recommendations
+4. Highlight the campaigns with the highest wasted spend and the specific ad set pairs causing it
+
+Do not abbreviate any section.`;
+}
+
+/**
+ * Fetch ALL messages for a task by paginating through the listMessages API.
+ * Uses cursor-based pagination to get every message, not just the last 20.
+ */
+async function fetchAllMessages(
+  taskId: string,
+  headers: Record<string, string>
+): Promise<ManusMessage[]> {
+  const allMessages: ManusMessage[] = [];
+  let cursor: string | undefined;
+  const PAGE_SIZE = 100;
+
+  // Fetch in ascending order so we get messages in chronological order
+  // and can paginate forward with a cursor
+  do {
+    const params: Record<string, string | number> = {
+      task_id: taskId,
+      order: "asc",
+      limit: PAGE_SIZE,
+    };
+    if (cursor) params.cursor = cursor;
+
+    const resp = await axios.get(`${MANUS_API_BASE}/v2/task.listMessages`, {
+      params,
+      headers,
+      timeout: 15000,
+    });
+
+    if (!resp.data?.ok) break;
+
+    const messages: ManusMessage[] = resp.data.messages ?? [];
+    allMessages.push(...messages);
+
+    // If we got fewer messages than the page size, we've reached the end
+    cursor = messages.length === PAGE_SIZE ? resp.data.next_cursor : undefined;
+  } while (cursor);
+
+  return allMessages;
 }
 
 /**
@@ -151,34 +433,33 @@ export async function runManusSkillTask(
 
   onProgress?.(`Task created (${taskId}). Waiting for analysis to complete...`);
 
-  // 2. Poll for completion
+  // 2. Poll for completion — check status with a small fetch, then do full fetch at end
   let attempts = 0;
-  const MAX_ATTEMPTS = 120; // 10 minutes at 5s intervals
+  const MAX_ATTEMPTS = 180; // 15 minutes at 5s intervals
   const POLL_INTERVAL_MS = 5000;
 
   while (attempts < MAX_ATTEMPTS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     attempts++;
 
-    const listResp = await axios.get(
+    // Use a small fetch just to check status (desc order, limit 5 = just status messages)
+    const statusResp = await axios.get(
       `${MANUS_API_BASE}/v2/task.listMessages`,
       {
-        params: { task_id: taskId, order: "desc", limit: 20 },
+        params: { task_id: taskId, order: "desc", limit: 5 },
         headers,
         timeout: 15000,
       }
     );
 
-    if (!listResp.data?.ok) continue;
+    if (!statusResp.data?.ok) continue;
 
-    const messages: ManusMessage[] = listResp.data.messages ?? [];
-
-    // Find the latest status update
-    const statusUpdate = messages.find((m) => m.type === "status_update");
+    const recentMessages: ManusMessage[] = statusResp.data.messages ?? [];
+    const statusUpdate = recentMessages.find((m) => m.type === "status_update");
     const agentStatus = statusUpdate?.status_update?.agent_status;
 
     if (agentStatus === "running") {
-      onProgress?.(`Analysis in progress... (${attempts * 5}s elapsed)`);
+      onProgress?.(`Analysis in progress... (${Math.round(attempts * 5 / 60)}m ${(attempts * 5) % 60}s elapsed)`);
       continue;
     }
 
@@ -187,14 +468,15 @@ export async function runManusSkillTask(
       onProgress?.(
         `Waiting: ${detail?.waiting_description ?? "Agent needs input"}`
       );
-      // For skill runs we don't expect waiting states — continue polling
       continue;
     }
 
     if (agentStatus === "error") {
+      // Fetch all messages to get the full error context
+      const allMsgs = await fetchAllMessages(taskId, headers);
       const errorMsg =
-        messages.find((m) => m.type === "error_message")?.error_message
-          ?.content ?? "Unknown error";
+        allMsgs.find((m) => m.type === "error_message")?.error_message?.content
+        ?? "Unknown error";
       return {
         taskId,
         taskUrl,
@@ -206,19 +488,40 @@ export async function runManusSkillTask(
     }
 
     if (agentStatus === "stopped") {
-      onProgress?.("Analysis complete. Extracting report...");
+      onProgress?.("Analysis complete. Fetching full report...");
 
-      // Collect all assistant messages in chronological order
-      const assistantMessages = messages
-        .filter((m) => m.type === "assistant_message" && m.assistant_message?.content)
-        .reverse(); // listMessages returns desc, so reverse for chronological
+      // Fetch ALL messages with pagination to get the complete output
+      const allMessages = await fetchAllMessages(taskId, headers);
 
-      const reportParts = assistantMessages.map(
-        (m) => m.assistant_message!.content
+      // Collect all assistant messages in chronological order (already asc from fetchAllMessages)
+      const assistantMessages = allMessages.filter(
+        (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
       );
-      const report = reportParts.join("\n\n---\n\n");
 
-      // Collect attachments
+      if (assistantMessages.length === 0) {
+        // Fallback: try the recent messages we already have
+        const fallbackMsgs = recentMessages.filter(
+          (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
+        );
+        if (fallbackMsgs.length > 0) {
+          const report = fallbackMsgs.map((m) => m.assistant_message!.content).join("\n\n---\n\n");
+          return { taskId, taskUrl, report, attachments: [], status: "success" };
+        }
+        return {
+          taskId,
+          taskUrl,
+          report: "The analysis completed but produced no output. Please check the task directly at: " + taskUrl,
+          attachments: [],
+          status: "error",
+          errorMessage: "No assistant messages found in completed task.",
+        };
+      }
+
+      // Join all assistant message content — this gives the full report
+      const reportParts = assistantMessages.map((m) => m.assistant_message!.content);
+      const report = reportParts.join("\n\n");
+
+      // Collect attachments from all messages
       const attachments = assistantMessages
         .flatMap((m) => m.assistant_message?.attachments ?? [])
         .filter((a) => a.url && a.filename)
@@ -228,11 +531,13 @@ export async function runManusSkillTask(
           contentType: a.content_type ?? "application/octet-stream",
         }));
 
+      onProgress?.(`Report extracted: ${reportParts.length} message(s), ${report.length} characters`);
+
       return { taskId, taskUrl, report, attachments, status: "success" };
     }
   }
 
-  throw new Error("Task timed out after 10 minutes.");
+  throw new Error("Task timed out after 15 minutes. Check the task directly at: https://manus.im/app/tasks/" + taskId);
 }
 
 /**
