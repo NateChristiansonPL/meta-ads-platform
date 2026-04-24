@@ -7,12 +7,11 @@ import {
   ChevronRight,
   Clock,
   Cpu,
+  Hammer,
   Key,
   LayoutDashboard,
-  Lock,
   LogOut,
   RefreshCw,
-  Settings,
   Shield,
   TrendingUp,
   Users,
@@ -217,31 +216,19 @@ export default function AppShell({ children, title, subtitle, badge }: AppShellP
             </div>
           </div>
 
-          {/* Campaign Builder — greyed out */}
+          {/* Campaign Builder — active tool */}
           <div className="px-3 pt-4">
             <p className="text-xs font-bold mb-2 px-2" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
               Tools
             </p>
-            <div
-              className="flex items-center gap-2.5 px-2 py-2 rounded-lg cursor-not-allowed"
-              style={{ opacity: 0.35 }}
-              title="Campaign Builder — Coming Soon"
-            >
-              <div className="w-6 h-6 rounded flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <Settings size={12} style={{ color: "rgba(255,255,255,0.5)" }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.5)" }}>
-                    Campaign Builder
-                  </span>
-                  <Lock size={9} style={{ color: "rgba(255,255,255,0.3)" }} />
-                </div>
-                <span className="text-xs truncate block" style={{ color: "rgba(255,255,255,0.25)", fontSize: "0.65rem" }}>
-                  Coming soon
-                </span>
-              </div>
-            </div>
+            <NavItem
+              icon={Hammer}
+              label="Campaign Builder"
+              sub="Create & launch"
+              path="/campaign-builder"
+              active={location === "/campaign-builder"}
+              color="#ED135F"
+            />
           </div>
 
           {/* Admin section */}

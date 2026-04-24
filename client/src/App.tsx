@@ -16,6 +16,7 @@ import AdminRunLogs from "./pages/AdminRunLogs";
 import AdminUsage from "./pages/AdminUsage";
 import AdminKnowledge from "./pages/AdminKnowledge";
 import ManusAI from "./pages/ManusAI";
+import CampaignBuilder from "./pages/CampaignBuilder";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/admin/usage" component={AdminUsage} />
       <Route path="/admin/knowledge" component={AdminKnowledge} />
       <Route path="/manus-ai" component={ManusAI} />
+      <Route path="/campaign-builder" component={CampaignBuilder} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
