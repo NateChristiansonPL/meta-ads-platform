@@ -21,3 +21,9 @@
 - [x] Ad name cleaning in Performance Insights prompt: strip ad-set/campaign prefixes after aggregation
 - [x] Auto-retry failed modules: add retry logic to Performance Insights prompt (Module Retry Policy section)
 - [x] Billing period credits chart: added configurable billing cycle start day (admin setting in Usage & Tallies), credits chart on Dashboard uses billing period window
+
+## Run Logs Improvements
+- [x] Add credits used column to Admin Run Logs table
+- [x] Add model used column to Admin Run Logs table
+- [x] Add campaign count column to Admin Run Logs table
+- [x] Convert duration from raw seconds to mm:ss format in Run Logs table
