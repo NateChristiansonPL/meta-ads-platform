@@ -1,5 +1,6 @@
 import AppShell from "@/components/AppShell";
 import SkillRunner from "@/components/SkillRunner";
+import { RunHistoryDrawer } from "@/components/RunHistoryDrawer";
 
 const CONFIG = {
   skillId: "audience-overlap",
@@ -12,7 +13,7 @@ const CONFIG = {
 
 export default function AudienceOverlap() {
   return (
-    <AppShell title="Audience Overlap & Wasted Spend" subtitle="Overlap & wasted spend" badge="pl-audience-overlap-spend">
+    <AppShell title="Audience Overlap & Wasted Spend" subtitle="Overlap & wasted spend" badge="pl-audience-overlap-spend" headerActions={<RunHistoryDrawer skillId="audience-overlap" skillName="Audience Overlap & Wasted Spend" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

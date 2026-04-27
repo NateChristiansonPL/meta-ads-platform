@@ -97,9 +97,10 @@ interface AppShellProps {
   title: string;
   subtitle?: string;
   badge?: string;
+  headerActions?: React.ReactNode;
 }
 
-export default function AppShell({ children, title, subtitle, badge }: AppShellProps) {
+export default function AppShell({ children, title, subtitle, badge, headerActions }: AppShellProps) {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [location] = useLocation();
   const [adminOpen, setAdminOpen] = useState(false);
@@ -285,24 +286,31 @@ export default function AppShell({ children, title, subtitle, badge }: AppShellP
               background: "rgba(20,19,73,0.6)",
             }}
           >
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>
-                  {title}
-                </h1>
-                {subtitle && (
-                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                    {subtitle}
-                  </p>
+            <div className="flex items-center justify-between gap-3 w-full">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h1 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                      {subtitle}
+                    </p>
+                  )}
+                </div>
+                {badge && (
+                  <span
+                    className="text-xs font-mono px-2 py-0.5 rounded"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  >
+                    {badge}
+                  </span>
                 )}
               </div>
-              {badge && (
-                <span
-                  className="text-xs font-mono px-2 py-0.5 rounded"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}
-                >
-                  {badge}
-                </span>
+              {headerActions && (
+                <div className="flex items-center gap-2">
+                  {headerActions}
+                </div>
               )}
             </div>
           </div>

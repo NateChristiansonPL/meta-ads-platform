@@ -233,6 +233,14 @@ export async function getRunsByUser(userId: number, limit = 20) {
     .orderBy(desc(skillRuns.startedAt))
     .limit(limit);
 }
+export async function getRunsByUserAndSkill(userId: number, skillId: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(skillRuns)
+    .where(and(eq(skillRuns.userId, userId), eq(skillRuns.skillId, skillId)))
+    .orderBy(desc(skillRuns.startedAt))
+    .limit(limit);
+}
 
 export async function getRunById(id: number) {
   const db = await getDb();

@@ -17,6 +17,7 @@ import {
   getRecentRuns,
   getRunById,
   getRunsByUser,
+  getRunsByUserAndSkill,
   getSkillSuccessCounts,
   getTokenById,
   getUserSuccessCounts,
@@ -374,6 +375,9 @@ export const appRouter = router({
     myRuns: protectedProcedure
       .input(z.object({ limit: z.number().int().min(1).max(100).default(20) }))
       .query(async ({ ctx, input }) => getRunsByUser(ctx.user.id, input.limit)),
+    skillHistory: protectedProcedure
+      .input(z.object({ skillId: z.string().min(1), limit: z.number().int().min(1).max(100).default(50) }))
+      .query(async ({ ctx, input }) => getRunsByUserAndSkill(ctx.user.id, input.skillId, input.limit)),
 
     /**
      * getRunStatus: Lightweight poll for a running task's current status.

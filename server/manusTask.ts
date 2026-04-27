@@ -498,40 +498,90 @@ export async function runManusSkillTask(
         (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
       );
 
+      // Collect ALL attachments across all messages
+      const rawAttachments = allMessages
+        .flatMap((m) => m.assistant_message?.attachments ?? [])
+        .filter((a) => a.url && a.filename);
+
+      const attachments = rawAttachments.map((a) => ({
+        filename: a.filename!,
+        url: a.url!,
+        contentType: a.content_type ?? "application/octet-stream",
+      }));
+
+      // ── Primary strategy: download markdown attachment files ──────────────
+      // The Manus agent writes the full analysis into .md files and attaches
+      // them. The chat message is just a short summary. We prefer the file
+      // content as the report because it contains the complete analysis.
+      const mdAttachments = rawAttachments.filter(
+        (a) => a.filename?.endsWith(".md") && a.url
+      );
+
+      // Prioritise comprehensive/master/summary files first, then the rest
+      const priorityOrder = ["comprehensive", "master", "summary", "weekly", "report"];
+      const sortedMdAttachments = [...mdAttachments].sort((a, b) => {
+        const aIdx = priorityOrder.findIndex((p) => a.filename!.toLowerCase().includes(p));
+        const bIdx = priorityOrder.findIndex((p) => b.filename!.toLowerCase().includes(p));
+        const aScore = aIdx === -1 ? 99 : aIdx;
+        const bScore = bIdx === -1 ? 99 : bIdx;
+        return aScore - bScore;
+      });
+
+      if (sortedMdAttachments.length > 0) {
+        onProgress?.(`Downloading ${sortedMdAttachments.length} report file(s)...`);
+        const reportSections: string[] = [];
+
+        for (const att of sortedMdAttachments) {
+          try {
+            const fileResp = await axios.get(att.url!, {
+              timeout: 30000,
+              responseType: "text",
+              // Manus storage URLs may need the API key
+              headers: att.url!.includes("api.manus.ai") ? headers : {},
+            });
+            const content = typeof fileResp.data === "string"
+              ? fileResp.data
+              : JSON.stringify(fileResp.data);
+            if (content.trim()) {
+              reportSections.push(`## ${att.filename}\n\n${content}`);
+            }
+          } catch (fetchErr) {
+            console.warn(`[manusTask] Failed to fetch attachment ${att.filename}:`, fetchErr);
+          }
+        }
+
+        if (reportSections.length > 0) {
+          const report = reportSections.join("\n\n---\n\n");
+          onProgress?.(`Full report extracted from ${reportSections.length} file(s) (${report.length} characters)`);
+          return { taskId, taskUrl, report, attachments, status: "success" };
+        }
+      }
+
+      // ── Fallback: use assistant message content ───────────────────────────
       if (assistantMessages.length === 0) {
-        // Fallback: try the recent messages we already have
+        // Last resort: try the recent messages we already have
         const fallbackMsgs = recentMessages.filter(
           (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
         );
         if (fallbackMsgs.length > 0) {
           const report = fallbackMsgs.map((m) => m.assistant_message!.content).join("\n\n---\n\n");
-          return { taskId, taskUrl, report, attachments: [], status: "success" };
+          return { taskId, taskUrl, report, attachments, status: "success" };
         }
         return {
           taskId,
           taskUrl,
-          report: "The analysis completed but produced no output. Please check the task directly at: " + taskUrl,
-          attachments: [],
-          status: "error",
-          errorMessage: "No assistant messages found in completed task.",
+          report: "The analysis completed but the report files could not be retrieved. Please view the full output directly at: " + taskUrl,
+          attachments,
+          status: attachments.length > 0 ? "success" : "error",
+          errorMessage: attachments.length > 0 ? undefined : "No report content found in completed task.",
         };
       }
 
-      // Join all assistant message content — this gives the full report
+      // Join all assistant message content as the report
       const reportParts = assistantMessages.map((m) => m.assistant_message!.content);
       const report = reportParts.join("\n\n");
 
-      // Collect attachments from all messages
-      const attachments = assistantMessages
-        .flatMap((m) => m.assistant_message?.attachments ?? [])
-        .filter((a) => a.url && a.filename)
-        .map((a) => ({
-          filename: a.filename!,
-          url: a.url!,
-          contentType: a.content_type ?? "application/octet-stream",
-        }));
-
-      onProgress?.(`Report extracted: ${reportParts.length} message(s), ${report.length} characters`);
+      onProgress?.(`Report extracted from ${reportParts.length} message(s) (${report.length} characters)`);
 
       return { taskId, taskUrl, report, attachments, status: "success" };
     }

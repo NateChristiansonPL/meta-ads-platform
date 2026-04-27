@@ -1,5 +1,6 @@
 import AppShell from "@/components/AppShell";
 import SkillRunner from "@/components/SkillRunner";
+import { RunHistoryDrawer } from "@/components/RunHistoryDrawer";
 
 const CONFIG = {
   skillId: "structural-audit",
@@ -12,7 +13,7 @@ const CONFIG = {
 
 export default function StructuralAudit() {
   return (
-    <AppShell title="Structural Audit" subtitle="Andromeda account audit" badge="meta-ads-structural-audit">
+    <AppShell title="Structural Audit" subtitle="Andromeda account audit" badge="meta-ads-structural-audit" headerActions={<RunHistoryDrawer skillId="structural-audit" skillName="Structural Audit" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

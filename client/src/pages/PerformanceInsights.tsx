@@ -1,5 +1,6 @@
 import AppShell from "@/components/AppShell";
 import SkillRunner from "@/components/SkillRunner";
+import { RunHistoryDrawer } from "@/components/RunHistoryDrawer";
 
 const MODULES = [
   { id: "creative", label: "Creative", sub: "Ad-level CPM, KPI, relevance diagnostics, fatigue signals" },
@@ -23,7 +24,7 @@ const CONFIG = {
 
 export default function PerformanceInsights() {
   return (
-    <AppShell title="Performance Insights" subtitle="KPI-anchored analysis" badge="pl-performance-analysis-insights-v3">
+    <AppShell title="Performance Insights" subtitle="KPI-anchored analysis" badge="pl-performance-analysis-insights-v3" headerActions={<RunHistoryDrawer skillId="performance-insights" skillName="Performance Insights" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );
