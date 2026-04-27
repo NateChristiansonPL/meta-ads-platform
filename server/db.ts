@@ -283,6 +283,23 @@ export async function getSkillSuccessCounts() {
     .groupBy(skillRuns.skillId, skillRuns.skillName);
 }
 
+export async function getCreditsByUser() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    userId: skillRuns.userId,
+    userName: users.name,
+    userEmail: users.email,
+    totalCredits: sql<number>`COALESCE(SUM(${skillRuns.creditUsage}), 0)`,
+    runCount: sql<number>`COUNT(*)`,
+    avgCredits: sql<number>`COALESCE(AVG(${skillRuns.creditUsage}), 0)`,
+  })
+    .from(skillRuns)
+    .leftJoin(users, eq(skillRuns.userId, users.id))
+    .groupBy(skillRuns.userId, users.name, users.email)
+    .orderBy(sql`COALESCE(SUM(${skillRuns.creditUsage}), 0) DESC`);
+}
+
 // ── Knowledge Base ────────────────────────────────────────────────────────────
 
 export async function getKnowledgeEntries() {

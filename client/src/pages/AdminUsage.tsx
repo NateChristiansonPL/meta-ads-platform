@@ -13,11 +13,13 @@ const SKILL_META: Record<string, { color: string; label: string }> = {
 type UserCount = { userId: number; userName: string | null; count: number };
 type SkillCount = { skillId: string; count: number };
 type UserRow = { id: number; name?: string | null; email?: string | null; role: string; lastSignedIn: Date };
+type CreditsByUserRow = { userId: number; userName: string | null; userEmail: string | null; totalCredits: number; runCount: number; avgCredits: number };
 
 export default function AdminUsage() {
   const { data: userCounts = [] } = trpc.runs.userSuccessCounts.useQuery();
   const { data: skillCounts = [] } = trpc.runs.skillSuccessCounts.useQuery();
   const { data: allUsers = [] } = trpc.users.list.useQuery();
+  const { data: creditsByUser = [], isLoading: creditsLoading } = trpc.runs.creditsByUser.useQuery();
   const { data: billingDayData } = trpc.settings.billingCycleStartDay.useQuery();
   const setBillingDay = trpc.settings.setBillingCycleStartDay.useMutation();
   const utils = trpc.useUtils();
@@ -87,6 +89,114 @@ export default function AdminUsage() {
                 );
               })}
             </div>
+          )}
+        </div>
+
+        {/* Credits used by user */}
+        <div className="rounded-xl overflow-hidden xl:col-span-2" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div className="px-5 py-4" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <h3 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Credits Used by User</h3>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Lifetime credit consumption per team member across all runs.</p>
+          </div>
+          {creditsLoading ? (
+            <div className="px-5 py-6 flex items-center gap-2" style={{ color: "rgba(255,255,255,0.35)" }}>
+              <div className="w-3.5 h-3.5 rounded-full border-2 animate-spin" style={{ borderColor: "#00BEEF", borderTopColor: "transparent" }} />
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : (creditsByUser as CreditsByUserRow[]).length === 0 ? (
+            <div className="px-5 py-6 text-center">
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>No credit data yet.</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  {["User", "Total Credits", "Runs", "Avg Credits / Run"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-5 py-2.5 text-left font-bold"
+                      style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(creditsByUser as CreditsByUserRow[]).map((row, i) => {
+                  const displayName = row.userName || row.userEmail || `User #${row.userId}`;
+                  const initial = displayName.charAt(0).toUpperCase();
+                  const grandTotal = (creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + (r.totalCredits ?? 0), 0);
+                  const sharePct = grandTotal > 0 ? Math.round(((row.totalCredits ?? 0) / grandTotal) * 100) : 0;
+                  return (
+                    <tr
+                      key={row.userId}
+                      style={{
+                        borderBottom: i < creditsByUser.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                        background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
+                      }}
+                    >
+                      {/* User */}
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                            style={{ background: "rgba(0,190,239,0.15)", color: "#00BEEF" }}
+                          >
+                            {initial}
+                          </div>
+                          <span className="font-semibold" style={{ color: "#FAFAFA" }}>{displayName}</span>
+                        </div>
+                      </td>
+                      {/* Total credits */}
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>
+                            {(row.totalCredits ?? 0).toLocaleString()}
+                          </span>
+                          <div className="flex-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", minWidth: 60, maxWidth: 120 }}>
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${sharePct}%`, background: "#00BEEF" }}
+                            />
+                          </div>
+                          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.65rem" }}>{sharePct}%</span>
+                        </div>
+                      </td>
+                      {/* Run count */}
+                      <td className="px-5 py-3">
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{row.runCount}</span>
+                      </td>
+                      {/* Avg credits / run */}
+                      <td className="px-5 py-3">
+                        <span style={{ color: "rgba(255,255,255,0.5)" }}>
+                          {row.runCount > 0 ? Math.round(row.avgCredits).toLocaleString() : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* Grand total footer */}
+              {(creditsByUser as CreditsByUserRow[]).length > 1 && (
+                <tfoot>
+                  <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
+                    <td className="px-5 py-3 text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)" }}>Total</td>
+                    <td className="px-5 py-3">
+                      <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>
+                        {(creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + (r.totalCredits ?? 0), 0).toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span style={{ color: "rgba(255,255,255,0.5)" }}>
+                        {(creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + r.runCount, 0)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           )}
         </div>
 

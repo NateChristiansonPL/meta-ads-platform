@@ -15,6 +15,7 @@ import {
   getAllUsers,
   getActiveTokens,
   getAppSetting,
+  getCreditsByUser,
   getKnowledgeEntries,
   getRecentRuns,
   getRunById,
@@ -425,6 +426,7 @@ export const appRouter = router({
 
     userSuccessCounts: adminProcedure.query(async () => getUserSuccessCounts()),
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
+    creditsByUser: adminProcedure.query(async () => getCreditsByUser()),
 
     /**
      * Compute billing period window from billingCycleStartDay setting.

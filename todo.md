@@ -27,3 +27,8 @@
 - [x] Add model used column to Admin Run Logs table
 - [x] Add campaign count column to Admin Run Logs table
 - [x] Convert duration from raw seconds to mm:ss format in Run Logs table
+
+## Admin Usage & Tallies — Credits by User
+- [x] Add DB query for credits used per user (sum creditUsage, count runs, avg per run)
+- [x] Add tRPC procedure runs.creditsByUser
+- [x] Add Credits Used by User table in AdminUsage.tsx
