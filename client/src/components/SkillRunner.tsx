@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, FileDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
@@ -66,6 +66,13 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [creditUsage, setCreditUsage] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load the most recent successful run output for this user + skill.
+  // This persists across navigation so the user sees their last result when returning.
+  const { data: lastOutputData } = trpc.runs.lastOutput.useQuery(
+    { skillId: config.skillId },
+    { enabled: status === "idle" }
+  );
 
   const selectedToken = activeTokens.find((t) => t.id === tokenId);
 
@@ -570,6 +577,64 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
                   <ExternalLink size={12} /> View on Manus
                 </a>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Persisted last-run output (shown only when idle and no active run) ── */}
+        {status === "idle" && lastOutputData?.reportMarkdown && (
+          <div className="flex flex-col gap-4">
+            {/* Banner */}
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}
+            >
+              <Clock size={13} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
+                Last run:{" "}
+                <span style={{ color: "rgba(255,255,255,0.65)" }}>
+                  {lastOutputData.completedAt
+                    ? new Date(lastOutputData.completedAt).toLocaleString()
+                    : "unknown"}
+                </span>
+                {lastOutputData.adAccountName && (
+                  <> · {lastOutputData.adAccountName}</>
+                )}
+                {lastOutputData.datePreset && (
+                  <> · {DATE_PRESETS.find((d) => d.value === lastOutputData.datePreset)?.label ?? lastOutputData.datePreset}</>
+                )}
+              </span>
+              <span
+                className="ml-auto text-xs px-2 py-0.5 rounded-full font-semibold"
+                style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                Previous result
+              </span>
+            </div>
+            {/* Persisted attachments */}
+            {lastOutputData.attachments && (lastOutputData.attachments as Array<{ filename: string; url: string; contentType: string }>).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {(lastOutputData.attachments as Array<{ filename: string; url: string; contentType: string }>).map((att, i) => (
+                  <a
+                    key={i}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={att.filename}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-all"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    <FileDown size={10} /> {att.filename}
+                  </a>
+                ))}
+              </div>
+            )}
+            {/* Persisted report */}
+            <div
+              className="rounded-xl p-5 prose-report"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <Streamdown>{lastOutputData.reportMarkdown}</Streamdown>
             </div>
           </div>
         )}

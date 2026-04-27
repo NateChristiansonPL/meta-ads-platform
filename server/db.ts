@@ -392,3 +392,33 @@ export async function deleteFeedback(id: number) {
   if (!db) throw new Error("Database unavailable");
   await db.delete(feedback).where(eq(feedback.id, id));
 }
+
+// ── Last skill output per user per skill ──────────────────────────────────────
+// Returns the most recent successfully-completed run for a given user + skill
+// that has a reportMarkdown. Used to restore output when the user navigates back.
+export async function getLastSkillOutput(userId: number, skillId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({
+      id: skillRuns.id,
+      skillId: skillRuns.skillId,
+      reportMarkdown: skillRuns.reportMarkdown,
+      attachments: skillRuns.attachments,
+      completedAt: skillRuns.completedAt,
+      adAccountName: skillRuns.adAccountName,
+      datePreset: skillRuns.datePreset,
+    })
+    .from(skillRuns)
+    .where(
+      and(
+        eq(skillRuns.userId, userId),
+        eq(skillRuns.skillId, skillId),
+        eq(skillRuns.status, "success"),
+        sql`${skillRuns.reportMarkdown} IS NOT NULL AND ${skillRuns.reportMarkdown} != ''`
+      )
+    )
+    .orderBy(desc(skillRuns.completedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}

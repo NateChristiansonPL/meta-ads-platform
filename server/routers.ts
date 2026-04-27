@@ -19,6 +19,7 @@ import {
   getAppSetting,
   getCreditsByUser,
   getKnowledgeEntries,
+  getLastSkillOutput,
   getRecentRuns,
   getRunById,
   getRunsByUser,
@@ -462,10 +463,16 @@ export const appRouter = router({
         return run;
       }),
 
-    allRuns: adminProcedure
+     allRuns: adminProcedure
       .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
       .query(async ({ input }) => getRecentRuns(input.limit)),
-
+    // Returns the most recent successful run output for the calling user + skillId.
+    // Used to restore the output panel when the user navigates back to a skill page.
+    lastOutput: protectedProcedure
+      .input(z.object({ skillId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        return getLastSkillOutput(ctx.user.id, input.skillId);
+      }),
     userSuccessCounts: adminProcedure.query(async () => getUserSuccessCounts()),
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
     creditsByUser: adminProcedure.query(async () => {

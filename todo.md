@@ -64,3 +64,9 @@
 - [x] Update skill run dispatch to pass project_id when configured
 - [x] Add Manus Project Assignments section to Token and API Key Vault UI
 - [x] Pre-populated: Structural Audit → MKTYEMAkqiP2LpTLjUQbfX, all others → juQv4FJjcFEmRRYNSe9VPF
+
+## Skill Output Persistence
+- [x] Add DB helper: getLastSkillOutput(userId, skillId) — queries skillRuns for most recent success row with reportMarkdown
+- [x] Add tRPC procedure: runs.lastOutput (protected, query by skillId)
+- [x] All five skill pages updated automatically via shared SkillRunner component
+- [x] Show a "Last run: <date>" banner with account name, date preset, and "Previous result" badge
