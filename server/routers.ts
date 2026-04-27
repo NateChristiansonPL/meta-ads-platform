@@ -35,6 +35,41 @@ import { ENV } from "./_core/env";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
+/**
+ * Resolve the current billing period window.
+ * Priority:
+ *   1. Explicit billingPeriodStart + billingPeriodEnd dates stored in app_settings.
+ *   2. billingCycleStartDay (day-of-month) — rolling window starting that day each month.
+ *   3. Default: calendar month (day 1).
+ */
+async function resolveBillingPeriod(): Promise<{ periodStart: Date; periodEnd: Date; billingCycleStartDay: number; isExplicit: boolean }> {
+  const startStr = await getAppSetting("billingPeriodStart");
+  const endStr = await getAppSetting("billingPeriodEnd");
+
+  if (startStr && endStr) {
+    const periodStart = new Date(startStr + "T00:00:00.000Z");
+    // End date is inclusive — set to end of that day
+    const periodEnd = new Date(endStr + "T23:59:59.999Z");
+    if (!isNaN(periodStart.getTime()) && !isNaN(periodEnd.getTime())) {
+      return { periodStart, periodEnd, billingCycleStartDay: periodStart.getUTCDate(), isExplicit: true };
+    }
+  }
+
+  // Fallback: rolling day-of-month window
+  const startDayStr = await getAppSetting("billingCycleStartDay");
+  const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
+  const now = new Date();
+  const today = now.getDate();
+  let periodStart: Date;
+  if (today >= startDay) {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+  } else {
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
+  }
+  return { periodStart, periodEnd: now, billingCycleStartDay: startDay, isExplicit: false };
+}
+
 async function metaGet(path: string, params: Record<string, string>, accessToken: string) {
   const resp = await axios.get(`${META_BASE}${path}`, {
     params: { ...params, access_token: accessToken },
@@ -426,50 +461,32 @@ export const appRouter = router({
 
     userSuccessCounts: adminProcedure.query(async () => getUserSuccessCounts()),
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
-    creditsByUser: adminProcedure.query(async () => getCreditsByUser()),
+    creditsByUser: adminProcedure.query(async () => {
+      const { periodStart, periodEnd } = await resolveBillingPeriod();
+      return getCreditsByUser({ periodStart, periodEnd });
+    }),
 
     /**
-     * Compute billing period window from billingCycleStartDay setting.
-     * Returns { periodStart, periodEnd } as Date objects.
-     * If billingCycleStartDay is not set, defaults to 1 (calendar month).
+     * Compute billing period window.
+     * Prefers explicit billingPeriodStart/End dates set by admin.
+     * Falls back to billingCycleStartDay (day-of-month) for backward compat.
      */
     billingPeriodWindow: protectedProcedure.query(async () => {
-      const startDayStr = await getAppSetting("billingCycleStartDay");
-      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
-      const now = new Date();
-      const today = now.getDate();
-      let periodStart: Date;
-      if (today >= startDay) {
-        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
-      } else {
-        // We're before the start day this month, so the period started last month
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
-      }
-      return { periodStart, periodEnd: now, billingCycleStartDay: startDay };
+      const { periodStart, periodEnd, billingCycleStartDay } = await resolveBillingPeriod();
+      return { periodStart, periodEnd, billingCycleStartDay };
     }),
 
     /**
      * billingPeriodCredits: Sums credit_usage from the Manus API for all tasks
-     * created within the current billing period (based on billingCycleStartDay setting).
+     * created within the current billing period.
+     * Uses explicit start/end dates if set by admin, otherwise falls back to billingCycleStartDay.
      * Falls back to DB sum if API is unavailable.
      */
     billingPeriodCredits: protectedProcedure.query(async () => {
       const apiKey = process.env.MANUS_API_KEY;
-      if (!apiKey) return { creditsUsed: null, source: "none" as const, periodStart: null, billingCycleStartDay: 1 };
+      if (!apiKey) return { creditsUsed: null, source: "none" as const, periodStart: null, periodEnd: null, billingCycleStartDay: 1 };
 
-      // Determine billing period start
-      const startDayStr = await getAppSetting("billingCycleStartDay");
-      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
-      const now = new Date();
-      const today = now.getDate();
-      let periodStart: Date;
-      if (today >= startDay) {
-        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
-      } else {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
-      }
+      const { periodStart, periodEnd, billingCycleStartDay: startDay } = await resolveBillingPeriod();
 
       try {
         const axiosInst = (await import("axios")).default;
@@ -494,7 +511,8 @@ export const appRouter = router({
           const periodTasks = tasks.filter((t) => {
             if (!t.created_at) return false;
             const tsMs = Number(t.created_at) * 1000;
-            return new Date(tsMs) >= periodStart;
+            const d = new Date(tsMs);
+            return d >= periodStart && d <= periodEnd;
           });
           totalCredits += periodTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
           const oldest = tasks[tasks.length - 1];
@@ -505,19 +523,18 @@ export const appRouter = router({
             : undefined;
         } while (cursor);
 
-        return { creditsUsed: totalCredits, source: "api" as const, periodStart, billingCycleStartDay: startDay };
+        return { creditsUsed: totalCredits, source: "api" as const, periodStart, periodEnd, billingCycleStartDay: startDay };
       } catch {
         // Fallback: sum creditUsage from our own DB
         const db = await (await import("./db.js")).getDb();
-        if (!db) return { creditsUsed: null, source: "none" as const, periodStart, billingCycleStartDay: startDay };
+        if (!db) return { creditsUsed: null, source: "none" as const, periodStart, periodEnd, billingCycleStartDay: startDay };
         const { skillRuns } = await import("../drizzle/schema.js");
-        const { sql } = await import("drizzle-orm");
-        const { gte } = await import("drizzle-orm");
+        const { sql, gte: gteOp, lte: lteOp, and: andOp } = await import("drizzle-orm");
         const [row] = await db
           .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
           .from(skillRuns)
-          .where(gte(skillRuns.startedAt, periodStart));
-        return { creditsUsed: row?.total ?? 0, source: "db" as const, periodStart, billingCycleStartDay: startDay };
+          .where(andOp(gteOp(skillRuns.startedAt, periodStart), lteOp(skillRuns.startedAt, periodEnd)));
+        return { creditsUsed: row?.total ?? 0, source: "db" as const, periodStart, periodEnd, billingCycleStartDay: startDay };
       }
     }),
 
@@ -527,19 +544,9 @@ export const appRouter = router({
      */
     dailyCreditsChart: protectedProcedure.query(async () => {
       const apiKey = process.env.MANUS_API_KEY;
-      if (!apiKey) return { days: [] as Array<{ date: string; credits: number }>, periodStart: null, billingCycleStartDay: 1 };
+      if (!apiKey) return { days: [] as Array<{ date: string; credits: number }>, periodStart: null, periodEnd: null, billingCycleStartDay: 1 };
 
-      const startDayStr = await getAppSetting("billingCycleStartDay");
-      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
-      const now = new Date();
-      const today = now.getDate();
-      let periodStart: Date;
-      if (today >= startDay) {
-        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
-      } else {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
-      }
+      const { periodStart, periodEnd, billingCycleStartDay: startDay } = await resolveBillingPeriod();
 
       try {
         const axiosInst = (await import("axios")).default;
@@ -561,7 +568,8 @@ export const appRouter = router({
           if (!tasks.length && !resp.data?.next_cursor) break;
           const periodTasks = tasks.filter((t) => {
             if (!t.created_at) return false;
-            return new Date(Number(t.created_at) * 1000) >= periodStart;
+            const d = new Date(Number(t.created_at) * 1000);
+            return d >= periodStart && d <= periodEnd;
           });
           allTasks.push(...periodTasks);
           const oldest = tasks[tasks.length - 1];
@@ -581,38 +589,28 @@ export const appRouter = router({
           byDay[key] = (byDay[key] ?? 0) + (t.credit_usage ?? 0);
         }
 
-        // Build a complete day-by-day array from periodStart to today
+        // Build a complete day-by-day array from periodStart to periodEnd
         const days: Array<{ date: string; credits: number }> = [];
         const cur = new Date(periodStart);
-        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        while (cur <= end) {
+        const endDay = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate());
+        while (cur <= endDay) {
           const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
           days.push({ date: key, credits: byDay[key] ?? 0 });
           cur.setDate(cur.getDate() + 1);
         }
 
-        return { days, periodStart, billingCycleStartDay: startDay };
+        return { days, periodStart, periodEnd, billingCycleStartDay: startDay };
       } catch {
-        return { days: [] as Array<{ date: string; credits: number }>, periodStart, billingCycleStartDay: startDay };
+        return { days: [] as Array<{ date: string; credits: number }>, periodStart, periodEnd, billingCycleStartDay: startDay };
       }
     }),
 
-    // Keep monthlyCreditsUsed as an alias for backward compat (used in AppShell header widget)
+    // monthlyCreditsUsed — now uses the admin-configured billing period (explicit dates or day-of-month)
     monthlyCreditsUsed: protectedProcedure.query(async () => {
       const apiKey = process.env.MANUS_API_KEY;
       if (!apiKey) return { creditsUsed: null, source: "none" as const };
 
-      const startDayStr = await getAppSetting("billingCycleStartDay");
-      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
-      const now = new Date();
-      const today = now.getDate();
-      let periodStart: Date;
-      if (today >= startDay) {
-        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
-      } else {
-        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
-      }
+      const { periodStart, periodEnd } = await resolveBillingPeriod();
 
       try {
         const axiosInst = (await import("axios")).default;
@@ -634,7 +632,8 @@ export const appRouter = router({
           if (!tasks.length && !resp.data?.next_cursor) break;
           const periodTasks = tasks.filter((t) => {
             if (!t.created_at) return false;
-            return new Date(Number(t.created_at) * 1000) >= periodStart;
+            const d = new Date(Number(t.created_at) * 1000);
+            return d >= periodStart && d <= periodEnd;
           });
           totalCredits += periodTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
           const oldest = tasks[tasks.length - 1];
@@ -650,12 +649,11 @@ export const appRouter = router({
         const db = await (await import("./db.js")).getDb();
         if (!db) return { creditsUsed: null, source: "none" as const };
         const { skillRuns } = await import("../drizzle/schema.js");
-        const { sql } = await import("drizzle-orm");
-        const { gte } = await import("drizzle-orm");
+        const { sql, gte: gteOp, lte: lteOp, and: andOp } = await import("drizzle-orm");
         const [row] = await db
           .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
           .from(skillRuns)
-          .where(gte(skillRuns.startedAt, periodStart));
+          .where(andOp(gteOp(skillRuns.startedAt, periodStart), lteOp(skillRuns.startedAt, periodEnd)));
         return { creditsUsed: row?.total ?? 0, source: "db" as const };
       }
     }),
@@ -675,6 +673,12 @@ export const appRouter = router({
       }),
 
     billingCycleStartDay: protectedProcedure.query(async () => {
+      // Legacy: kept for backward compat, returns day from explicit start date if set
+      const startStr = await getAppSetting("billingPeriodStart");
+      if (startStr) {
+        const d = new Date(startStr);
+        return { day: isNaN(d.getTime()) ? 1 : d.getDate() };
+      }
       const val = await getAppSetting("billingCycleStartDay");
       return { day: val ? parseInt(val, 10) : 1 };
     }),
@@ -683,6 +687,28 @@ export const appRouter = router({
       .input(z.object({ day: z.number().int().min(1).max(28) }))
       .mutation(async ({ ctx, input }) => {
         await setAppSetting("billingCycleStartDay", String(input.day), ctx.user.id);
+        return { success: true };
+      }),
+
+    /** Get the explicit billing period start/end dates set by admin */
+    billingPeriod: protectedProcedure.query(async () => {
+      const startStr = await getAppSetting("billingPeriodStart");
+      const endStr = await getAppSetting("billingPeriodEnd");
+      return {
+        periodStart: startStr ?? null,
+        periodEnd: endStr ?? null,
+      };
+    }),
+
+    /** Admin sets explicit billing period start and end dates (ISO date strings YYYY-MM-DD) */
+    setBillingPeriod: adminProcedure
+      .input(z.object({
+        periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
+        periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await setAppSetting("billingPeriodStart", input.periodStart, ctx.user.id);
+        await setAppSetting("billingPeriodEnd", input.periodEnd, ctx.user.id);
         return { success: true };
       }),
   }),

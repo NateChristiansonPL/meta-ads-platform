@@ -93,11 +93,14 @@ export default function Dashboard() {
   const periodStart = billingCredits?.periodStart
     ? new Date(billingCredits.periodStart)
     : null;
-  const billingDay = billingCredits?.billingCycleStartDay ?? 1;
+  const periodEnd = billingCredits?.periodEnd
+    ? new Date(billingCredits.periodEnd)
+    : null;
 
   // Format the billing period label
-  const periodLabel = periodStart
-    ? `${periodStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – Today`
+  const fmtDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const periodLabel = periodStart && periodEnd
+    ? `${fmtDate(periodStart)} – ${fmtDate(periodEnd)}`
     : "This Billing Period";
 
   return (
@@ -171,9 +174,6 @@ export default function Dashboard() {
             </div>
             <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
               {periodLabel}
-              {billingDay !== 1 && (
-                <span style={{ color: "rgba(255,255,255,0.2)" }}> · billing cycle starts on the {billingDay}{billingDay === 1 ? "st" : billingDay === 2 ? "nd" : billingDay === 3 ? "rd" : "th"}</span>
-              )}
             </p>
           </div>
           <div className="text-right">

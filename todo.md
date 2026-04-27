@@ -32,3 +32,13 @@
 - [x] Add DB query for credits used per user (sum creditUsage, count runs, avg per run)
 - [x] Add tRPC procedure runs.creditsByUser
 - [x] Add Credits Used by User table in AdminUsage.tsx
+
+## Billing Period Date Range
+- [x] Replace billingCycleStartDay setting with billingPeriodStart and billingPeriodEnd (ISO date strings) in app_settings
+- [x] Update tRPC settings procedures: getBillingPeriod, setBillingPeriod (start+end dates)
+- [x] Update billingPeriodCredits and dailyCreditsChart procedures to use explicit start/end dates
+- [x] Update monthlyCreditsUsed (header counter) to use billing period dates
+- [x] Update AdminUsage.tsx billing settings UI: replace number input with start/end date pickers
+- [x] Update Dashboard.tsx credits chart to use billing period dates
+- [x] Update AppShell header counter to show billing period date range label
+- [x] Update Credits Used by User table to use billing period dates (invalidated on save)

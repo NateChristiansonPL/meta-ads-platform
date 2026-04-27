@@ -20,22 +20,27 @@ export default function AdminUsage() {
   const { data: skillCounts = [] } = trpc.runs.skillSuccessCounts.useQuery();
   const { data: allUsers = [] } = trpc.users.list.useQuery();
   const { data: creditsByUser = [], isLoading: creditsLoading } = trpc.runs.creditsByUser.useQuery();
-  const { data: billingDayData } = trpc.settings.billingCycleStartDay.useQuery();
-  const setBillingDay = trpc.settings.setBillingCycleStartDay.useMutation();
+  const { data: billingPeriodData } = trpc.settings.billingPeriod.useQuery();
+  const setBillingPeriod = trpc.settings.setBillingPeriod.useMutation();
   const utils = trpc.useUtils();
 
-  const [billingDayInput, setBillingDayInput] = useState<string>("");
-  const currentBillingDay = billingDayData?.day ?? 1;
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
-  const handleSaveBillingDay = async () => {
-    const day = parseInt(billingDayInput, 10);
-    if (isNaN(day) || day < 1 || day > 28) return;
-    await setBillingDay.mutateAsync({ day });
-    setBillingDayInput("");
-    utils.settings.billingCycleStartDay.invalidate();
+  const currentStart = billingPeriodData?.periodStart ?? null;
+  const currentEnd = billingPeriodData?.periodEnd ?? null;
+
+  const handleSaveBillingPeriod = async () => {
+    if (!startDate || !endDate) return;
+    if (startDate > endDate) return;
+    await setBillingPeriod.mutateAsync({ periodStart: startDate, periodEnd: endDate });
+    setStartDate("");
+    setEndDate("");
+    utils.settings.billingPeriod.invalidate();
     utils.runs.billingPeriodCredits.invalidate();
     utils.runs.dailyCreditsChart.invalidate();
     utils.runs.monthlyCreditsUsed.invalidate();
+    utils.runs.creditsByUser.invalidate();
   };
 
   const maxSkill = Math.max(1, ...(skillCounts as SkillCount[]).map((s) => s.count));
@@ -96,7 +101,14 @@ export default function AdminUsage() {
         <div className="rounded-xl overflow-hidden xl:col-span-2" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
           <div className="px-5 py-4" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <h3 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Credits Used by User</h3>
-            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Lifetime credit consumption per team member across all runs.</p>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+              Credit consumption per team member during the configured billing period.
+              {currentStart && currentEnd && (
+                <span style={{ color: "rgba(0,190,239,0.7)" }}>
+                  {" "}({new Date(currentStart + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} – {new Date(currentEnd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
+                </span>
+              )}
+            </p>
           </div>
           {creditsLoading ? (
             <div className="px-5 py-6 flex items-center gap-2" style={{ color: "rgba(255,255,255,0.35)" }}>
@@ -204,38 +216,72 @@ export default function AdminUsage() {
         <div className="rounded-xl p-5 xl:col-span-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <h3 className="text-sm font-bold mb-1" style={{ color: "#FAFAFA" }}>Billing Cycle Settings</h3>
           <p className="text-xs mb-4" style={{ color: "rgba(255,255,255,0.35)" }}>
-            Set the day of the month your Manus billing period starts. The credits chart on the Dashboard will show usage from that day forward.
+            Set the exact start and end dates of your Manus billing period. All credit counters — the header widget, Dashboard chart, and the Credits by User table — will reflect usage within this window.
             Manus does not expose a billing API, so this must be set manually.
           </p>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>Current start day:</span>
-              <span className="text-sm font-bold" style={{ color: "#00BEEF" }}>{currentBillingDay}</span>
+
+          {/* Current period display */}
+          {currentStart && currentEnd && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg" style={{ background: "rgba(0,190,239,0.08)", border: "1px solid rgba(0,190,239,0.2)" }}>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>Current period:</span>
+              <span className="text-xs font-bold" style={{ color: "#00BEEF" }}>
+                {new Date(currentStart + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>→</span>
+              <span className="text-xs font-bold" style={{ color: "#00BEEF" }}>
+                {new Date(currentEnd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
             </div>
-            <div className="flex items-center gap-2 ml-4">
+          )}
+
+          {/* Date pickers */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>Start Date</label>
               <input
-                type="number"
-                min={1}
-                max={28}
-                placeholder="1–28"
-                value={billingDayInput}
-                onChange={(e) => setBillingDayInput(e.target.value)}
-                className="w-20 px-2 py-1.5 rounded-lg text-xs"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg text-xs"
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#FAFAFA", outline: "none" }}
               />
-              <button
-                onClick={handleSaveBillingDay}
-                disabled={setBillingDay.isPending || !billingDayInput}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity"
-                style={{ background: "#00BEEF", color: "#141349", opacity: setBillingDay.isPending || !billingDayInput ? 0.5 : 1 }}
-              >
-                {setBillingDay.isPending ? "Saving..." : "Save"}
-              </button>
-              {setBillingDay.isSuccess && (
-                <span className="text-xs" style={{ color: "#00B37A" }}>Saved</span>
-              )}
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg text-xs"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#FAFAFA", outline: "none" }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs" style={{ color: "transparent" }}>Save</label>
+              <button
+                onClick={handleSaveBillingPeriod}
+                disabled={setBillingPeriod.isPending || !startDate || !endDate || startDate > endDate}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-opacity"
+                style={{
+                  background: "#00BEEF",
+                  color: "#141349",
+                  opacity: setBillingPeriod.isPending || !startDate || !endDate || startDate > endDate ? 0.5 : 1,
+                }}
+              >
+                {setBillingPeriod.isPending ? "Saving..." : "Save Period"}
+              </button>
+            </div>
+            {setBillingPeriod.isSuccess && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs" style={{ color: "transparent" }}>_</label>
+                <span className="text-xs py-1.5" style={{ color: "#00B37A" }}>✓ Saved</span>
+              </div>
+            )}
           </div>
+          {startDate && endDate && startDate > endDate && (
+            <p className="text-xs mt-2" style={{ color: "#ED135F" }}>End date must be on or after start date.</p>
+          )}
         </div>
 
         {/* Team members */}

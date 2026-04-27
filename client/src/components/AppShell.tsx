@@ -76,6 +76,10 @@ function CreditsWidget() {
     undefined,
     { enabled: !!me, refetchInterval: 5 * 60 * 1000, staleTime: 4 * 60 * 1000 }
   );
+  const { data: billingPeriod } = trpc.settings.billingPeriod.useQuery(
+    undefined,
+    { enabled: !!me, staleTime: 5 * 60 * 1000 }
+  );
 
   if (!me) return null;
 
@@ -97,17 +101,24 @@ function CreditsWidget() {
   if (credits === null) return null;
 
   const color = "#00B37A";
-  const label = source === "db" ? "credits used this month (est.)" : "credits used this month";
+
+  // Build a human-readable period label
+  let periodLabel = "this billing period";
+  if (billingPeriod?.periodStart && billingPeriod?.periodEnd) {
+    const fmt = (s: string) => new Date(s + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    periodLabel = `${fmt(billingPeriod.periodStart)} – ${fmt(billingPeriod.periodEnd)}`;
+  }
+  const tooltip = source === "db" ? `${credits.toLocaleString()} credits used ${periodLabel} (est.)` : `${credits.toLocaleString()} credits used ${periodLabel}`;
 
   return (
     <div
       className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
       style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
-      title={label}
+      title={tooltip}
     >
       <Zap size={12} style={{ color }} />
       <span style={{ color }}>{credits.toLocaleString()}</span>
-      <span style={{ color: "rgba(255,255,255,0.35)" }}>credits used this month</span>
+      <span style={{ color: "rgba(255,255,255,0.35)" }}>credits used {periodLabel}</span>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   appSettings,
@@ -283,10 +283,14 @@ export async function getSkillSuccessCounts() {
     .groupBy(skillRuns.skillId, skillRuns.skillName);
 }
 
-export async function getCreditsByUser() {
+export async function getCreditsByUser(opts?: { periodStart?: Date; periodEnd?: Date }) {
   const db = await getDb();
   if (!db) return [];
-  return db.select({
+  const conditions = [];
+  if (opts?.periodStart) conditions.push(gte(skillRuns.startedAt, opts.periodStart));
+  if (opts?.periodEnd) conditions.push(lte(skillRuns.startedAt, opts.periodEnd));
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const q = db.select({
     userId: skillRuns.userId,
     userName: users.name,
     userEmail: users.email,
@@ -298,6 +302,8 @@ export async function getCreditsByUser() {
     .leftJoin(users, eq(skillRuns.userId, users.id))
     .groupBy(skillRuns.userId, users.name, users.email)
     .orderBy(sql`COALESCE(SUM(${skillRuns.creditUsage}), 0) DESC`);
+  if (whereClause) return q.where(whereClause);
+  return q;
 }
 
 // ── Knowledge Base ────────────────────────────────────────────────────────────
