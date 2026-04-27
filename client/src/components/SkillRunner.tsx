@@ -69,9 +69,12 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
   // Load the most recent successful run output for this user + skill.
   // This persists across navigation so the user sees their last result when returning.
+  // Always enabled (no condition) so it fetches on every mount.
+  // staleTime: 0 ensures it refetches when the user navigates back.
+  const utils = trpc.useUtils();
   const { data: lastOutputData } = trpc.runs.lastOutput.useQuery(
     { skillId: config.skillId },
-    { enabled: status === "idle" }
+    { staleTime: 0, refetchOnMount: true }
   );
 
   const selectedToken = activeTokens.find((t) => t.id === tokenId);
@@ -87,8 +90,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   );
 
   const executeRun = trpc.runs.execute.useMutation();
-  const utils = trpc.useUtils();
-
   const canRun = !!tokenId && !!adAccountId && status !== "running";
 
   // Poll getRunStatus while a run is in progress
@@ -113,6 +114,8 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             setAttachments(data.attachments ?? []);
             setCreditUsage(data.creditUsage ?? null);
             setStatus("success");
+            // Invalidate so next mount (after navigation) fetches fresh output
+            utils.runs.lastOutput.invalidate({ skillId: config.skillId });
           } else {
             setErrorMsg(data.errorMessage ?? "Run failed.");
             setTaskUrl(data.taskUrl ?? null);
