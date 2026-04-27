@@ -450,19 +450,23 @@ export const appRouter = router({
             headers,
             timeout: 15000,
           });
-          if (!resp.data?.ok) break;
-          const tasks: Array<{ created_at?: string; credit_usage?: number }> = resp.data.tasks ?? [];
-          // Only count tasks from this month
+          // Manus API returns { data: [...], ok: true } — check both shapes
+          const respData = resp.data?.data ?? resp.data?.tasks ?? [];
+          const tasks: Array<{ created_at?: string; credit_usage?: number }> = respData;
+          if (!tasks.length && !resp.data?.next_cursor) break;
+          // created_at is a Unix timestamp in SECONDS (string), not ISO date
           const thisMonthTasks = tasks.filter((t) => {
             if (!t.created_at) return false;
-            return new Date(t.created_at) >= monthStart;
+            const tsMs = Number(t.created_at) * 1000;
+            return new Date(tsMs) >= monthStart;
           });
           totalCredits += thisMonthTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
           // If the oldest task in this page is before monthStart, stop paginating
           const oldest = tasks[tasks.length - 1];
-          const oldestDate = oldest?.created_at ? new Date(oldest.created_at) : null;
+          const oldestTsMs = oldest?.created_at ? Number(oldest.created_at) * 1000 : 0;
+          const oldestDate = oldestTsMs ? new Date(oldestTsMs) : null;
           cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= monthStart)
-            ? resp.data.next_cursor
+            ? (resp.data.next_cursor ?? undefined)
             : undefined;
         } while (cursor);
 
