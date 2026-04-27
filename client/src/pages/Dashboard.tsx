@@ -2,6 +2,15 @@ import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
 import { BarChart2, Clock, RefreshCw, Shield, TrendingUp, Users, Zap } from "lucide-react";
 import { useLocation } from "wouter";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const SKILLS = [
   {
@@ -51,10 +60,45 @@ const SKILLS = [
   },
 ];
 
+/** Format a YYYY-MM-DD date string as "Apr 27" */
+function fmtDay(dateStr: string): string {
+  const [, m, d] = dateStr.split("-").map(Number);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[m - 1]} ${d}`;
+}
+
+/** Custom tooltip for the credits bar chart */
+function CreditsTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div
+      className="rounded-lg px-3 py-2 text-xs"
+      style={{ background: "#1a1a3e", border: "1px solid rgba(255,255,255,0.12)", color: "#FAFAFA" }}
+    >
+      <div className="font-semibold mb-0.5">{label ? fmtDay(label) : ""}</div>
+      <div style={{ color: "#00BEEF" }}>{payload[0].value.toLocaleString()} credits</div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const { data: recentRuns = [] } = trpc.runs.myRuns.useQuery({ limit: 8 });
   const { data: me } = trpc.auth.me.useQuery();
+  const { data: chartData } = trpc.runs.dailyCreditsChart.useQuery();
+  const { data: billingCredits } = trpc.runs.billingPeriodCredits.useQuery();
+
+  const days = chartData?.days ?? [];
+  const totalCredits = billingCredits?.creditsUsed ?? 0;
+  const periodStart = billingCredits?.periodStart
+    ? new Date(billingCredits.periodStart)
+    : null;
+  const billingDay = billingCredits?.billingCycleStartDay ?? 1;
+
+  // Format the billing period label
+  const periodLabel = periodStart
+    ? `${periodStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – Today`
+    : "This Billing Period";
 
   return (
     <AppShell title="Dashboard" subtitle="Pathlabs Intelligence Platform">
@@ -110,6 +154,63 @@ export default function Dashboard() {
             </div>
           </button>
         ))}
+      </div>
+
+      {/* Credits chart */}
+      <div
+        className="rounded-xl p-5 mb-8"
+        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Zap size={14} style={{ color: "#00BEEF" }} />
+              <h3 className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Credits Used
+              </h3>
+            </div>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
+              {periodLabel}
+              {billingDay !== 1 && (
+                <span style={{ color: "rgba(255,255,255,0.2)" }}> · billing cycle starts on the {billingDay}{billingDay === 1 ? "st" : billingDay === 2 ? "nd" : billingDay === 3 ? "rd" : "th"}</span>
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-black" style={{ color: "#00BEEF" }}>
+              {totalCredits != null ? totalCredits.toLocaleString() : "—"}
+            </div>
+            <div className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>total credits</div>
+          </div>
+        </div>
+
+        {days.length > 0 ? (
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={days} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.05)" />
+              <XAxis
+                dataKey="date"
+                tickFormatter={fmtDay}
+                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+              />
+              <Tooltip content={<CreditsTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+              <Bar dataKey="credits" fill="#00BEEF" radius={[3, 3, 0, 0]} maxBarSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-24" style={{ color: "rgba(255,255,255,0.2)", fontSize: 12 }}>
+            No credit data available for this billing period.
+          </div>
+        )}
       </div>
 
       {/* Recent runs */}

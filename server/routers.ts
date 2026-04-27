@@ -10,9 +10,11 @@ import {
   createSkillRun,
   deactivateToken,
   deleteKnowledgeEntry,
+  getAllAppSettings,
   getAllTokens,
   getAllUsers,
   getActiveTokens,
+  getAppSetting,
   getKnowledgeEntries,
   getRecentRuns,
   getRunById,
@@ -22,6 +24,7 @@ import {
   getTokenById,
   getUserSuccessCounts,
   insertToken,
+  setAppSetting,
   updateSkillRun,
   updateToken,
 } from "./db";
@@ -424,18 +427,50 @@ export const appRouter = router({
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
 
     /**
-     * monthlyCreditsUsed: Sums credit_usage from the Manus API for all tasks
-     * created this calendar month. Falls back to DB sum if API is unavailable.
+     * Compute billing period window from billingCycleStartDay setting.
+     * Returns { periodStart, periodEnd } as Date objects.
+     * If billingCycleStartDay is not set, defaults to 1 (calendar month).
      */
-    monthlyCreditsUsed: protectedProcedure.query(async () => {
+    billingPeriodWindow: protectedProcedure.query(async () => {
+      const startDayStr = await getAppSetting("billingCycleStartDay");
+      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
+      const now = new Date();
+      const today = now.getDate();
+      let periodStart: Date;
+      if (today >= startDay) {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+      } else {
+        // We're before the start day this month, so the period started last month
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
+      }
+      return { periodStart, periodEnd: now, billingCycleStartDay: startDay };
+    }),
+
+    /**
+     * billingPeriodCredits: Sums credit_usage from the Manus API for all tasks
+     * created within the current billing period (based on billingCycleStartDay setting).
+     * Falls back to DB sum if API is unavailable.
+     */
+    billingPeriodCredits: protectedProcedure.query(async () => {
       const apiKey = process.env.MANUS_API_KEY;
-      if (!apiKey) return { creditsUsed: null, source: "none" as const };
+      if (!apiKey) return { creditsUsed: null, source: "none" as const, periodStart: null, billingCycleStartDay: 1 };
+
+      // Determine billing period start
+      const startDayStr = await getAppSetting("billingCycleStartDay");
+      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
+      const now = new Date();
+      const today = now.getDate();
+      let periodStart: Date;
+      if (today >= startDay) {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+      } else {
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
+      }
 
       try {
-        // Fetch tasks from this month via Manus API task.list
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const axios = (await import("axios")).default;
+        const axiosInst = (await import("axios")).default;
         const headers = { "x-manus-api-key": apiKey };
 
         let totalCredits = 0;
@@ -445,48 +480,209 @@ export const appRouter = router({
         do {
           const params: Record<string, string | number> = { limit: PAGE_SIZE };
           if (cursor) params.cursor = cursor;
-          const resp = await axios.get("https://api.manus.ai/v2/task.list", {
+          const resp = await axiosInst.get("https://api.manus.ai/v2/task.list", {
             params,
             headers,
             timeout: 15000,
           });
-          // Manus API returns { data: [...], ok: true } — check both shapes
           const respData = resp.data?.data ?? resp.data?.tasks ?? [];
           const tasks: Array<{ created_at?: string; credit_usage?: number }> = respData;
           if (!tasks.length && !resp.data?.next_cursor) break;
-          // created_at is a Unix timestamp in SECONDS (string), not ISO date
-          const thisMonthTasks = tasks.filter((t) => {
+          // created_at is Unix timestamp in SECONDS (string)
+          const periodTasks = tasks.filter((t) => {
             if (!t.created_at) return false;
             const tsMs = Number(t.created_at) * 1000;
-            return new Date(tsMs) >= monthStart;
+            return new Date(tsMs) >= periodStart;
           });
-          totalCredits += thisMonthTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
-          // If the oldest task in this page is before monthStart, stop paginating
+          totalCredits += periodTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
           const oldest = tasks[tasks.length - 1];
           const oldestTsMs = oldest?.created_at ? Number(oldest.created_at) * 1000 : 0;
           const oldestDate = oldestTsMs ? new Date(oldestTsMs) : null;
-          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= monthStart)
+          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= periodStart)
+            ? (resp.data.next_cursor ?? undefined)
+            : undefined;
+        } while (cursor);
+
+        return { creditsUsed: totalCredits, source: "api" as const, periodStart, billingCycleStartDay: startDay };
+      } catch {
+        // Fallback: sum creditUsage from our own DB
+        const db = await (await import("./db.js")).getDb();
+        if (!db) return { creditsUsed: null, source: "none" as const, periodStart, billingCycleStartDay: startDay };
+        const { skillRuns } = await import("../drizzle/schema.js");
+        const { sql } = await import("drizzle-orm");
+        const { gte } = await import("drizzle-orm");
+        const [row] = await db
+          .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
+          .from(skillRuns)
+          .where(gte(skillRuns.startedAt, periodStart));
+        return { creditsUsed: row?.total ?? 0, source: "db" as const, periodStart, billingCycleStartDay: startDay };
+      }
+    }),
+
+    /**
+     * dailyCreditsChart: Returns per-day credit usage for the current billing period.
+     * Used to render the credits bar chart on the Dashboard.
+     */
+    dailyCreditsChart: protectedProcedure.query(async () => {
+      const apiKey = process.env.MANUS_API_KEY;
+      if (!apiKey) return { days: [] as Array<{ date: string; credits: number }>, periodStart: null, billingCycleStartDay: 1 };
+
+      const startDayStr = await getAppSetting("billingCycleStartDay");
+      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
+      const now = new Date();
+      const today = now.getDate();
+      let periodStart: Date;
+      if (today >= startDay) {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+      } else {
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
+      }
+
+      try {
+        const axiosInst = (await import("axios")).default;
+        const headers = { "x-manus-api-key": apiKey };
+        const allTasks: Array<{ created_at?: string; credit_usage?: number }> = [];
+        let cursor: string | undefined;
+        const PAGE_SIZE = 50;
+
+        do {
+          const params: Record<string, string | number> = { limit: PAGE_SIZE };
+          if (cursor) params.cursor = cursor;
+          const resp = await axiosInst.get("https://api.manus.ai/v2/task.list", {
+            params,
+            headers,
+            timeout: 15000,
+          });
+          const respData = resp.data?.data ?? resp.data?.tasks ?? [];
+          const tasks: Array<{ created_at?: string; credit_usage?: number }> = respData;
+          if (!tasks.length && !resp.data?.next_cursor) break;
+          const periodTasks = tasks.filter((t) => {
+            if (!t.created_at) return false;
+            return new Date(Number(t.created_at) * 1000) >= periodStart;
+          });
+          allTasks.push(...periodTasks);
+          const oldest = tasks[tasks.length - 1];
+          const oldestTsMs = oldest?.created_at ? Number(oldest.created_at) * 1000 : 0;
+          const oldestDate = oldestTsMs ? new Date(oldestTsMs) : null;
+          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= periodStart)
+            ? (resp.data.next_cursor ?? undefined)
+            : undefined;
+        } while (cursor);
+
+        // Group by date (YYYY-MM-DD)
+        const byDay: Record<string, number> = {};
+        for (const t of allTasks) {
+          if (!t.created_at) continue;
+          const d = new Date(Number(t.created_at) * 1000);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          byDay[key] = (byDay[key] ?? 0) + (t.credit_usage ?? 0);
+        }
+
+        // Build a complete day-by-day array from periodStart to today
+        const days: Array<{ date: string; credits: number }> = [];
+        const cur = new Date(periodStart);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        while (cur <= end) {
+          const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+          days.push({ date: key, credits: byDay[key] ?? 0 });
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        return { days, periodStart, billingCycleStartDay: startDay };
+      } catch {
+        return { days: [] as Array<{ date: string; credits: number }>, periodStart, billingCycleStartDay: startDay };
+      }
+    }),
+
+    // Keep monthlyCreditsUsed as an alias for backward compat (used in AppShell header widget)
+    monthlyCreditsUsed: protectedProcedure.query(async () => {
+      const apiKey = process.env.MANUS_API_KEY;
+      if (!apiKey) return { creditsUsed: null, source: "none" as const };
+
+      const startDayStr = await getAppSetting("billingCycleStartDay");
+      const startDay = startDayStr ? Math.max(1, Math.min(28, parseInt(startDayStr, 10))) : 1;
+      const now = new Date();
+      const today = now.getDate();
+      let periodStart: Date;
+      if (today >= startDay) {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), startDay);
+      } else {
+        const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        periodStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth(), startDay);
+      }
+
+      try {
+        const axiosInst = (await import("axios")).default;
+        const headers = { "x-manus-api-key": apiKey };
+        let totalCredits = 0;
+        let cursor: string | undefined;
+        const PAGE_SIZE = 50;
+
+        do {
+          const params: Record<string, string | number> = { limit: PAGE_SIZE };
+          if (cursor) params.cursor = cursor;
+          const resp = await axiosInst.get("https://api.manus.ai/v2/task.list", {
+            params,
+            headers,
+            timeout: 15000,
+          });
+          const respData = resp.data?.data ?? resp.data?.tasks ?? [];
+          const tasks: Array<{ created_at?: string; credit_usage?: number }> = respData;
+          if (!tasks.length && !resp.data?.next_cursor) break;
+          const periodTasks = tasks.filter((t) => {
+            if (!t.created_at) return false;
+            return new Date(Number(t.created_at) * 1000) >= periodStart;
+          });
+          totalCredits += periodTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
+          const oldest = tasks[tasks.length - 1];
+          const oldestTsMs = oldest?.created_at ? Number(oldest.created_at) * 1000 : 0;
+          const oldestDate = oldestTsMs ? new Date(oldestTsMs) : null;
+          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= periodStart)
             ? (resp.data.next_cursor ?? undefined)
             : undefined;
         } while (cursor);
 
         return { creditsUsed: totalCredits, source: "api" as const };
       } catch {
-        // Fallback: sum creditUsage from our own DB
         const db = await (await import("./db.js")).getDb();
         if (!db) return { creditsUsed: null, source: "none" as const };
         const { skillRuns } = await import("../drizzle/schema.js");
         const { sql } = await import("drizzle-orm");
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const { gte } = await import("drizzle-orm");
         const [row] = await db
           .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
           .from(skillRuns)
-          .where(gte(skillRuns.startedAt, monthStart));
+          .where(gte(skillRuns.startedAt, periodStart));
         return { creditsUsed: row?.total ?? 0, source: "db" as const };
       }
     }),
+  }),
+
+  settings: router({
+    getAll: adminProcedure.query(async () => getAllAppSettings()),
+
+    set: adminProcedure
+      .input(z.object({
+        key: z.string().min(1).max(128),
+        value: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await setAppSetting(input.key, input.value, ctx.user.id);
+        return { success: true };
+      }),
+
+    billingCycleStartDay: protectedProcedure.query(async () => {
+      const val = await getAppSetting("billingCycleStartDay");
+      return { day: val ? parseInt(val, 10) : 1 };
+    }),
+
+    setBillingCycleStartDay: adminProcedure
+      .input(z.object({ day: z.number().int().min(1).max(28) }))
+      .mutation(async ({ ctx, input }) => {
+        await setAppSetting("billingCycleStartDay", String(input.day), ctx.user.id);
+        return { success: true };
+      }),
   }),
 
   users: router({

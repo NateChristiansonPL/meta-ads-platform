@@ -212,11 +212,31 @@ ${campaignFilter
   --output-dir /home/ubuntu/output/perf-insights`}
 \`\`\`
 
+## Module Retry Policy
+
+If **any individual analysis module** (Audience, Creative, Timing, Saturation, Lifecycle, Placement, or any other) fails, returns an error, or produces empty output:
+- **Automatically retry that specific module up to 3 times** before marking it as failed
+- Do NOT skip a module after the first failure — retry until it succeeds or 3 attempts are exhausted
+- Log each retry attempt (e.g., "Retrying Audience module — attempt 2/3")
+- Only mark a module as failed after all 3 retry attempts have been exhausted
+- Continue running all other modules regardless of any single module's failure status
+
+## Ad Name Cleaning
+
+After aggregating ad performance data across ad sets:
+- **Strip any ad-set-specific or campaign-specific naming prefixes from ad names**
+- Ad names in Meta accounts often include targeting identifiers baked in (e.g., geo, audience type, campaign objective, funnel stage) separated by " - " delimiters
+- The **creative name** is the meaningful part that describes the actual creative content — typically the last 2–3 segments after stripping targeting prefixes
+- **Rule:** If an ad name contains " - " separators, identify and remove any leading segments that describe targeting/geo/audience/objective (e.g., "SAG", "Tucson", "Conversion", "Purchase LAL") and keep only the segments that describe the creative itself (e.g., "April New Breakfast - Burrito - Static")
+- Apply this cleaning consistently across all ad name references in the report
+- Example: "SAG - Tucson - Conversion - Purchase LAL - April New Breakfast - Burrito - Static" → "April New Breakfast - Burrito - Static"
+
 After the script completes:
 1. Read the master summary from \`/home/ubuntu/output/perf-insights/master_summary.md\` (or the individual module outputs if no master summary)
 2. Output the **full contents** of the report — do not summarize or truncate any section
 3. Include all module outputs: timing analysis, saturation, lifecycle enrichment, placement conversion data, and signals
-4. If converting to PDF is possible, do so and attach it
+4. Apply ad name cleaning to all ad names in the report before outputting
+5. If converting to PDF is possible, do so and attach it
 
 The report must be comprehensive and include every section the skill produces. Do not abbreviate.`;
 }

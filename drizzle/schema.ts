@@ -101,3 +101,18 @@ export const knowledgeBase = mysqlTable("knowledge_base", {
 
 export type KnowledgeEntry = typeof knowledgeBase.$inferSelect;
 export type InsertKnowledgeEntry = typeof knowledgeBase.$inferInsert;
+
+// ── App Settings ─────────────────────────────────────────────────────────────
+// Key-value store for admin-configurable app settings.
+// e.g., billingCycleStartDay (1-28) for the credits chart billing period.
+
+export const appSettings = mysqlTable("app_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 128 }).notNull().unique(),
+  value: text("value").notNull(),
+  updatedByUserId: int("updatedByUserId"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = typeof appSettings.$inferInsert;

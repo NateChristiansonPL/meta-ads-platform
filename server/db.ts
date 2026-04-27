@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  appSettings,
   InsertSkillRun,
   InsertTokenVaultEntry,
   InsertUser,
@@ -300,4 +301,28 @@ export async function deleteKnowledgeEntry(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.update(knowledgeBase).set({ isActive: false }).where(eq(knowledgeBase.id, id));
+}
+
+// ── App Settings ─────────────────────────────────────────────────────────────
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
+  return rows[0]?.value ?? null;
+}
+
+export async function setAppSetting(key: string, value: string, updatedByUserId?: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(appSettings)
+    .values({ key, value, updatedByUserId })
+    .onDuplicateKeyUpdate({ set: { value, updatedByUserId } });
+}
+
+export async function getAllAppSettings(): Promise<Record<string, string>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select().from(appSettings);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }

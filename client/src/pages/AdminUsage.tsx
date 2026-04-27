@@ -1,5 +1,6 @@
 import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
+import { useState } from "react";
 
 const SKILL_META: Record<string, { color: string; label: string }> = {
   "weekly-optimization": { color: "#00BEEF", label: "Weekly Optimization" },
@@ -17,6 +18,23 @@ export default function AdminUsage() {
   const { data: userCounts = [] } = trpc.runs.userSuccessCounts.useQuery();
   const { data: skillCounts = [] } = trpc.runs.skillSuccessCounts.useQuery();
   const { data: allUsers = [] } = trpc.users.list.useQuery();
+  const { data: billingDayData } = trpc.settings.billingCycleStartDay.useQuery();
+  const setBillingDay = trpc.settings.setBillingCycleStartDay.useMutation();
+  const utils = trpc.useUtils();
+
+  const [billingDayInput, setBillingDayInput] = useState<string>("");
+  const currentBillingDay = billingDayData?.day ?? 1;
+
+  const handleSaveBillingDay = async () => {
+    const day = parseInt(billingDayInput, 10);
+    if (isNaN(day) || day < 1 || day > 28) return;
+    await setBillingDay.mutateAsync({ day });
+    setBillingDayInput("");
+    utils.settings.billingCycleStartDay.invalidate();
+    utils.runs.billingPeriodCredits.invalidate();
+    utils.runs.dailyCreditsChart.invalidate();
+    utils.runs.monthlyCreditsUsed.invalidate();
+  };
 
   const maxSkill = Math.max(1, ...(skillCounts as SkillCount[]).map((s) => s.count));
   const maxUser = Math.max(1, ...(userCounts as UserCount[]).map((u) => u.count));
@@ -70,6 +88,44 @@ export default function AdminUsage() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Billing cycle setting */}
+        <div className="rounded-xl p-5 xl:col-span-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <h3 className="text-sm font-bold mb-1" style={{ color: "#FAFAFA" }}>Billing Cycle Settings</h3>
+          <p className="text-xs mb-4" style={{ color: "rgba(255,255,255,0.35)" }}>
+            Set the day of the month your Manus billing period starts. The credits chart on the Dashboard will show usage from that day forward.
+            Manus does not expose a billing API, so this must be set manually.
+          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>Current start day:</span>
+              <span className="text-sm font-bold" style={{ color: "#00BEEF" }}>{currentBillingDay}</span>
+            </div>
+            <div className="flex items-center gap-2 ml-4">
+              <input
+                type="number"
+                min={1}
+                max={28}
+                placeholder="1–28"
+                value={billingDayInput}
+                onChange={(e) => setBillingDayInput(e.target.value)}
+                className="w-20 px-2 py-1.5 rounded-lg text-xs"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#FAFAFA", outline: "none" }}
+              />
+              <button
+                onClick={handleSaveBillingDay}
+                disabled={setBillingDay.isPending || !billingDayInput}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity"
+                style={{ background: "#00BEEF", color: "#141349", opacity: setBillingDay.isPending || !billingDayInput ? 0.5 : 1 }}
+              >
+                {setBillingDay.isPending ? "Saving..." : "Save"}
+              </button>
+              {setBillingDay.isSuccess && (
+                <span className="text-xs" style={{ color: "#00B37A" }}>Saved</span>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Team members */}
