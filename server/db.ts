@@ -189,6 +189,8 @@ export async function updateSkillRun(
     attachments?: Array<{ filename: string; url: string; contentType: string }>;
     statusLog?: Array<{ ts: number; msg: string }>;
     durationMs?: number;
+    creditUsage?: number | null;
+    agentProfile?: string;
   }
 ) {
   const db = await getDb();

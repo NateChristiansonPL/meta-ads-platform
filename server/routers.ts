@@ -260,6 +260,7 @@ export const appRouter = router({
         campaignIds: z.array(z.string()).optional(),
         additionalInstructions: z.string().optional(),
         extraParams: z.record(z.string(), z.unknown()).optional(),
+        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite", "manus-1.6-max"]).default("manus-1.6-lite"),
       }))
       .mutation(async ({ ctx, input }) => {
         const apiKey = process.env.MANUS_API_KEY;
@@ -322,6 +323,7 @@ export const appRouter = router({
               apiKey,
               skillId: input.skillId,
               prompt,
+              agentProfile: input.agentProfile,
               onProgress: async (msg: string) => {
                 statusLog.push({ ts: Date.now(), msg });
                 console.log(`[Run ${runId}] ${msg}`);
@@ -339,6 +341,7 @@ export const appRouter = router({
               attachments: result.attachments,
               statusLog,
               durationMs,
+              creditUsage: result.creditUsage ?? null,
             });
           } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : String(err);
@@ -398,6 +401,7 @@ export const appRouter = router({
           reportMarkdown: run.reportMarkdown ?? null,
           errorMessage: run.errorMessage ?? null,
           durationMs: run.durationMs ?? null,
+          creditUsage: run.creditUsage ?? null,
           startedAt: run.startedAt,
           completedAt: run.completedAt ?? null,
         };
@@ -418,6 +422,67 @@ export const appRouter = router({
 
     userSuccessCounts: adminProcedure.query(async () => getUserSuccessCounts()),
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
+
+    /**
+     * monthlyCreditsUsed: Sums credit_usage from the Manus API for all tasks
+     * created this calendar month. Falls back to DB sum if API is unavailable.
+     */
+    monthlyCreditsUsed: protectedProcedure.query(async () => {
+      const apiKey = process.env.MANUS_API_KEY;
+      if (!apiKey) return { creditsUsed: null, source: "none" as const };
+
+      try {
+        // Fetch tasks from this month via Manus API task.list
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const axios = (await import("axios")).default;
+        const headers = { "x-manus-api-key": apiKey };
+
+        let totalCredits = 0;
+        let cursor: string | undefined;
+        const PAGE_SIZE = 50;
+
+        do {
+          const params: Record<string, string | number> = { limit: PAGE_SIZE };
+          if (cursor) params.cursor = cursor;
+          const resp = await axios.get("https://api.manus.ai/v2/task.list", {
+            params,
+            headers,
+            timeout: 15000,
+          });
+          if (!resp.data?.ok) break;
+          const tasks: Array<{ created_at?: string; credit_usage?: number }> = resp.data.tasks ?? [];
+          // Only count tasks from this month
+          const thisMonthTasks = tasks.filter((t) => {
+            if (!t.created_at) return false;
+            return new Date(t.created_at) >= monthStart;
+          });
+          totalCredits += thisMonthTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
+          // If the oldest task in this page is before monthStart, stop paginating
+          const oldest = tasks[tasks.length - 1];
+          const oldestDate = oldest?.created_at ? new Date(oldest.created_at) : null;
+          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= monthStart)
+            ? resp.data.next_cursor
+            : undefined;
+        } while (cursor);
+
+        return { creditsUsed: totalCredits, source: "api" as const };
+      } catch {
+        // Fallback: sum creditUsage from our own DB
+        const db = await (await import("./db.js")).getDb();
+        if (!db) return { creditsUsed: null, source: "none" as const };
+        const { skillRuns } = await import("../drizzle/schema.js");
+        const { sql } = await import("drizzle-orm");
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const { gte } = await import("drizzle-orm");
+        const [row] = await db
+          .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
+          .from(skillRuns)
+          .where(gte(skillRuns.startedAt, monthStart));
+        return { creditsUsed: row?.total ?? 0, source: "db" as const };
+      }
+    }),
   }),
 
   users: router({

@@ -76,6 +76,8 @@ export const skillRuns = mysqlTable("skill_runs", {
   attachments: json("attachments").$type<Array<{ filename: string; url: string; contentType: string }>>().default([]),
   statusLog: json("statusLog").$type<Array<{ ts: number; msg: string }>>().default([]),
   durationMs: int("durationMs"),
+  creditUsage: int("creditUsage"),
+  agentProfile: varchar("agentProfile", { length: 32 }).default("manus-1.6-lite"),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
 });

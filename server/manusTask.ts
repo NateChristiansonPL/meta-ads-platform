@@ -29,6 +29,7 @@ interface ManusTaskOptions {
   apiKey: string;
   skillId: string;
   prompt: string;
+  agentProfile?: "manus-1.6" | "manus-1.6-lite" | "manus-1.6-max";
   onProgress?: (message: string) => void;
 }
 
@@ -64,6 +65,7 @@ interface ManusTaskResult {
   attachments: Array<{ filename: string; url: string; contentType: string }>;
   status: "success" | "error";
   errorMessage?: string;
+  creditUsage?: number;
 }
 
 /**
@@ -400,7 +402,7 @@ async function fetchAllMessages(
 export async function runManusSkillTask(
   options: ManusTaskOptions
 ): Promise<ManusTaskResult> {
-  const { apiKey, skillId, prompt, onProgress } = options;
+  const { apiKey, skillId, prompt, agentProfile = "manus-1.6-lite", onProgress } = options;
 
   const headers = {
     "Content-Type": "application/json",
@@ -416,6 +418,7 @@ export async function runManusSkillTask(
         content: prompt,
         force_skills: [SKILL_IDS[skillId] ?? skillId],
       },
+      agent_profile: agentProfile,
       title: `Pathlabs: ${skillId} run`,
     },
     { headers, timeout: 30000 }
@@ -553,7 +556,17 @@ export async function runManusSkillTask(
         if (reportSections.length > 0) {
           const report = reportSections.join("\n\n---\n\n");
           onProgress?.(`Full report extracted from ${reportSections.length} file(s) (${report.length} characters)`);
-          return { taskId, taskUrl, report, attachments, status: "success" };
+          // Fetch credit_usage from task.detail
+          let creditUsage: number | undefined;
+          try {
+            const detailResp = await axios.get(`${MANUS_API_BASE}/v2/task.detail`, {
+              params: { task_id: taskId },
+              headers,
+              timeout: 10000,
+            });
+            creditUsage = detailResp.data?.task?.credit_usage ?? detailResp.data?.credit_usage;
+          } catch { /* non-fatal */ }
+          return { taskId, taskUrl, report, attachments, status: "success", creditUsage };
         }
       }
 
@@ -583,7 +596,18 @@ export async function runManusSkillTask(
 
       onProgress?.(`Report extracted from ${reportParts.length} message(s) (${report.length} characters)`);
 
-      return { taskId, taskUrl, report, attachments, status: "success" };
+      // Fetch credit_usage from task.detail
+      let creditUsage: number | undefined;
+      try {
+        const detailResp = await axios.get(`${MANUS_API_BASE}/v2/task.detail`, {
+          params: { task_id: taskId },
+          headers,
+          timeout: 10000,
+        });
+        creditUsage = detailResp.data?.task?.credit_usage ?? detailResp.data?.credit_usage;
+      } catch { /* non-fatal */ }
+
+      return { taskId, taskUrl, report, attachments, status: "success", creditUsage };
     }
   }
 

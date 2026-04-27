@@ -72,22 +72,42 @@ const ADMIN_ITEMS = [
 
 function CreditsWidget() {
   const { data: me } = trpc.auth.me.useQuery();
-  const [credits] = useState(850);
-  const max = 1000;
-  const pct = Math.round((credits / max) * 100);
-  const color = pct > 50 ? "#00B37A" : pct > 20 ? "#F7901E" : "#ED135F";
+  const { data: creditsData, isLoading } = trpc.runs.monthlyCreditsUsed.useQuery(
+    undefined,
+    { enabled: !!me, refetchInterval: 5 * 60 * 1000, staleTime: 4 * 60 * 1000 }
+  );
 
   if (!me) return null;
+
+  const credits = creditsData?.creditsUsed ?? null;
+  const source = creditsData?.source;
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.35)" }}
+      >
+        <Zap size={12} />
+        <span>Loading...</span>
+      </div>
+    );
+  }
+
+  if (credits === null) return null;
+
+  const color = "#00B37A";
+  const label = source === "db" ? "credits used this month (est.)" : "credits used this month";
 
   return (
     <div
       className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
       style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
-      title={`${credits} / ${max} Manus credits remaining this month`}
+      title={label}
     >
       <Zap size={12} style={{ color }} />
       <span style={{ color }}>{credits.toLocaleString()}</span>
-      <span style={{ color: "rgba(255,255,255,0.35)" }}>/ {max.toLocaleString()} credits</span>
+      <span style={{ color: "rgba(255,255,255,0.35)" }}>credits used this month</span>
     </div>
   );
 }

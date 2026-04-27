@@ -50,6 +50,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [enabledModules, setEnabledModules] = useState<string[]>(config.modules?.map((m) => m.id) ?? []);
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [compare, setCompare] = useState(false);
+  const [agentProfile, setAgentProfile] = useState<"manus-1.6" | "manus-1.6-lite" | "manus-1.6-max">("manus-1.6-lite");
 
   const [runId, setRunId] = useState<number | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
@@ -62,6 +63,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [rateLimitWarning, setRateLimitWarning] = useState(false);
   const [timeoutWarning, setTimeoutWarning] = useState(false);
+  const [creditUsage, setCreditUsage] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -102,6 +104,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             setReport(data.reportMarkdown ?? "");
             setTaskUrl(data.taskUrl ?? null);
             setAttachments(data.attachments ?? []);
+            setCreditUsage(data.creditUsage ?? null);
             setStatus("success");
           } else {
             setErrorMsg(data.errorMessage ?? "Run failed.");
@@ -155,6 +158,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         datePreset,
         campaignIds: selectedCampaigns,
         additionalInstructions,
+        agentProfile,
         extraParams: { modules: enabledModules, compare },
       });
       // execute now returns immediately with { runId, status: "running" }.
@@ -182,6 +186,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
     setTimeoutWarning(false);
     setTaskUrl(null);
     setAttachments([]);
+    setCreditUsage(null);
   }
 
   function handleRetry() {
@@ -403,6 +408,34 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
           />
         </Section>
 
+        {/* Model Selector */}
+        <Section title="Manus Model">
+          <div className="grid grid-cols-3 gap-2">
+            {(["manus-1.6-lite", "manus-1.6", "manus-1.6-max"] as const).map((m) => {
+              const labels: Record<string, { short: string; sub: string }> = {
+                "manus-1.6-lite": { short: "1.6 Lite", sub: "Faster · fewer credits" },
+                "manus-1.6": { short: "1.6", sub: "Balanced" },
+                "manus-1.6-max": { short: "1.6 Max", sub: "Most thorough" },
+              };
+              const active = agentProfile === m;
+              return (
+                <button
+                  key={m}
+                  onClick={() => setAgentProfile(m)}
+                  className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-center transition-all"
+                  style={{
+                    background: active ? `${config.color}20` : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${active ? config.color + "50" : "rgba(255,255,255,0.08)"}`,
+                  }}
+                >
+                  <span className="text-xs font-bold" style={{ color: active ? config.color : "rgba(255,255,255,0.6)" }}>{labels[m].short}</span>
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.6rem" }}>{labels[m].sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
         {/* Run Button */}
         <div className="flex items-center gap-3">
           <button
@@ -550,6 +583,15 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
               <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
                 {adAccountName || adAccountId} · {DATE_PRESETS.find((d) => d.value === datePreset)?.label}
               </span>
+              {creditUsage !== null && (
+                <span
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: "rgba(0,179,122,0.12)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.25)" }}
+                  title="Manus credits consumed by this run"
+                >
+                  ⚡ {creditUsage} credits
+                </span>
+              )}
               {/* Action buttons */}
               <div className="flex items-center gap-2 ml-auto flex-wrap">
                 {taskUrl && (
