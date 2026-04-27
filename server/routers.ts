@@ -320,6 +320,9 @@ export const appRouter = router({
           .map((k) => `[${k.title}]\n${k.content}`)
           .join("\n\n");
 
+        // Look up the Manus project ID configured for this skill
+        const skillProjectId = await getAppSetting(`skillProjectId:${input.skillId}`) ?? undefined;
+
         // Create the run record immediately so we can return the runId right away.
         // The actual Manus agent call runs in the background — this prevents HTTP
         // request timeouts on the deployed platform (which kills requests after ~60s).
@@ -366,6 +369,7 @@ export const appRouter = router({
               skillId: input.skillId,
               prompt,
               agentProfile: input.agentProfile,
+              projectId: skillProjectId,
               onProgress: async (msg: string) => {
                 statusLog.push({ ts: Date.now(), msg });
                 console.log(`[Run ${runId}] ${msg}`);
@@ -741,6 +745,29 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await setAppSetting("googleSheetId", input.sheetId, ctx.user.id);
         if (input.sheetName !== undefined) await setAppSetting("googleSheetName", input.sheetName ?? "", ctx.user.id);
+        return { success: true };
+      }),
+
+    /** Returns all per-skill project ID assignments */
+    skillProjectIds: adminProcedure.query(async () => {
+      const all = await getAllAppSettings();
+      const result: Record<string, string> = {};
+      for (const [k, v] of Object.entries(all)) {
+        if (k.startsWith("skillProjectId:")) {
+          result[k.replace("skillProjectId:", "")] = v;
+        }
+      }
+      return result;
+    }),
+
+    /** Admin sets a project ID for a specific skill */
+    setSkillProjectId: adminProcedure
+      .input(z.object({
+        skillId: z.string().min(1),
+        projectId: z.string(), // empty string clears the assignment
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await setAppSetting(`skillProjectId:${input.skillId}`, input.projectId, ctx.user.id);
         return { success: true };
       }),
   }),

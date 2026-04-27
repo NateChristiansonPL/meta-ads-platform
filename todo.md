@@ -56,3 +56,11 @@
 - [x] Update TokenVault page to cover all token categories (Manus API Key status, Meta BM tokens, Google Sheets config)
 - [x] Rename nav label from "Token Vault" to "Token and API Key Vault"
 - [x] Rename page title/header to "Token and API Key Vault"
+
+## Manus Team Plan Migration
+- [x] Update MANUS_API_KEY secret to team plan key (verified HTTP 200 with skill.list)
+- [x] Add per-skill Manus Project ID to app_settings DB (key pattern: skillProjectId:{skillId})
+- [x] Add tRPC procedures: settings.skillProjectIds, settings.setSkillProjectId
+- [x] Update skill run dispatch to pass project_id when configured
+- [x] Add Manus Project Assignments section to Token and API Key Vault UI
+- [x] Pre-populated: Structural Audit → MKTYEMAkqiP2LpTLjUQbfX, all others → juQv4FJjcFEmRRYNSe9VPF

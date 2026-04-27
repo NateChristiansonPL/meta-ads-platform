@@ -1,8 +1,22 @@
 import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, Eye, EyeOff, ExternalLink, Key, Plus, RefreshCw, Settings, Sheet, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, ExternalLink, FolderOpen, Key, Plus, RefreshCw, Settings, Sheet, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+// ── Skill → Project mapping config ────────────────────────────────────────────
+const SKILL_PROJECT_CONFIG = [
+  { skillId: "weekly-optimization",    skillName: "Weekly Optimization",     color: "#00BEEF", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "performance-insights",   skillName: "Performance Insights",    color: "#F7901E", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "creative-lifecycle",     skillName: "Creative Lifecycle",      color: "#00B37A", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "audience-overlap",       skillName: "Audience Overlap",        color: "#a78bfa", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "structural-audit",       skillName: "Structural Audit",        color: "#ED135F", defaultProjectId: "MKTYEMAkqiP2LpTLjUQbfX" },
+];
+
+const PROJECT_LABELS: Record<string, string> = {
+  "juQv4FJjcFEmRRYNSe9VPF": "Meta Ads Performance Optimization",
+  "MKTYEMAkqiP2LpTLjUQbfX": "Meta Ads Andromeda Audit",
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type TokenEntry = {
@@ -70,6 +84,117 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
       {ok ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
       {label}
     </span>
+  );
+}
+
+// ── Project Assignments Section ───────────────────────────────────────────────
+function ProjectAssignmentsSection() {
+  const { data: savedIds = {}, refetch } = trpc.settings.skillProjectIds.useQuery();
+  const setProjectId = trpc.settings.setSkillProjectId.useMutation({
+    onSuccess: () => { refetch(); toast.success("Project assignment saved"); },
+    onError: () => toast.error("Failed to save project assignment"),
+  });
+
+  // Local edit state: skillId → draft value
+  const [editing, setEditing] = useState<Record<string, string>>({});
+
+  const getEffectiveId = (skillId: string, defaultId: string) =>
+    (savedIds as Record<string, string>)[skillId] ?? defaultId;
+
+  const getProjectLabel = (projectId: string) =>
+    PROJECT_LABELS[projectId] ?? (projectId ? "Custom Project" : "None");
+
+  return (
+    <div className="rounded-xl p-5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <SectionHeader
+        icon={<FolderOpen size={16} />}
+        title="Manus Project Assignments"
+        subtitle="Each skill run is dispatched into a specific Manus team project, giving it access to that project's shared knowledge and context."
+        color="#a78bfa"
+      />
+
+      <div className="flex flex-col gap-2">
+        {SKILL_PROJECT_CONFIG.map((skill) => {
+          const effectiveId = getEffectiveId(skill.skillId, skill.defaultProjectId);
+          const isEditing = skill.skillId in editing;
+          const draftValue = editing[skill.skillId] ?? effectiveId;
+
+          return (
+            <div
+              key={skill.skillId}
+              className="rounded-xl px-4 py-3.5"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+            >
+              <div className="flex items-center gap-3">
+                {/* Skill color dot */}
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: skill.color }} />
+
+                {/* Skill name */}
+                <span className="text-sm font-semibold w-44 shrink-0" style={{ color: "#FAFAFA" }}>
+                  {skill.skillName}
+                </span>
+
+                {/* Project display / edit */}
+                {isEditing ? (
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <input
+                      value={draftValue}
+                      onChange={(e) => setEditing((s) => ({ ...s, [skill.skillId]: e.target.value }))}
+                      placeholder="Project ID"
+                      className="flex-1 px-3 py-1.5 rounded-lg text-xs font-mono"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(167,139,250,0.4)", color: "#FAFAFA", outline: "none" }}
+                    />
+                    <button
+                      onClick={() => {
+                        setProjectId.mutate({ skillId: skill.skillId, projectId: draftValue });
+                        setEditing((s) => { const n = { ...s }; delete n[skill.skillId]; return n; });
+                      }}
+                      disabled={setProjectId.isPending}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-40"
+                      style={{ background: "#a78bfa", color: "#fff" }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditing((s) => { const n = { ...s }; delete n[skill.skillId]; return n; })}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                      style={{ color: "rgba(255,255,255,0.4)" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-semibold block" style={{ color: "rgba(167,139,250,0.9)" }}>
+                        {getProjectLabel(effectiveId)}
+                      </span>
+                      <span className="text-xs font-mono block truncate" style={{ color: "rgba(255,255,255,0.3)" }}>
+                        {effectiveId}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setEditing((s) => ({ ...s, [skill.skillId]: effectiveId }))}
+                      className="p-1.5 rounded-lg transition-colors shrink-0"
+                      style={{ color: "rgba(255,255,255,0.3)" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#a78bfa"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.3)"; }}
+                      title="Edit project assignment"
+                    >
+                      <Settings size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-xs mt-4" style={{ color: "rgba(255,255,255,0.3)" }}>
+        Project IDs are sourced from your Manus team workspace. Each skill run is dispatched into the assigned project so the agent can recall shared knowledge, files, and context stored there. Changes take effect on the next run.
+      </p>
+    </div>
   );
 }
 
@@ -408,6 +533,9 @@ export default function AdminTokenVault() {
             The Google service account key used to authenticate with Google Sheets is bundled inside the <code style={{ color: "#00B37A" }}>pl-campaign-creation</code> skill in your Manus workspace. Only the Sheet ID needs to be configured here.
           </p>
         </div>
+
+        {/* ── Section 4: Manus Project Assignments ──────────────────────── */}
+        <ProjectAssignmentsSection />
 
       </div>
     </AppShell>

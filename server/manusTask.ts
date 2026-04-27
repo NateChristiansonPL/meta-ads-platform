@@ -30,6 +30,7 @@ interface ManusTaskOptions {
   skillId: string;
   prompt: string;
   agentProfile?: "manus-1.6" | "manus-1.6-lite" | "manus-1.6-max";
+  projectId?: string;
   onProgress?: (message: string) => void;
 }
 
@@ -422,7 +423,7 @@ async function fetchAllMessages(
 export async function runManusSkillTask(
   options: ManusTaskOptions
 ): Promise<ManusTaskResult> {
-  const { apiKey, skillId, prompt, agentProfile = "manus-1.6-lite", onProgress } = options;
+  const { apiKey, skillId, prompt, agentProfile = "manus-1.6-lite", projectId, onProgress } = options;
 
   const headers = {
     "Content-Type": "application/json",
@@ -440,6 +441,7 @@ export async function runManusSkillTask(
       },
       agent_profile: agentProfile,
       title: `Pathlabs: ${skillId} run`,
+      ...(projectId ? { project_id: projectId } : {}),
     },
     { headers, timeout: 30000 }
   );
