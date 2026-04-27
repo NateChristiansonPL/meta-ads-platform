@@ -714,6 +714,35 @@ export const appRouter = router({
         await setAppSetting("billingPeriodEnd", input.periodEnd, ctx.user.id);
         return { success: true };
       }),
+
+    /** Returns masked status of MANUS_API_KEY — never exposes the full key */
+    manusApiKeyStatus: adminProcedure.query(async () => {
+      const key = process.env.MANUS_API_KEY;
+      if (!key) return { configured: false, masked: null as string | null };
+      const masked = key.length > 8
+        ? key.slice(0, 4) + "*".repeat(Math.max(0, key.length - 8)) + key.slice(-4)
+        : "****";
+      return { configured: true, masked };
+    }),
+
+    /** Returns Google Sheets config stored in app_settings */
+    googleSheetsConfig: adminProcedure.query(async () => {
+      const sheetId = await getAppSetting("googleSheetId");
+      const sheetName = await getAppSetting("googleSheetName");
+      return { sheetId: sheetId ?? null, sheetName: sheetName ?? null };
+    }),
+
+    /** Admin sets Google Sheets config */
+    setGoogleSheetsConfig: adminProcedure
+      .input(z.object({
+        sheetId: z.string().min(1),
+        sheetName: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await setAppSetting("googleSheetId", input.sheetId, ctx.user.id);
+        if (input.sheetName !== undefined) await setAppSetting("googleSheetName", input.sheetName ?? "", ctx.user.id);
+        return { success: true };
+      }),
   }),
 
   users: router({

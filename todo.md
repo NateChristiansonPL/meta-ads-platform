@@ -50,3 +50,9 @@
 - [x] Build FeedbackModal component with category selector and text area
 - [x] Add "Provide Feedback" button to AppShell header next to credits widget
 - [x] Add Feedback section to AdminUsage.tsx organized by category tabs/sections
+
+## Token and API Key Vault Expansion
+- [x] Audit all API tokens/keys used across the app
+- [x] Update TokenVault page to cover all token categories (Manus API Key status, Meta BM tokens, Google Sheets config)
+- [x] Rename nav label from "Token Vault" to "Token and API Key Vault"
+- [x] Rename page title/header to "Token and API Key Vault"
