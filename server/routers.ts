@@ -6,9 +6,11 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
+  createFeedback,
   createKnowledgeEntry,
   createSkillRun,
   deactivateToken,
+  deleteFeedback,
   deleteKnowledgeEntry,
   getAllAppSettings,
   getAllTokens,
@@ -25,6 +27,7 @@ import {
   getTokenById,
   getUserSuccessCounts,
   insertToken,
+  listFeedback,
   setAppSetting,
   updateSkillRun,
   updateToken,
@@ -735,6 +738,44 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ input }) => {
         await deleteKnowledgeEntry(input.id);
+        return { success: true };
+      }),
+  }),
+
+  feedback: router({
+    /** Submit feedback (any logged-in user) */
+    submit: protectedProcedure
+      .input(z.object({
+        category: z.enum(["skill", "suggestion", "general"]),
+        skillId: z.string().optional(),
+        skillName: z.string().optional(),
+        message: z.string().min(1).max(4000),
+        rating: z.number().int().min(1).max(5).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await createFeedback({
+          userId: ctx.user.id,
+          category: input.category,
+          skillId: input.skillId ?? null,
+          skillName: input.skillName ?? null,
+          message: input.message,
+          rating: input.rating ?? null,
+        });
+        return { id };
+      }),
+
+    /** List all feedback (admin only) */
+    list: adminProcedure
+      .input(z.object({
+        category: z.enum(["skill", "suggestion", "general"]).optional(),
+      }).optional())
+      .query(async ({ input }) => listFeedback(input ?? {})),
+
+    /** Delete a feedback entry (admin only) */
+    delete: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        await deleteFeedback(input.id);
         return { success: true };
       }),
   }),

@@ -2,6 +2,8 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   appSettings,
+  feedback,
+  InsertFeedback,
   InsertSkillRun,
   InsertTokenVaultEntry,
   InsertUser,
@@ -351,4 +353,42 @@ export async function getAllAppSettings(): Promise<Record<string, string>> {
   if (!db) return {};
   const rows = await db.select().from(appSettings);
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+// ── User Feedback ───────────────────────────────────────────────────────────────────────────────
+
+export async function createFeedback(entry: Omit<InsertFeedback, "id" | "createdAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [result] = await db.insert(feedback).values(entry);
+  return (result as { insertId: number }).insertId;
+}
+
+export async function listFeedback(opts?: { category?: "skill" | "suggestion" | "general" }) {
+  const db = await getDb();
+  if (!db) return [];
+  const q = db
+    .select({
+      id: feedback.id,
+      userId: feedback.userId,
+      userName: users.name,
+      userEmail: users.email,
+      category: feedback.category,
+      skillId: feedback.skillId,
+      skillName: feedback.skillName,
+      message: feedback.message,
+      rating: feedback.rating,
+      createdAt: feedback.createdAt,
+    })
+    .from(feedback)
+    .leftJoin(users, eq(feedback.userId, users.id))
+    .orderBy(desc(feedback.createdAt));
+  if (opts?.category) return q.where(eq(feedback.category, opts.category));
+  return q;
+}
+
+export async function deleteFeedback(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(feedback).where(eq(feedback.id, id));
 }

@@ -42,3 +42,11 @@
 - [x] Update Dashboard.tsx credits chart to use billing period dates
 - [x] Update AppShell header counter to show billing period date range label
 - [x] Update Credits Used by User table to use billing period dates (invalidated on save)
+
+## Feedback System
+- [x] Add feedback table to drizzle/schema.ts (id, userId, category, skillId, message, createdAt)
+- [x] Add DB helpers: createFeedback, listFeedback (admin)
+- [x] Add tRPC procedures: feedback.submit (protected), feedback.list (admin), feedback.delete (admin)
+- [x] Build FeedbackModal component with category selector and text area
+- [x] Add "Provide Feedback" button to AppShell header next to credits widget
+- [x] Add Feedback section to AdminUsage.tsx organized by category tabs/sections

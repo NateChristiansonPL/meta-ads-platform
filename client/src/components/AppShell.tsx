@@ -11,6 +11,7 @@ import {
   Key,
   LayoutDashboard,
   LogOut,
+  MessageSquarePlus,
   RefreshCw,
   Shield,
   TrendingUp,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { FeedbackModal } from "./FeedbackModal";
 
 const SKILLS = [
   {
@@ -135,6 +137,7 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [location] = useLocation();
   const [adminOpen, setAdminOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -184,6 +187,19 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
 
         <div className="flex items-center gap-3">
           <CreditsWidget />
+          {/* Feedback button */}
+          <button
+            onClick={() => setFeedbackOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold transition-all"
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(0,190,239,0.4)"; (e.currentTarget as HTMLButtonElement).style.color = "#00BEEF"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)"; }}
+            title="Provide feedback"
+          >
+            <MessageSquarePlus size={13} />
+            <span>Provide Feedback</span>
+          </button>
+          <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#ED135F", color: "#fff" }}>
               {(user?.name || user?.email || "U").charAt(0).toUpperCase()}

@@ -116,3 +116,24 @@ export const appSettings = mysqlTable("app_settings", {
 
 export type AppSetting = typeof appSettings.$inferSelect;
 export type InsertAppSetting = typeof appSettings.$inferInsert;
+
+// ── User Feedback ───────────────────────────────────────────────────────────────────────────────
+// Users can submit feedback on specific skills, suggest new skills, or leave general feedback.
+
+export const feedback = mysqlTable("feedback", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Category: 'skill' | 'suggestion' | 'general' */
+  category: mysqlEnum("category", ["skill", "suggestion", "general"]).notNull(),
+  /** Only set when category = 'skill' */
+  skillId: varchar("skillId", { length: 64 }),
+  skillName: varchar("skillName", { length: 128 }),
+  /** The feedback message */
+  message: text("message").notNull(),
+  /** Optional rating 1-5 */
+  rating: int("rating"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Feedback = typeof feedback.$inferSelect;
+export type InsertFeedback = typeof feedback.$inferInsert;
