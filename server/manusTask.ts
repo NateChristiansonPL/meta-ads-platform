@@ -84,9 +84,13 @@ export function buildSkillPrompt(
     additionalInstructions?: string;
     knowledgeContext?: string;
     accessToken?: string;
+    /** Raw JSON string from a prior Audience Overlap run (sidecarJson) to inject as enrichment */
+    enrichOverlapJson?: string;
+    /** Raw JSON string from a prior Creative Lifecycle run (sidecarJson) to inject as enrichment */
+    enrichLifecycleJson?: string;
   }
 ): string {
-  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext, accessToken } = params;
+  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext, accessToken, enrichOverlapJson, enrichLifecycleJson } = params;
 
   // Normalize account ID — ensure it has the act_ prefix
   const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
@@ -119,7 +123,7 @@ export function buildSkillPrompt(
       return buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     case "performance-insights":
-      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
+      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport, enrichOverlapJson, enrichLifecycleJson);
 
     case "creative-lifecycle":
       return buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
@@ -192,16 +196,53 @@ function buildPerformanceInsightsPrompt(
   campaignFilter: string,
   knowledgeSection: string,
   additionalSection: string,
-  tokenExport: string
+  tokenExport: string,
+  enrichOverlapJson?: string,
+  enrichLifecycleJson?: string
 ): string {
   const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
+
+  // Build enrichment injection block — write sidecar JSON to temp files the skill can read
+  let enrichmentBlock = "";
+  if (enrichOverlapJson || enrichLifecycleJson) {
+    let bashBlock = "";
+    if (enrichOverlapJson) {
+      bashBlock += "# Audience Overlap sidecar JSON\n";
+      bashBlock += "cat > /tmp/enrichment_audience_overlap.json << 'ENDJSON'\n";
+      bashBlock += enrichOverlapJson + "\n";
+      bashBlock += "ENDJSON\n";
+      bashBlock += "export ENRICHMENT_AUDIENCE_OVERLAP_JSON=/tmp/enrichment_audience_overlap.json\n";
+    }
+    if (enrichLifecycleJson) {
+      bashBlock += "# Creative Lifecycle sidecar JSON\n";
+      bashBlock += "cat > /tmp/enrichment_creative_lifecycle.json << 'ENDJSON'\n";
+      bashBlock += enrichLifecycleJson + "\n";
+      bashBlock += "ENDJSON\n";
+      bashBlock += "export ENRICHMENT_CREATIVE_LIFECYCLE_JSON=/tmp/enrichment_creative_lifecycle.json\n";
+    }
+    const overlapNote = enrichOverlapJson
+      ? "- If ENRICHMENT_AUDIENCE_OVERLAP_JSON is set: reference the audience overlap signals (wasted spend, overlapping ad sets) in the Audience module and recommendations\n"
+      : "";
+    const lifecycleNote = enrichLifecycleJson
+      ? "- If ENRICHMENT_CREATIVE_LIFECYCLE_JSON is set: reference the creative fatigue signals (CDR, BOCPD, CUSUM, EWMA) in the Creative module and recommendations\n"
+      : "";
+    enrichmentBlock =
+      "\n## Enrichment Data\n\n" +
+      "The following prior-run JSON data has been provided to enrich this analysis.\n" +
+      "Write each JSON block to the corresponding temp file before running the skill scripts:\n\n" +
+      "```bash\n" + bashBlock + "```\n\n" +
+      "When the skill scripts have completed, **incorporate the enrichment data** into the final analysis:\n" +
+      overlapNote +
+      lifecycleNote +
+      "- Cross-reference enrichment findings with the live performance data to produce a more complete picture\n";
+  }
+
   return `Please run the **pl-performance-analysis-insights-v3** skill for the following Meta Ads account.
 
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${knowledgeSection}${additionalSection}
-
+${knowledgeSection}${additionalSection}${enrichmentBlock}
 ## Instructions
 
 Read the skill at \`/home/ubuntu/skills/pl-performance-analysis-insights-v3/SKILL.md\` first, then execute the full analysis:

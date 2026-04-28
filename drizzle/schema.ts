@@ -2,6 +2,7 @@ import {
   boolean,
   int,
   json,
+  mediumtext,
   mysqlEnum,
   mysqlTable,
   text,
@@ -80,6 +81,13 @@ export const skillRuns = mysqlTable("skill_runs", {
   agentProfile: varchar("agentProfile", { length: 32 }).default("manus-1.6-lite"),
   /** Manus task ID returned by task.create — used for abort (task.stop) and redelivery */
   manusTaskId: varchar("manusTaskId", { length: 128 }),
+  /**
+   * Sidecar JSON payload extracted from the skill output.
+   * For Creative Lifecycle: the signals.json content.
+   * For Audience Overlap: the overlap_report.json content.
+   * Stored as raw JSON text for use as enrichment input in Performance Insights.
+   */
+  sidecarJson: mediumtext("sidecarJson"),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
 });

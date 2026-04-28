@@ -206,6 +206,8 @@ export async function updateSkillRun(
     creditUsage?: number | null;
     agentProfile?: string;
     manusTaskId?: string;
+    /** Raw JSON string extracted from the skill output (signals.json / overlap_report.json) */
+    sidecarJson?: string | null;
   }
 ) {
   const db = await getDb();
@@ -249,6 +251,22 @@ export async function getRecentRuns(limit = 50) {
 export async function getRunsByUser(userId: number, limit = 20) {
   const db = await getDb();
   if (!db) return [];
+  // Auto-expire runs stuck in 'running' for more than 4 hours (stale/orphaned tasks)
+  const staleThreshold = new Date(Date.now() - 4 * 60 * 60 * 1000);
+  await db
+    .update(skillRuns)
+    .set({
+      status: 'error',
+      errorMessage: 'Run timed out — no completion signal received within 4 hours.',
+      completedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(skillRuns.userId, userId),
+        eq(skillRuns.status, 'running'),
+        sql`${skillRuns.startedAt} < ${staleThreshold}`
+      )
+    );
   return db.select().from(skillRuns)
     .where(eq(skillRuns.userId, userId))
     .orderBy(desc(skillRuns.startedAt))
@@ -261,6 +279,54 @@ export async function getRunsByUserAndSkill(userId: number, skillId: string, lim
     .where(and(eq(skillRuns.userId, userId), eq(skillRuns.skillId, skillId)))
     .orderBy(desc(skillRuns.startedAt))
     .limit(limit);
+}
+
+/**
+ * Returns recent successful runs for a given skill that have sidecar JSON stored.
+ * Used by Performance Insights to populate the enrichment picker.
+ */
+export async function getRecentRunsWithSidecar(
+  userId: number,
+  skillId: string,
+  adAccountId?: string,
+  limit = 10
+) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [
+    eq(skillRuns.userId, userId),
+    eq(skillRuns.skillId, skillId),
+    eq(skillRuns.status, 'success'),
+    sql`${skillRuns.sidecarJson} IS NOT NULL AND ${skillRuns.sidecarJson} != ''`,
+  ];
+  if (adAccountId) {
+    conditions.push(eq(skillRuns.adAccountId, adAccountId));
+  }
+  return db
+    .select({
+      id: skillRuns.id,
+      skillId: skillRuns.skillId,
+      adAccountId: skillRuns.adAccountId,
+      adAccountName: skillRuns.adAccountName,
+      datePreset: skillRuns.datePreset,
+      completedAt: skillRuns.completedAt,
+      sidecarJson: skillRuns.sidecarJson,
+    })
+    .from(skillRuns)
+    .where(and(...conditions))
+    .orderBy(desc(skillRuns.completedAt))
+    .limit(limit);
+}
+
+export async function getSidecarJsonByRunId(runId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ id: skillRuns.id, sidecarJson: skillRuns.sidecarJson })
+    .from(skillRuns)
+    .where(eq(skillRuns.id, runId))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getRunById(id: number) {

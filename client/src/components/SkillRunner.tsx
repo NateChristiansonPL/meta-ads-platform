@@ -14,6 +14,12 @@ export interface SkillConfig {
   hasModules?: boolean;
   modules?: Array<{ id: string; label: string; sub: string }>;
   extraFields?: React.ReactNode;
+  /**
+   * When true, shows an "Enrich Analysis" section that lets the user select
+   * recent Audience Overlap and Creative Lifecycle runs to inject their
+   * sidecar JSON into the skill prompt.
+   */
+  hasEnrichment?: boolean;
 }
 
 interface SkillRunnerProps {
@@ -51,6 +57,20 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [compare, setCompare] = useState(false);
   const [agentProfile, setAgentProfile] = useState<"manus-1.6" | "manus-1.6-lite" | "manus-1.6-max">("manus-1.6-lite");
+
+  // Enrichment: selected run IDs from prior Audience Overlap / Creative Lifecycle runs
+  const [enrichOverlapRunId, setEnrichOverlapRunId] = useState<number | null>(null);
+  const [enrichLifecycleRunId, setEnrichLifecycleRunId] = useState<number | null>(null);
+
+  // Query recent runs with sidecar JSON for enrichment (only when hasEnrichment is enabled)
+  const { data: overlapRuns = [] } = trpc.runs.recentWithSidecar.useQuery(
+    { skillId: "audience-overlap", adAccountId: adAccountId || undefined, limit: 10 },
+    { enabled: !!config.hasEnrichment && !!adAccountId }
+  );
+  const { data: lifecycleRuns = [] } = trpc.runs.recentWithSidecar.useQuery(
+    { skillId: "creative-lifecycle", adAccountId: adAccountId || undefined, limit: 10 },
+    { enabled: !!config.hasEnrichment && !!adAccountId }
+  );
 
   const [runId, setRunId] = useState<number | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
@@ -217,7 +237,12 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         campaignIds: selectedCampaigns,
         additionalInstructions,
         agentProfile,
-        extraParams: { modules: enabledModules, compare },
+        extraParams: {
+          modules: enabledModules,
+          compare,
+          enrichOverlapRunId: enrichOverlapRunId ?? undefined,
+          enrichLifecycleRunId: enrichLifecycleRunId ?? undefined,
+        },
       });
       // execute now returns immediately with { runId, status: "running" }.
       // The Manus agent runs in the background; we poll getRunStatus for updates.
@@ -444,6 +469,67 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             >
               Deselect all
             </button>
+          </Section>
+        )}
+
+        {/* Enrichment */}
+        {config.hasEnrichment && (
+          <Section title="Enrich Analysis" optional>
+            <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
+              Optionally attach a prior Audience Overlap or Creative Lifecycle run to inject its signals into this analysis.
+            </p>
+            <FormField label="Audience Overlap Run">
+              {!adAccountId ? (
+                <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  Select an ad account first
+                </div>
+              ) : overlapRuns.length === 0 ? (
+                <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  No Audience Overlap runs with JSON data found for this account
+                </div>
+              ) : (
+                <Select
+                  value={enrichOverlapRunId?.toString() ?? ""}
+                  onChange={(v) => setEnrichOverlapRunId(v ? parseInt(v) : null)}
+                  placeholder="None (skip enrichment)"
+                  options={[
+                    { value: "", label: "None" },
+                    ...overlapRuns.map((r) => ({
+                      value: r.id.toString(),
+                      label: `${r.datePreset ?? "unknown range"} · ${r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "?"}${
+                        r.adAccountName ? ` · ${r.adAccountName}` : ""
+                      }`,
+                    })),
+                  ]}
+                />
+              )}
+            </FormField>
+            <FormField label="Creative Lifecycle Run">
+              {!adAccountId ? (
+                <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  Select an ad account first
+                </div>
+              ) : lifecycleRuns.length === 0 ? (
+                <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  No Creative Lifecycle runs with JSON data found for this account
+                </div>
+              ) : (
+                <Select
+                  value={enrichLifecycleRunId?.toString() ?? ""}
+                  onChange={(v) => setEnrichLifecycleRunId(v ? parseInt(v) : null)}
+                  placeholder="None (skip enrichment)"
+                  options={[
+                    { value: "", label: "None" },
+                    ...lifecycleRuns.map((r) => ({
+                      value: r.id.toString(),
+                      label: `${r.datePreset ?? "unknown range"} · ${r.completedAt ? new Date(r.completedAt).toLocaleDateString() : "?"}${
+                        r.adAccountName ? ` · ${r.adAccountName}` : ""
+                      }`,
+                    })),
+                  ]}
+                />
+              )}
+            </FormField>
           </Section>
         )}
 

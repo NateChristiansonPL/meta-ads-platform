@@ -24,7 +24,9 @@ import {
   getKnowledgeEntries,
   getLastSkillOutput,
   getRecentRuns,
+  getRecentRunsWithSidecar,
   getRunById,
+  getSidecarJsonByRunId,
   getRunsByUser,
   getRunsByUserAndSkill,
   getSkillSuccessCounts,
@@ -277,6 +279,23 @@ export const appRouter = router({
         // runId immediately; the frontend polls getRunStatus for progress.
         (async () => {
           try {
+            // Resolve enrichment sidecar JSON for Performance Insights
+            let enrichOverlapJson: string | undefined;
+            let enrichLifecycleJson: string | undefined;
+            if (input.skillId === "performance-insights") {
+              const ep = input.extraParams as Record<string, unknown>;
+              const overlapRunId = typeof ep?.enrichOverlapRunId === "number" ? ep.enrichOverlapRunId : null;
+              const lifecycleRunId = typeof ep?.enrichLifecycleRunId === "number" ? ep.enrichLifecycleRunId : null;
+              if (overlapRunId) {
+                const run = await getSidecarJsonByRunId(overlapRunId);
+                if (run?.sidecarJson) enrichOverlapJson = run.sidecarJson;
+              }
+              if (lifecycleRunId) {
+                const run = await getSidecarJsonByRunId(lifecycleRunId);
+                if (run?.sidecarJson) enrichLifecycleJson = run.sidecarJson;
+              }
+            }
+
             const prompt = buildSkillPrompt(input.skillId, {
               adAccountId: input.adAccountId,
               businessManagerId: input.businessManagerId,
@@ -285,6 +304,8 @@ export const appRouter = router({
               additionalInstructions: input.additionalInstructions,
               knowledgeContext: relevantKnowledge || undefined,
               accessToken: metaAccessToken,
+              enrichOverlapJson,
+              enrichLifecycleJson,
             });
 
             const statusLog: Array<{ ts: number; msg: string }> = [];
@@ -315,6 +336,34 @@ export const appRouter = router({
             });
 
             const durationMs = Date.now() - startedAt;
+
+            // For skills that produce a JSON sidecar (Audience Overlap, Creative Lifecycle),
+            // fetch the JSON attachment and store it for downstream enrichment in Performance Insights.
+            const SIDECAR_SKILLS = ["audience-overlap", "creative-lifecycle"];  // app-level skill IDs
+            let sidecarJson: string | null = null;
+            if (result.status === "success" && SIDECAR_SKILLS.includes(input.skillId)) {
+              const jsonAtt = result.attachments.find(
+                (a) => a.filename.endsWith(".json") && a.url
+              );
+              if (jsonAtt) {
+                try {
+                  const jsonResp = await axios.get(jsonAtt.url, {
+                    timeout: 20000,
+                    responseType: "text",
+                    headers: jsonAtt.url.includes("api.manus.ai")
+                      ? { "x-manus-api-key": apiKey }
+                      : {},
+                  });
+                  sidecarJson = typeof jsonResp.data === "string"
+                    ? jsonResp.data
+                    : JSON.stringify(jsonResp.data);
+                  console.log(`[Run ${runId}] Sidecar JSON captured from ${jsonAtt.filename} (${sidecarJson.length} chars)`);
+                } catch (jsonErr) {
+                  console.warn(`[Run ${runId}] Failed to fetch sidecar JSON from ${jsonAtt.filename}:`, jsonErr);
+                }
+              }
+            }
+
             await updateSkillRun(runId, {
               status: result.status,
               reportMarkdown: result.report || result.errorMessage,
@@ -325,6 +374,7 @@ export const appRouter = router({
               durationMs,
               creditUsage: result.creditUsage ?? null,
               manusTaskId: result.taskId,
+              sidecarJson,
             });
           } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : String(err);
@@ -529,6 +579,21 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return getLastSkillOutput(ctx.user.id, input.skillId);
       }),
+    /**
+     * recentWithSidecar: Returns recent successful runs for a given skill that have sidecar JSON.
+     * Used by Performance Insights to populate the enrichment picker.
+     * Optionally filtered by adAccountId to show only runs for the same account.
+     */
+    recentWithSidecar: protectedProcedure
+      .input(z.object({
+        skillId: z.string().min(1),
+        adAccountId: z.string().optional(),
+        limit: z.number().int().min(1).max(20).default(10),
+      }))
+      .query(async ({ ctx, input }) => {
+        return getRecentRunsWithSidecar(ctx.user.id, input.skillId, input.adAccountId, input.limit);
+      }),
+
     userSuccessCounts: adminProcedure.query(async () => getUserSuccessCounts()),
     skillSuccessCounts: adminProcedure.query(async () => getSkillSuccessCounts()),
     creditsByUser: adminProcedure.query(async () => {

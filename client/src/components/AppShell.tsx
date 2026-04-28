@@ -79,8 +79,13 @@ function useRunningSkills() {
     { refetchInterval: 10000, staleTime: 8000 }
   );
   if (!runs) return new Set<string>();
+  const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
   return new Set(
-    runs.filter((r: { status: string; skillId: string }) => r.status === "running").map((r: { skillId: string }) => r.skillId)
+    runs
+      .filter((r: { status: string; skillId: string; startedAt: Date | string }) =>
+        r.status === "running" && new Date(r.startedAt).getTime() > fourHoursAgo
+      )
+      .map((r: { skillId: string }) => r.skillId)
   );
 }
 

@@ -20,6 +20,7 @@ const CONFIG = {
   hasDateRange: true,
   hasModules: true,
   modules: MODULES,
+  hasEnrichment: true,
 };
 
 export default function PerformanceInsights() {
