@@ -285,14 +285,15 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
               Tools
             </p>
             <div className="flex flex-col gap-0.5">
-              {/* Campaign Builder — accessible but Coming Soon badge */}
-              <NavItemWithBadge
+              {/* Campaign Builder */}
+              <NavItem
                 icon={Hammer}
                 label="Campaign Builder"
                 sub="Create & launch"
                 color="#ED135F"
                 path="/campaign-builder"
                 active={location === "/campaign-builder"}
+                running={false}
               />
               <NavItem
                 icon={Bot}

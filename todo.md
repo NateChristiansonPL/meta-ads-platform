@@ -103,21 +103,21 @@
 
 ## Campaign Builder Backend Wiring
 
-- [ ] Add campaign_sessions table to drizzle schema
-- [ ] Add db helpers: createSession, listSessions, getSessionById, updateSession, deleteSession
-- [ ] Add sessions tRPC router: list, save, load, delete
-- [ ] Add meta.validateSettings procedure
-- [ ] Add meta.getAdImages procedure
-- [ ] Add meta.getAdVideos procedure
-- [ ] Add meta.getAudienceOverlap procedure
-- [ ] Add meta.getPixelEvents procedure
-- [ ] Add meta.getCustomAudiences procedure
-- [ ] Add meta.getSavedAudiences procedure
-- [ ] Add meta.searchGeoLocations procedure
-- [ ] Add meta.searchTargeting procedure
-- [ ] Create client/src/lib/campaignStore.ts with all shared types and factories
-- [ ] Create client/src/hooks/useLaunchBuild.ts with LaunchProgress type and launch logic
-- [ ] Copy all 11 uploaded components into client/src/components/
-- [ ] Replace CampaignBuilder.tsx with new version using uploaded components
-- [ ] Remove Coming Soon gate from AppShell sidebar for Campaign Builder
-- [ ] TypeScript check and tests pass
+- [x] Add campaign_sessions table to drizzle schema
+- [x] Add db helpers: createSession, listSessions, getSessionById, updateSession, deleteSession
+- [x] Add sessions tRPC router: list, save, load, delete
+- [x] Add meta.validateSettings procedure
+- [x] Add meta.getAdImages procedure
+- [x] Add meta.getAdVideos procedure
+- [x] Add meta.getAudienceOverlap procedure
+- [x] Add meta.getPixelEvents procedure
+- [x] Add meta.getCustomAudiences procedure
+- [x] Add meta.getSavedAudiences procedure
+- [x] Add meta.searchGeoLocations procedure
+- [x] Add meta.searchTargeting procedure
+- [x] Create client/src/lib/campaignStore.ts with all shared types and factories
+- [x] Create client/src/hooks/useLaunchBuild.ts with LaunchProgress type and launch logic
+- [x] Copy all 11 uploaded components into client/src/components/
+- [x] Replace CampaignBuilder.tsx with new version using uploaded components
+- [x] Remove Coming Soon gate from AppShell sidebar for Campaign Builder
+- [x] TypeScript check and tests pass
