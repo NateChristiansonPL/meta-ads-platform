@@ -178,14 +178,12 @@ python3 run_weekly_analysis.py \\
   ${campaignArg}--compare-prior \\
   --output-dir /home/ubuntu/output/weekly-opt
 \`\`\`
-
 After the script completes:
-1. Read \`/home/ubuntu/output/weekly-opt/weekly_optimization.md\`
-2. Output the **full contents** of that file as your response — do not summarize or truncate
-3. If the file is large, output it in multiple messages but include every section
-4. Also note any key findings from \`recommendations.json\`
+1. Confirm that the analysis finished successfully
+2. List the output files produced in \`/home/ubuntu/output/weekly-opt/\` (filenames and sizes)
+3. If the script errored or produced no output files, describe the error in full so it can be debugged
 
-The report must include: campaign overview table, all ranked recommendations per campaign, funnel drop-off issues, and all breakdown tables. Do not abbreviate.`;
+Do **not** re-output the file contents as a message — the report will be retrieved directly from the output files.`;
 }
 
 function buildPerformanceInsightsPrompt(
@@ -243,13 +241,11 @@ After aggregating ad performance data across ad sets:
 - Example: "SAG - Tucson - Conversion - Purchase LAL - April New Breakfast - Burrito - Static" → "April New Breakfast - Burrito - Static"
 
 After the script completes:
-1. Read the master summary from \`/home/ubuntu/output/perf-insights/master_summary.md\` (or the individual module outputs if no master summary)
-2. Output the **full contents** of the report — do not summarize or truncate any section
-3. Include all module outputs: timing analysis, saturation, lifecycle enrichment, placement conversion data, and signals
-4. Apply ad name cleaning to all ad names in the report before outputting
-5. If converting to PDF is possible, do so and attach it
+1. Confirm that the analysis finished successfully
+2. List the output files produced in \`/home/ubuntu/output/perf-insights/\` (filenames and sizes)
+3. If the script errored or produced no output files, describe the error in full so it can be debugged
 
-The report must be comprehensive and include every section the skill produces. Do not abbreviate.`;
+Do **not** re-output the file contents as a message — the report will be retrieved directly from the output files.`;
 }
 
 function buildCreativeLifecyclePrompt(
@@ -285,12 +281,11 @@ python3 analyze_creative_lifecycle.py \\
 \`\`\`
 
 After the script completes:
-1. Read the full Markdown report from the output directory
-2. Output the **complete report** — do not summarize or truncate
-3. Include all sections: CDR analysis, BOCPD change points, CUSUM alerts, EWMA alerts, composite fatigue assessment, and ad relevance diagnostics
-4. Note any ads flagged as fatigued and the recommended actions
+1. Confirm that the analysis finished successfully
+2. List the output files produced in \`/home/ubuntu/output/creative-lifecycle/\` (filenames and sizes)
+3. If the script errored or produced no output files, describe the error in full so it can be debugged
 
-The report must include every section the skill produces. Do not abbreviate.`;
+Do **not** re-output the file contents as a message — the report will be retrieved directly from the output files.`;
 }
 
 function buildStructuralAuditPrompt(
@@ -333,12 +328,11 @@ python3 meta_ads_checker_v3.py \\
 \`\`\`
 
 After both scripts complete:
-1. Follow the SKILL.md report template exactly — you are a rendering engine, not an author
-2. Copy pre-computed data from \`mechanical_check_results.json\` into the template
-3. Output the **complete audit report** with all 9 checks: Data Infrastructure & EMQ, Signal Density, Creative Velocity & Format Diversity, Liquidity Consolidation Index, Budget Liquidity Ratio, Late-Stage Funnel Signal Velocity, Creative Fatigue Index, ASC Adoption Rate, Learning Phase & Reset Risk
-4. Include the health score, all check scores/verdicts, and the full recommendations section
+1. Confirm that both scripts finished successfully
+2. List the output files produced (\`audit_data.json\`, \`mechanical_check_results.json\`, and any other files written)
+3. If either script errored or produced no output, describe the error in full so it can be debugged
 
-Do not skip any check. Do not abbreviate any section.`;
+Do **not** re-output the file contents as a message — the report will be retrieved directly from the output files.`;
 }
 
 function buildAudienceOverlapPrompt(
@@ -387,12 +381,11 @@ python3 estimate_waste.py \\
 \`\`\`
 
 After all scripts complete:
-1. Read the full Markdown reports from \`./output/\`
-2. Output the **complete overlap report and wasted spend report** — do not summarize or truncate
-3. Include all sections: pairwise overlap matrix, overlap heatmap description, wasted spend estimates per campaign, KPI impact of overlap, and recommendations
-4. Highlight the campaigns with the highest wasted spend and the specific ad set pairs causing it
+1. Confirm that all three scripts finished successfully
+2. List the output files produced in \`./output/\` (filenames and sizes)
+3. If any script errored or produced no output files, describe the error in full so it can be debugged
 
-Do not abbreviate any section.`;
+Do **not** re-output the file contents as a message — the report will be retrieved directly from the output files.`;
 }
 
 /**
