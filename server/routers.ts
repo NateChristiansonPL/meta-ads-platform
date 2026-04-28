@@ -26,6 +26,7 @@ import {
   getRunsByUserAndSkill,
   getSkillSuccessCounts,
   getTokenById,
+  getFirstActiveTokenWithValue,
   getUserSuccessCounts,
   insertToken,
   listFeedback,
@@ -299,6 +300,7 @@ export const appRouter = router({
         adAccountId: z.string().min(1),
         adAccountName: z.string().optional(),
         businessManagerId: z.string().optional(),
+        tokenId: z.number().int().positive().optional(),
         datePreset: z.string().default("last_7d"),
         campaignIds: z.array(z.string()).optional(),
         additionalInstructions: z.string().optional(),
@@ -323,6 +325,19 @@ export const appRouter = router({
 
         // Look up the Manus project ID configured for this skill
         const skillProjectId = await getAppSetting(`skillProjectId:${input.skillId}`) ?? undefined;
+
+        // Fetch the Meta access token from the Token Vault so we can inject it
+        // into the skill prompt at runtime (skills must NOT have hardcoded tokens).
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          // Fallback: use the first active token if no specific tokenId provided
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
 
         // Create the run record immediately so we can return the runId right away.
         // The actual Manus agent call runs in the background — this prevents HTTP
@@ -354,6 +369,7 @@ export const appRouter = router({
               dateRange: input.datePreset,
               additionalInstructions: input.additionalInstructions,
               knowledgeContext: relevantKnowledge || undefined,
+              accessToken: metaAccessToken,
             });
 
             const statusLog: Array<{ ts: number; msg: string }> = [];

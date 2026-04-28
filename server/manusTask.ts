@@ -83,9 +83,10 @@ export function buildSkillPrompt(
     dateRange: string;
     additionalInstructions?: string;
     knowledgeContext?: string;
+    accessToken?: string;
   }
 ): string {
-  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext } = params;
+  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext, accessToken } = params;
 
   // Normalize account ID — ensure it has the act_ prefix
   const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
@@ -106,21 +107,28 @@ export function buildSkillPrompt(
     ? `\n\nAdditional instructions from the user: ${additionalInstructions}`
     : "";
 
+  // Build the env-var export line that injects the token at runtime.
+  // The skill config.py files read META_ACCESS_TOKEN from the environment.
+  const tokenExport = accessToken
+    ? `export META_ACCESS_TOKEN="${accessToken}"
+`
+    : "# WARNING: No META_ACCESS_TOKEN provided — skill will fail if no token is configured\n";
+
   switch (skillId) {
     case "weekly-optimization":
-      return buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+      return buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     case "performance-insights":
-      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     case "creative-lifecycle":
-      return buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+      return buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     case "structural-audit":
-      return buildStructuralAuditPrompt(accountId, campaignFilter, knowledgeSection, additionalSection);
+      return buildStructuralAuditPrompt(accountId, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     case "audience-overlap":
-      return buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection);
+      return buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
 
     default:
       return `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}${knowledgeSection}${additionalSection}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
@@ -147,7 +155,8 @@ function buildWeeklyOptPrompt(
   datePreset: string,
   campaignFilter: string,
   knowledgeSection: string,
-  additionalSection: string
+  additionalSection: string,
+  tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
   return `Please run the **pl-weekly-optimization** skill for the following Meta Ads account.
@@ -162,7 +171,7 @@ ${knowledgeSection}${additionalSection}
 Read the skill at \`/home/ubuntu/skills/pl-weekly-optimization/SKILL.md\` first, then execute:
 
 \`\`\`bash
-cd /home/ubuntu/skills/pl-weekly-optimization/scripts
+${tokenExport}cd /home/ubuntu/skills/pl-weekly-optimization/scripts
 python3 run_weekly_analysis.py \\
   --account-id ${accountId} \\
   --date-preset ${datePreset} \\
@@ -184,7 +193,8 @@ function buildPerformanceInsightsPrompt(
   datePreset: string,
   campaignFilter: string,
   knowledgeSection: string,
-  additionalSection: string
+  additionalSection: string,
+  tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
   return `Please run the **pl-performance-analysis-insights-v3** skill for the following Meta Ads account.
@@ -199,7 +209,7 @@ ${knowledgeSection}${additionalSection}
 Read the skill at \`/home/ubuntu/skills/pl-performance-analysis-insights-v3/SKILL.md\` first, then execute the full analysis:
 
 \`\`\`bash
-cd /home/ubuntu/skills/pl-performance-analysis-insights-v3/scripts
+${tokenExport}cd /home/ubuntu/skills/pl-performance-analysis-insights-v3/scripts
 
 # If specific campaigns provided, use filtered run:
 ${campaignFilter
@@ -247,7 +257,8 @@ function buildCreativeLifecyclePrompt(
   datePreset: string,
   campaignFilter: string,
   knowledgeSection: string,
-  additionalSection: string
+  additionalSection: string,
+  tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}" ` : "";
   return `Please run the **pl-creative-lifecycle-v3** skill for the following Meta Ads account.
@@ -262,7 +273,7 @@ ${knowledgeSection}${additionalSection}
 Read the skill at \`/home/ubuntu/skills/pl-creative-lifecycle-v3/SKILL.md\` first, then execute:
 
 \`\`\`bash
-cd /home/ubuntu/skills/pl-creative-lifecycle-v3/scripts
+${tokenExport}cd /home/ubuntu/skills/pl-creative-lifecycle-v3/scripts
 
 # Install dependencies if needed
 pip install scipy tabulate rapidfuzz 2>/dev/null || true
@@ -286,9 +297,16 @@ function buildStructuralAuditPrompt(
   accountId: string,
   campaignFilter: string,
   knowledgeSection: string,
-  additionalSection: string
+  additionalSection: string,
+  tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? campaignFilter.split(",").join(" ") : "";
+  // For structural audit, the fetcher uses --token CLI arg (not env var)
+  // We pass the token both as env var (for consistency) and as --token flag
+  const tokenArg = tokenExport.startsWith("export META_ACCESS_TOKEN=")
+    ? `--token "$META_ACCESS_TOKEN" \\
+  `
+    : "";
   return `Please run the **meta-ads-audit** (Andromeda Structural Audit) skill for the following Meta Ads account.
 
 **Account ID:** ${accountId}
@@ -300,12 +318,12 @@ ${knowledgeSection}${additionalSection}
 Read the skill at \`/home/ubuntu/skills/meta-ads-audit/SKILL.md\` first, then execute both steps:
 
 \`\`\`bash
-cd /home/ubuntu/skills/meta-ads-audit/scripts
+${tokenExport}cd /home/ubuntu/skills/meta-ads-audit
 
 # Step 1 — Fetch data
 python3 meta_ads_fetcher_v3.py \\
   --account ${accountId} \\
-  ${campaignArg ? `--campaigns ${campaignArg} \\` : ""}
+  ${tokenArg}${campaignArg ? `--campaigns ${campaignArg} \\` : ""}
   --output audit_data.json
 
 # Step 2 — Run mechanical checks
@@ -328,7 +346,8 @@ function buildAudienceOverlapPrompt(
   datePreset: string,
   campaignFilter: string,
   knowledgeSection: string,
-  additionalSection: string
+  additionalSection: string,
+  tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}"` : "";
   return `Please run the **pl-audience-overlap-spend** skill for the following Meta Ads account.
@@ -343,7 +362,7 @@ ${knowledgeSection}${additionalSection}
 Read the skill at \`/home/ubuntu/skills/pl-audience-overlap-spend/SKILL.md\` first, then execute all three steps:
 
 \`\`\`bash
-cd /home/ubuntu/skills/pl-audience-overlap-spend/scripts
+${tokenExport}cd /home/ubuntu/skills/pl-audience-overlap-spend/scripts
 
 # Step 1 — Pull data
 python3 pull_data.py \\

@@ -74,3 +74,14 @@
 ## Concurrent Skill Run Persistence
 - [x] Keep all skill pages mounted in background (display:none when inactive) so active runs survive navigation between skills
 - [x] Add 5s retry for Manus attachment fetch when rawAttachments is empty on task completion (race condition fix for missing report attachments)
+
+## Token Removal from Skill Files
+
+- [x] Update buildSkillPrompt signature to accept accessToken parameter
+- [x] Update routers.ts execute mutation to fetch token from DB and pass to buildSkillPrompt
+- [x] Update all 5 skill prompts in manusTask.ts to export META_ACCESS_TOKEN env var before running scripts
+- [x] Update pl-weekly-optimization/scripts/config.py — remove hardcoded EAA tokens, read from META_ACCESS_TOKEN env var
+- [x] Update pl-performance-analysis-insights-v3/scripts/config.py — same
+- [x] Update pl-creative-lifecycle-v3/scripts/config.py — same
+- [x] Update pl-audience-overlap-spend/scripts/config.py — same
+- [x] Update meta-ads-audit prompt in manusTask.ts to pass --token flag with the injected token value

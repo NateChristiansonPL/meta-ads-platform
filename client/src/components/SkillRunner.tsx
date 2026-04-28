@@ -165,6 +165,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         adAccountId,
         adAccountName,
         businessManagerId: bmId,
+        tokenId: tokenId ?? undefined,
         datePreset,
         campaignIds: selectedCampaigns,
         additionalInstructions,

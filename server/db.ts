@@ -154,6 +154,14 @@ export async function getTokenById(id: number) {
   return rows[0];
 }
 
+/** Returns the first active token including the raw accessToken value. Used server-side only for skill execution. */
+export async function getFirstActiveTokenWithValue() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(tokenVault).where(eq(tokenVault.isActive, true)).orderBy(desc(tokenVault.createdAt)).limit(1);
+  return rows[0];
+}
+
 export async function insertToken(entry: InsertTokenVaultEntry) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
