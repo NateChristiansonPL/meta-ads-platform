@@ -524,9 +524,30 @@ export async function runManusSkillTask(
       );
 
       // Collect ALL attachments across all messages
-      const rawAttachments = allMessages
+      let rawAttachments = allMessages
         .flatMap((m) => m.assistant_message?.attachments ?? [])
         .filter((a) => a.url && a.filename);
+
+      // If no attachments found, wait 5s and retry once — the Manus API sometimes
+      // commits attachments slightly after the task status changes to "stopped".
+      if (rawAttachments.length === 0) {
+        onProgress?.("No attachments found yet, retrying in 5s...");
+        await new Promise((r) => setTimeout(r, 5000));
+        const retryMessages = await fetchAllMessages(taskId, headers);
+        rawAttachments = retryMessages
+          .flatMap((m) => m.assistant_message?.attachments ?? [])
+          .filter((a) => a.url && a.filename);
+        // Also update assistantMessages from the retry fetch
+        if (retryMessages.length > allMessages.length) {
+          assistantMessages.length = 0;
+          retryMessages
+            .filter((m) => m.type === "assistant_message" && m.assistant_message?.content?.trim())
+            .forEach((m) => assistantMessages.push(m));
+        }
+        if (rawAttachments.length > 0) {
+          onProgress?.(`Found ${rawAttachments.length} attachment(s) on retry.`);
+        }
+      }
 
       const attachments = rawAttachments.map((a) => ({
         filename: a.filename!,

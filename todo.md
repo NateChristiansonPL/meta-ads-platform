@@ -70,3 +70,7 @@
 - [x] Add tRPC procedure: runs.lastOutput (protected, query by skillId)
 - [x] All five skill pages updated automatically via shared SkillRunner component
 - [x] Show a "Last run: <date>" banner with account name, date preset, and "Previous result" badge
+
+## Concurrent Skill Run Persistence
+- [x] Keep all skill pages mounted in background (display:none when inactive) so active runs survive navigation between skills
+- [x] Add 5s retry for Manus attachment fetch when rawAttachments is empty on task completion (race condition fix for missing report attachments)
