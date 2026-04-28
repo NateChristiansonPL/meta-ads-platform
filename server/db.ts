@@ -233,6 +233,7 @@ export async function getRecentRuns(limit = 50) {
     campaignIds: skillRuns.campaignIds,
     startedAt: skillRuns.startedAt,
     completedAt: skillRuns.completedAt,
+    errorMessage: skillRuns.errorMessage,
     userName: users.name,
     userEmail: users.email,
   })

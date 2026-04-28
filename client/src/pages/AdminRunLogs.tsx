@@ -1,6 +1,7 @@
 import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
-import { BarChart2, Clock, RefreshCw, Shield, TrendingUp, Users } from "lucide-react";
+import { AlertCircle, BarChart2, ChevronDown, ChevronRight, Clock, RefreshCw, Shield, TrendingUp, Users } from "lucide-react";
+import { useState } from "react";
 
 const SKILL_META: Record<string, { color: string; Icon: React.ElementType }> = {
   "weekly-optimization": { color: "#00BEEF", Icon: TrendingUp },
@@ -43,12 +44,14 @@ type RunRow = {
   agentProfile?: string | null;
   campaignIds?: string[] | null;
   status: string;
+  errorMessage?: string | null;
 };
 
 const HEADERS = ["Skill", "User", "Ad Account", "Date", "Duration", "Credits", "Model", "Campaigns", "Status"];
 
 export default function AdminRunLogs() {
   const { data: runs = [], isLoading } = trpc.runs.allRuns.useQuery({ limit: 100 });
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   return (
     <AppShell title="Run Logs" subtitle="All skill runs across the team" badge="admin-only">
@@ -89,13 +92,18 @@ export default function AdminRunLogs() {
                 {(runs as RunRow[]).map((r, i) => {
                   const meta = SKILL_META[r.skillId] ?? { color: "#00BEEF", Icon: Clock };
                   const campaignCount = Array.isArray(r.campaignIds) ? r.campaignIds.length : 0;
+                  const isExpanded = expandedId === r.id;
+                  const hasError = r.status === "error" && !!r.errorMessage;
 
                   return (
+                    <>
                     <tr
                       key={r.id}
+                      onClick={() => hasError ? setExpandedId(isExpanded ? null : r.id) : undefined}
                       style={{
-                        borderBottom: i < runs.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                        borderBottom: (!isExpanded && i < runs.length - 1) ? "1px solid rgba(255,255,255,0.05)" : "none",
                         background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
+                        cursor: hasError ? "pointer" : "default",
                       }}
                     >
                       {/* Skill */}
@@ -163,29 +171,48 @@ export default function AdminRunLogs() {
                         )}
                       </td>
 
-                      {/* Status */}
+                      {/* Status + expand toggle */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                          style={{
-                            background:
-                              r.status === "success"
-                                ? "rgba(0,179,122,0.15)"
-                                : r.status === "error"
-                                ? "rgba(237,19,95,0.15)"
-                                : "rgba(247,144,30,0.15)",
-                            color:
-                              r.status === "success"
-                                ? "#00B37A"
-                                : r.status === "error"
-                                ? "#ED135F"
-                                : "#F7901E",
-                          }}
-                        >
-                          {r.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                            style={{
+                              background:
+                                r.status === "success"
+                                  ? "rgba(0,179,122,0.15)"
+                                  : r.status === "error"
+                                  ? "rgba(237,19,95,0.15)"
+                                  : "rgba(247,144,30,0.15)",
+                              color:
+                                r.status === "success"
+                                  ? "#00B37A"
+                                  : r.status === "error"
+                                  ? "#ED135F"
+                                  : "#F7901E",
+                            }}
+                          >
+                            {r.status}
+                          </span>
+                          {hasError && (
+                            isExpanded
+                              ? <ChevronDown size={11} style={{ color: "#ED135F" }} />
+                              : <ChevronRight size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
+                          )}
+                        </div>
                       </td>
                     </tr>
+                    {/* Error detail row */}
+                    {isExpanded && hasError && (
+                      <tr key={`${r.id}-err`} style={{ borderBottom: i < runs.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", background: "rgba(237,19,95,0.04)" }}>
+                        <td colSpan={HEADERS.length} className="px-5 py-3">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle size={12} style={{ color: "#ED135F", marginTop: 1, flexShrink: 0 }} />
+                            <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>{r.errorMessage}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })}
               </tbody>

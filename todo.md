@@ -88,15 +88,15 @@
 
 ## April 28 UI/Functional Improvements
 
-- [ ] Fix credits counter in top bar: show per-user credits (not aggregate), scoped to billing cycle dates
-- [ ] Fix credits-by-user total calculation in Usage & Tallies
-- [ ] Credits % used per user based on 8k credits per individual seat
-- [ ] Move "Provide Feedback" button: below Manus AI in sidebar, centered, red bg, bold white text
-- [ ] Add "Beta" badge next to "Pathlabs Intelligence" in top-left header
-- [ ] Campaign Builder: add "Coming Soon" overlay with translucent bright background
-- [ ] Richer live status: stream real Manus task messages to progress log during skill runs
-- [ ] Add active-skill indicator (spinner/dot) in sidebar next to skill name when running
-- [ ] Add kill-switch (Abort) button to skill output panel
-- [ ] Add "Re-deliver Report" button to skill output panel for re-fetching from completed task
-- [ ] Fix status detection: only mark success if .md attachments were actually retrieved
-- [ ] Add per-run error logging: capture and persist error details in DB, visible in Run Logs
+- [x] Fix credits counter in top bar: show per-user credits (not aggregate), scoped to billing cycle dates
+- [x] Fix credits-by-user total calculation in Usage & Tallies
+- [x] Credits % used per user based on 8k credits per individual seat
+- [x] Move "Provide Feedback" button: below Manus AI in sidebar, centered, red bg, bold white text
+- [x] Add "Beta" badge next to "Pathlabs Intelligence" in top-left header
+- [x] Campaign Builder: add "Coming Soon" overlay with translucent bright background
+- [x] Richer live status: stream real Manus task messages to progress log during skill runs
+- [x] Add active-skill indicator (spinner/dot) in sidebar next to skill name when running
+- [x] Add kill-switch (Abort) button to skill output panel
+- [x] Add "Re-deliver Report" button to skill output panel for re-fetching from completed task
+- [x] Fix status detection: only mark success if .md attachments were actually retrieved
+- [x] Add per-run error logging: capture and persist error details in DB, visible in Run Logs
