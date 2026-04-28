@@ -83,16 +83,16 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   );
 
   const selectedToken = activeTokens.find((t) => t.id === tokenId);
+  // Ad accounts come from the token vault — no separate Meta API call needed
+  const adAccounts: Array<{ id: string; name: string }> = [];
+  const loadingAccounts = false;
 
-  const { data: adAccounts = [], isLoading: loadingAccounts } = trpc.meta.getAdAccounts.useQuery(
-    { businessManagerId: bmId, tokenId: tokenId! },
-    { enabled: !!bmId && !!tokenId }
-  );
-
-  const { data: campaigns = [], isLoading: loadingCampaigns } = trpc.meta.getCampaigns.useQuery(
-    { adAccountId, tokenId: tokenId!, statusFilter: campaignFilter },
+  const { data: campaignsData, isLoading: loadingCampaigns } = trpc.meta.getCampaignsByTokenId.useQuery(
+    { adAccountId, tokenId: tokenId! },
     { enabled: !!adAccountId && !!tokenId }
   );
+  const campaigns: Array<{ id: string; name: string; status: string; objective: string }> =
+    campaignsData?.campaigns ?? [];
 
   const executeRun = trpc.runs.execute.useMutation();
   const canRun = !!tokenId && !!adAccountId && status !== "running";

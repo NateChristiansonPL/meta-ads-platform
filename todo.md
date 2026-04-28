@@ -100,3 +100,24 @@
 - [x] Add "Re-deliver Report" button to skill output panel for re-fetching from completed task
 - [x] Fix status detection: only mark success if .md attachments were actually retrieved
 - [x] Add per-run error logging: capture and persist error details in DB, visible in Run Logs
+
+## Campaign Builder Backend Wiring
+
+- [ ] Add campaign_sessions table to drizzle schema
+- [ ] Add db helpers: createSession, listSessions, getSessionById, updateSession, deleteSession
+- [ ] Add sessions tRPC router: list, save, load, delete
+- [ ] Add meta.validateSettings procedure
+- [ ] Add meta.getAdImages procedure
+- [ ] Add meta.getAdVideos procedure
+- [ ] Add meta.getAudienceOverlap procedure
+- [ ] Add meta.getPixelEvents procedure
+- [ ] Add meta.getCustomAudiences procedure
+- [ ] Add meta.getSavedAudiences procedure
+- [ ] Add meta.searchGeoLocations procedure
+- [ ] Add meta.searchTargeting procedure
+- [ ] Create client/src/lib/campaignStore.ts with all shared types and factories
+- [ ] Create client/src/hooks/useLaunchBuild.ts with LaunchProgress type and launch logic
+- [ ] Copy all 11 uploaded components into client/src/components/
+- [ ] Replace CampaignBuilder.tsx with new version using uploaded components
+- [ ] Remove Coming Soon gate from AppShell sidebar for Campaign Builder
+- [ ] TypeScript check and tests pass

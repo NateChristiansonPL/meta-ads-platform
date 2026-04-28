@@ -2,7 +2,10 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   appSettings,
+  campaignSessions,
+  CampaignSession,
   feedback,
+  InsertCampaignSession,
   InsertFeedback,
   InsertSkillRun,
   InsertTokenVaultEntry,
@@ -446,4 +449,51 @@ export async function getLastSkillOutput(userId: number, skillId: string) {
     .orderBy(desc(skillRuns.completedAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+// ── Campaign Builder Session Helpers ─────────────────────────────────────────
+
+export async function listCampaignSessions(userId: number): Promise<CampaignSession[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(campaignSessions)
+    .where(eq(campaignSessions.userId, userId))
+    .orderBy(desc(campaignSessions.updatedAt));
+}
+
+export async function getCampaignSessionById(id: number, userId: number): Promise<CampaignSession | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(campaignSessions)
+    .where(and(eq(campaignSessions.id, id), eq(campaignSessions.userId, userId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createCampaignSession(data: Omit<InsertCampaignSession, "id" | "createdAt" | "updatedAt">): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(campaignSessions).values(data);
+  return (result as unknown as { insertId: number }).insertId;
+}
+
+export async function updateCampaignSession(id: number, userId: number, patch: { name?: string; stateJson?: string }): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(campaignSessions)
+    .set(patch)
+    .where(and(eq(campaignSessions.id, id), eq(campaignSessions.userId, userId)));
+}
+
+export async function deleteCampaignSession(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(campaignSessions)
+    .where(and(eq(campaignSessions.id, id), eq(campaignSessions.userId, userId)));
 }

@@ -285,12 +285,14 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
               Tools
             </p>
             <div className="flex flex-col gap-0.5">
-              {/* Campaign Builder — Coming Soon */}
-              <NavItemComingSoon
+              {/* Campaign Builder — accessible but Coming Soon badge */}
+              <NavItemWithBadge
                 icon={Hammer}
                 label="Campaign Builder"
                 sub="Create & launch"
                 color="#ED135F"
+                path="/campaign-builder"
+                active={location === "/campaign-builder"}
               />
               <NavItem
                 icon={Bot}
@@ -471,55 +473,74 @@ function NavItem({ icon: Icon, label, sub, path, active, color, small, running }
   );
 }
 
-/** Greyed-out nav item with "Coming Soon" overlay — not clickable */
-function NavItemComingSoon({ icon: Icon, label, sub, color }: { icon: React.ElementType; label: string; sub?: string; color: string }) {
+/** Clickable nav item with a small "Coming Soon" badge pinned to the bottom-right corner */
+function NavItemWithBadge({
+  icon: Icon,
+  label,
+  sub,
+  color,
+  path,
+  active,
+}: {
+  icon: React.ElementType;
+  label: string;
+  sub?: string;
+  color: string;
+  path: string;
+  active: boolean;
+}) {
   return (
     <div className="relative">
-      <div
-        className="flex items-center gap-2.5 px-2 py-2 rounded-lg"
-        style={{
-          background: "transparent",
-          border: "1px solid transparent",
-          opacity: 0.45,
-          cursor: "not-allowed",
-        }}
-      >
+      <Link href={path}>
         <div
-          className="rounded flex items-center justify-center shrink-0"
-          style={{ width: 26, height: 26, background: "rgba(255,255,255,0.06)" }}
-        >
-          <Icon size={13} style={{ color: "rgba(255,255,255,0.45)" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="block text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}>
-            {label}
-          </span>
-          {sub && (
-            <span className="block truncate" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.62rem" }}>
-              {sub}
-            </span>
-          )}
-        </div>
-      </div>
-      {/* Coming Soon badge overlay */}
-      <div
-        className="absolute inset-0 flex items-center justify-end pr-2 rounded-lg pointer-events-none"
-        style={{
-          background: `linear-gradient(90deg, transparent 40%, rgba(237,19,95,0.18) 100%)`,
-          border: "1px solid rgba(237,19,95,0.25)",
-        }}
-      >
-        <span
-          className="text-xs font-bold px-1.5 py-0.5 rounded"
+          className="flex items-center gap-2.5 px-2 py-2 rounded-lg transition-all cursor-pointer"
           style={{
-            background: "rgba(237,19,95,0.25)",
-            color: color,
-            border: `1px solid ${color}50`,
-            fontSize: "0.58rem",
-            letterSpacing: "0.06em",
+            background: active ? `${color}18` : "transparent",
+            border: `1px solid ${active ? color + "40" : "transparent"}`,
           }}
         >
-          SOON
+          <div
+            className="rounded flex items-center justify-center shrink-0"
+            style={{
+              width: 26,
+              height: 26,
+              background: active ? `${color}22` : "rgba(255,255,255,0.06)",
+            }}
+          >
+            <Icon size={13} style={{ color: active ? color : "rgba(255,255,255,0.45)" }} />
+          </div>
+          <div className="flex-1 min-w-0 pr-10">
+            <span
+              className="block text-xs font-semibold truncate"
+              style={{ color: active ? "#FAFAFA" : "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}
+            >
+              {label}
+            </span>
+            {sub && (
+              <span className="block truncate" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.62rem" }}>
+                {sub}
+              </span>
+            )}
+          </div>
+        </div>
+      </Link>
+      {/* Coming Soon badge — bottom-right corner, outside the text flow */}
+      <div className="absolute bottom-1 right-2 pointer-events-none">
+        <span
+          style={{
+            background: "rgba(237,19,95,0.20)",
+            color: "#ED135F",
+            border: "1px solid rgba(237,19,95,0.40)",
+            fontSize: "0.52rem",
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            padding: "1px 5px",
+            borderRadius: 4,
+            lineHeight: 1.6,
+            display: "inline-block",
+          }}
+        >
+          COMING SOON
         </span>
       </div>
     </div>

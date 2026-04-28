@@ -139,3 +139,35 @@ export const feedback = mysqlTable("feedback", {
 
 export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = typeof feedback.$inferInsert;
+
+// ── Campaign Builder Sessions ─────────────────────────────────────────────────
+// Named save-states for the Campaign Builder spreadsheet UI.
+// Each user can have multiple saved sessions (drafts / named builds).
+// "builderSessions" is the canonical name used by the sessions router.
+
+export const builderSessions = mysqlTable("builder_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Full CampaignBuilderState serialised as JSON */
+  stateJson: text("stateJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BuilderSession = typeof builderSessions.$inferSelect;
+export type InsertBuilderSession = typeof builderSessions.$inferInsert;
+
+/** @deprecated Use builderSessions instead */
+export const campaignSessions = mysqlTable("campaign_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Full serialized CampaignBuilderState as JSON */
+  stateJson: text("stateJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CampaignSession = typeof campaignSessions.$inferSelect;
+export type InsertCampaignSession = typeof campaignSessions.$inferInsert;

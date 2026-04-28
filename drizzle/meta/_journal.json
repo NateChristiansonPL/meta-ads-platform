@@ -50,6 +50,20 @@
       "when": 1777397864547,
       "tag": "0006_charming_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1777399912783,
+      "tag": "0007_talented_psylocke",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1777401389035,
+      "tag": "0008_far_logan",
+      "breakpoints": true
     }
   ]
 }

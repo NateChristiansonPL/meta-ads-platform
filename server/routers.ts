@@ -3,6 +3,8 @@ import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { metaRouter } from "./routers/meta";
+import { sessionsRouter } from "./routers/sessions";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
@@ -105,96 +107,8 @@ export const appRouter = router({
     }),
   }),
 
-  meta: router({
-    validateToken: protectedProcedure
-      .input(z.object({ accessToken: z.string().min(1) }))
-      .mutation(async ({ input }) => {
-        try {
-          const me = await metaGet("/me", { fields: "id,name" }, input.accessToken);
-          const bms = await metaGet("/me/businesses", { fields: "id,name" }, input.accessToken);
-          return { valid: true, userId: me.id as string, userName: me.name as string, businesses: (bms.data || []) as Array<{ id: string; name: string }> };
-        } catch {
-          return { valid: false, userId: "", userName: "", businesses: [] };
-        }
-      }),
-
-    getAdAccounts: protectedProcedure
-      .input(z.object({ businessManagerId: z.string().min(1), tokenId: z.number().int().positive() }))
-      .query(async ({ input }) => {
-        const token = await getTokenById(input.tokenId);
-        if (!token) throw new TRPCError({ code: "NOT_FOUND", message: "Token not found." });
-        type AdAccount = { id: string; name: string; currency: string; account_status: number };
-
-        // Paginate through all pages of a Meta Graph API list endpoint
-        async function fetchAllPages(path: string, params: Record<string, string>): Promise<AdAccount[]> {
-          const results: AdAccount[] = [];
-          let url: string | null = null;
-          let firstPage = true;
-          while (firstPage || url) {
-            let data: { data?: AdAccount[]; paging?: { next?: string } };
-            if (firstPage) {
-              data = await metaGet(path, params, token!.accessToken);
-              firstPage = false;
-            } else {
-              const resp = await axios.get(url!, { params: { access_token: token!.accessToken }, timeout: 30000 });
-              data = resp.data;
-            }
-            results.push(...(data.data ?? []));
-            url = data.paging?.next ?? null;
-          }
-          return results;
-        }
-
-        try {
-          const fields = "id,name,currency,account_status";
-          const limit = "200";
-          // Fetch both owned accounts (direct) and client accounts (via agency relationship)
-          const [owned, client] = await Promise.allSettled([
-            fetchAllPages(`/${input.businessManagerId}/owned_ad_accounts`, { fields, limit }),
-            fetchAllPages(`/${input.businessManagerId}/client_ad_accounts`, { fields, limit }),
-          ]);
-          const all: AdAccount[] = [
-            ...(owned.status === "fulfilled" ? owned.value : []),
-            ...(client.status === "fulfilled" ? client.value : []),
-          ];
-          // Deduplicate by id, then sort alphabetically by name
-          const seen = new Set<string>();
-          const deduped = all.filter((a) => { if (seen.has(a.id)) return false; seen.add(a.id); return true; });
-          return deduped.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-        } catch { return []; }
-      }),
-    getCampaigns: protectedProcedure
-      .input(z.object({ adAccountId: z.string().min(1), tokenId: z.number().int().positive(), statusFilter: z.string().optional() }))
-      .query(async ({ input }) => {
-        const token = await getTokenById(input.tokenId);
-        if (!token) throw new TRPCError({ code: "NOT_FOUND", message: "Token not found." });
-        const accountId = normalizeAdAccountId(input.adAccountId);
-        type Campaign = { id: string; name: string; status: string; objective: string };
-        try {
-          const params: Record<string, string> = { fields: "id,name,status,objective", limit: "200" };
-          if (input.statusFilter === "active") params.effective_status = '["ACTIVE"]';
-          else if (input.statusFilter === "inactive") params.effective_status = '["PAUSED","ARCHIVED","DELETED"]';
-          // else last_30d / all — no status filter, rely on date filtering at analysis time
-          // Paginate through all campaign pages
-          const results: Campaign[] = [];
-          let url: string | null = null;
-          let firstPage = true;
-          while (firstPage || url) {
-            let data: { data?: Campaign[]; paging?: { next?: string } };
-            if (firstPage) {
-              data = await metaGet(`/${accountId}/campaigns`, params, token.accessToken);
-              firstPage = false;
-            } else {
-              const resp = await axios.get(url!, { params: { access_token: token.accessToken }, timeout: 30000 });
-              data = resp.data;
-            }
-            results.push(...(data.data ?? []));
-            url = data.paging?.next ?? null;
-          }
-          return results;
-        } catch { return []; }
-      }),
-  }),
+  meta: metaRouter,
+  sessions: sessionsRouter,
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),
