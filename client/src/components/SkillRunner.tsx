@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, Play, RotateCcw, Search, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, OctagonX, Play, RefreshCcw, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
@@ -64,8 +64,13 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [rateLimitWarning, setRateLimitWarning] = useState(false);
   const [timeoutWarning, setTimeoutWarning] = useState(false);
   const [creditUsage, setCreditUsage] = useState<number | null>(null);
+  const [isAborting, setIsAborting] = useState(false);
+  const [isRedelivering, setIsRedelivering] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const abortRunMutation = trpc.runs.abortRun.useMutation();
+  const redeliverMutation = trpc.runs.redeliverReport.useMutation();
 
   // Load the most recent successful run output for this user + skill.
   // This persists across navigation so the user sees their last result when returning.
@@ -92,6 +97,42 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const executeRun = trpc.runs.execute.useMutation();
   const canRun = !!tokenId && !!adAccountId && status !== "running";
 
+  async function handleAbort() {
+    if (!runId || isAborting) return;
+    setIsAborting(true);
+    try {
+      await abortRunMutation.mutateAsync({ runId });
+      stopPolling();
+      setStatus("error");
+      setErrorMsg("Run was aborted by user.");
+    } catch (err) {
+      console.error("Abort failed:", err);
+    } finally {
+      setIsAborting(false);
+    }
+  }
+
+  async function handleRedeliver() {
+    if (!runId || isRedelivering) return;
+    setIsRedelivering(true);
+    try {
+      const result = await redeliverMutation.mutateAsync({ runId });
+      if (result.reportMarkdown) {
+        setReport(result.reportMarkdown);
+        setAttachments(result.attachments ?? []);
+        setStatus("success");
+        setErrorMsg(null);
+      } else {
+        setErrorMsg("No report files found on the Manus task. The agent may not have produced output files for this run.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Redeliver failed";
+      setErrorMsg(msg);
+    } finally {
+      setIsRedelivering(false);
+    }
+  }
+
   // Poll getRunStatus while a run is in progress
   function startPolling(id: number) {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -108,17 +149,23 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         }
         if (data.status !== "running") {
           stopPolling();
+          setTaskUrl(data.taskUrl ?? null);
           if (data.status === "success") {
-            setReport(data.reportMarkdown ?? "");
-            setTaskUrl(data.taskUrl ?? null);
-            setAttachments(data.attachments ?? []);
-            setCreditUsage(data.creditUsage ?? null);
-            setStatus("success");
-            // Invalidate so next mount (after navigation) fetches fresh output
-            utils.runs.lastOutput.invalidate({ skillId: config.skillId });
+            // Only mark success if there's actual report content or attachments
+            const hasContent = !!(data.reportMarkdown?.trim()) || (data.attachments ?? []).length > 0;
+            if (hasContent) {
+              setReport(data.reportMarkdown ?? "");
+              setAttachments(data.attachments ?? []);
+              setCreditUsage(data.creditUsage ?? null);
+              setStatus("success");
+              utils.runs.lastOutput.invalidate({ skillId: config.skillId });
+            } else {
+              // Task completed but no output — treat as error with redeliver option
+              setErrorMsg("The analysis completed but no report content was found. The agent may have encountered an issue generating the output files. Use 'Re-fetch Report' to try retrieving the output again, or view the full run on Manus.");
+              setStatus("error");
+            }
           } else {
             setErrorMsg(data.errorMessage ?? "Run failed.");
-            setTaskUrl(data.taskUrl ?? null);
             setStatus("error");
           }
         }
@@ -491,15 +538,26 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
         {status === "running" && (
           <div className="flex flex-col gap-4 p-2">
-            {/* Header */}
+            {/* Header with kill-switch */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${config.color}15`, border: `1px solid ${config.color}30` }}>
                 <Loader2 size={20} className="animate-spin" style={{ color: config.color }} />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>Analysis in progress</p>
                 <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Elapsed: {formatElapsed(elapsedSec)}</p>
               </div>
+              {/* Kill-switch */}
+              <button
+                onClick={handleAbort}
+                disabled={isAborting}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0"
+                style={{ background: "rgba(237,19,95,0.12)", color: "#ED135F", border: "1px solid rgba(237,19,95,0.3)" }}
+                title="Abort this run"
+              >
+                {isAborting ? <Loader2 size={11} className="animate-spin" /> : <OctagonX size={11} />}
+                {isAborting ? "Aborting…" : "Abort Run"}
+              </button>
             </div>
 
             {/* Rate limit alert */}
@@ -570,6 +628,19 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
               >
                 <RotateCcw size={12} /> Retry
               </button>
+              {/* Re-fetch report — tries to pull attachments from the completed Manus task */}
+              {runId && (
+                <button
+                  onClick={handleRedeliver}
+                  disabled={isRedelivering}
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold transition-all"
+                  style={{ background: "rgba(0,179,122,0.12)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.3)" }}
+                  title="Try to re-fetch the report files from the completed Manus task"
+                >
+                  {isRedelivering ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
+                  {isRedelivering ? "Fetching…" : "Re-fetch Report"}
+                </button>
+              )}
               {taskUrl && (
                 <a
                   href={taskUrl}

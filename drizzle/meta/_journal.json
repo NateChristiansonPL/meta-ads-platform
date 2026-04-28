@@ -43,6 +43,13 @@
       "when": 1777314487468,
       "tag": "0005_robust_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1777397864547,
+      "tag": "0006_charming_star_brand",
+      "breakpoints": true
     }
   ]
 }

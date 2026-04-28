@@ -202,6 +202,7 @@ export async function updateSkillRun(
     durationMs?: number;
     creditUsage?: number | null;
     agentProfile?: string;
+    manusTaskId?: string;
   }
 ) {
   const db = await getDb();
@@ -314,6 +315,21 @@ export async function getCreditsByUser(opts?: { periodStart?: Date; periodEnd?: 
     .orderBy(sql`COALESCE(SUM(${skillRuns.creditUsage}), 0) DESC`);
   if (whereClause) return q.where(whereClause);
   return q;
+}
+
+/** Get credit usage for a single user within a billing period. Used for the per-user top-bar counter. */
+export async function getCreditsByUserForUser(userId: number, opts?: { periodStart?: Date; periodEnd?: Date }) {
+  const db = await getDb();
+  if (!db) return 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conditions: any[] = [eq(skillRuns.userId, userId)];
+  if (opts?.periodStart) conditions.push(gte(skillRuns.startedAt, opts.periodStart));
+  if (opts?.periodEnd) conditions.push(lte(skillRuns.startedAt, opts.periodEnd));
+  const [row] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${skillRuns.creditUsage}), 0)` })
+    .from(skillRuns)
+    .where(and(...conditions));
+  return row?.total ?? 0;
 }
 
 // ── Knowledge Base ────────────────────────────────────────────────────────────

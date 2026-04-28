@@ -72,6 +72,18 @@ const ADMIN_ITEMS = [
   { label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge" },
 ];
 
+/** Returns the set of skillIds that have a currently running task for the logged-in user. */
+function useRunningSkills() {
+  const { data: runs } = trpc.runs.myRuns.useQuery(
+    { limit: 20 },
+    { refetchInterval: 10000, staleTime: 8000 }
+  );
+  if (!runs) return new Set<string>();
+  return new Set(
+    runs.filter((r: { status: string; skillId: string }) => r.status === "running").map((r: { skillId: string }) => r.skillId)
+  );
+}
+
 function CreditsWidget() {
   const { data: me } = trpc.auth.me.useQuery();
   const { data: creditsData, isLoading } = trpc.runs.monthlyCreditsUsed.useQuery(
@@ -86,7 +98,6 @@ function CreditsWidget() {
   if (!me) return null;
 
   const credits = creditsData?.creditsUsed ?? null;
-  const source = creditsData?.source;
 
   if (isLoading) {
     return (
@@ -104,13 +115,13 @@ function CreditsWidget() {
 
   const color = "#00B37A";
 
-  // Build a human-readable period label
+  // Build a human-readable period label from the billing period data
   let periodLabel = "this billing period";
   if (billingPeriod?.periodStart && billingPeriod?.periodEnd) {
     const fmt = (s: string) => new Date(s + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
     periodLabel = `${fmt(billingPeriod.periodStart)} – ${fmt(billingPeriod.periodEnd)}`;
   }
-  const tooltip = source === "db" ? `${credits.toLocaleString()} credits used ${periodLabel} (est.)` : `${credits.toLocaleString()} credits used ${periodLabel}`;
+  const tooltip = `${credits.toLocaleString()} credits used by you ${periodLabel}`;
 
   return (
     <div
@@ -138,10 +149,10 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
   const [location] = useLocation();
   const [adminOpen, setAdminOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const runningSkills = useRunningSkills();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      // Always redirect to the web app login page, not the Manus OAuth URL directly
       window.location.href = "/";
     }
   }, [loading, isAuthenticated]);
@@ -183,22 +194,23 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
           <span className="font-bold text-sm tracking-tight" style={{ color: "#FAFAFA" }}>
             Pathlabs <span style={{ color: "#00BEEF" }}>Intelligence</span>
           </span>
+          {/* Beta badge */}
+          <span
+            className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+            style={{
+              background: "rgba(247,144,30,0.15)",
+              color: "#F7901E",
+              border: "1px solid rgba(247,144,30,0.35)",
+              fontSize: "0.6rem",
+              letterSpacing: "0.05em",
+            }}
+          >
+            BETA
+          </span>
         </Link>
 
         <div className="flex items-center gap-3">
           <CreditsWidget />
-          {/* Feedback button */}
-          <button
-            onClick={() => setFeedbackOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold transition-all"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(0,190,239,0.4)"; (e.currentTarget as HTMLButtonElement).style.color = "#00BEEF"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)"; }}
-            title="Provide feedback"
-          >
-            <MessageSquarePlus size={13} />
-            <span>Provide Feedback</span>
-          </button>
           <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#ED135F", color: "#fff" }}>
@@ -242,6 +254,7 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
               path="/dashboard"
               active={location === "/dashboard"}
               color="#00BEEF"
+              running={false}
             />
           </div>
 
@@ -260,6 +273,7 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                   path={s.path}
                   active={location === s.path}
                   color={s.color}
+                  running={runningSkills.has(s.id)}
                 />
               ))}
             </div>
@@ -271,12 +285,11 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
               Tools
             </p>
             <div className="flex flex-col gap-0.5">
-              <NavItem
+              {/* Campaign Builder — Coming Soon */}
+              <NavItemComingSoon
                 icon={Hammer}
                 label="Campaign Builder"
                 sub="Create & launch"
-                path="/campaign-builder"
-                active={location === "/campaign-builder"}
                 color="#ED135F"
               />
               <NavItem
@@ -286,8 +299,29 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                 path="/manus-ai"
                 active={location === "/manus-ai"}
                 color="#00BEEF"
+                running={false}
               />
             </div>
+          </div>
+
+          {/* Feedback button — below Manus AI, centered with standout styling */}
+          <div className="px-3 pt-3">
+            <button
+              onClick={() => setFeedbackOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all"
+              style={{
+                background: "#ED135F",
+                color: "#fff",
+                border: "none",
+                letterSpacing: "0.04em",
+                boxShadow: "0 2px 12px rgba(237,19,95,0.35)",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#c8104f"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#ED135F"; }}
+            >
+              <MessageSquarePlus size={13} />
+              <span>Provide Feedback</span>
+            </button>
           </div>
 
           {/* Admin section */}
@@ -314,6 +348,7 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                       active={location === a.path}
                       color="#ED135F"
                       small
+                      running={false}
                     />
                   ))}
                 </div>
@@ -380,9 +415,10 @@ interface NavItemProps {
   active: boolean;
   color: string;
   small?: boolean;
+  running?: boolean;
 }
 
-function NavItem({ icon: Icon, label, sub, path, active, color, small }: NavItemProps) {
+function NavItem({ icon: Icon, label, sub, path, active, color, small, running }: NavItemProps) {
   return (
     <Link href={path}>
       <div
@@ -421,8 +457,71 @@ function NavItem({ icon: Icon, label, sub, path, active, color, small }: NavItem
             </span>
           )}
         </div>
-        {active && <div className="w-1 h-1 rounded-full shrink-0" style={{ background: color }} />}
+        {/* Running indicator — pulsing dot */}
+        {running && (
+          <span
+            className="shrink-0 w-2 h-2 rounded-full animate-pulse"
+            style={{ background: "#F7901E", boxShadow: "0 0 6px rgba(247,144,30,0.7)" }}
+            title="Analysis in progress"
+          />
+        )}
+        {active && !running && <div className="w-1 h-1 rounded-full shrink-0" style={{ background: color }} />}
       </div>
     </Link>
+  );
+}
+
+/** Greyed-out nav item with "Coming Soon" overlay — not clickable */
+function NavItemComingSoon({ icon: Icon, label, sub, color }: { icon: React.ElementType; label: string; sub?: string; color: string }) {
+  return (
+    <div className="relative">
+      <div
+        className="flex items-center gap-2.5 px-2 py-2 rounded-lg"
+        style={{
+          background: "transparent",
+          border: "1px solid transparent",
+          opacity: 0.45,
+          cursor: "not-allowed",
+        }}
+      >
+        <div
+          className="rounded flex items-center justify-center shrink-0"
+          style={{ width: 26, height: 26, background: "rgba(255,255,255,0.06)" }}
+        >
+          <Icon size={13} style={{ color: "rgba(255,255,255,0.45)" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="block text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}>
+            {label}
+          </span>
+          {sub && (
+            <span className="block truncate" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.62rem" }}>
+              {sub}
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Coming Soon badge overlay */}
+      <div
+        className="absolute inset-0 flex items-center justify-end pr-2 rounded-lg pointer-events-none"
+        style={{
+          background: `linear-gradient(90deg, transparent 40%, rgba(237,19,95,0.18) 100%)`,
+          border: "1px solid rgba(237,19,95,0.25)",
+        }}
+      >
+        <span
+          className="text-xs font-bold px-1.5 py-0.5 rounded"
+          style={{
+            background: "rgba(237,19,95,0.25)",
+            color: color,
+            border: `1px solid ${color}50`,
+            fontSize: "0.58rem",
+            letterSpacing: "0.06em",
+          }}
+        >
+          SOON
+        </span>
+      </div>
+    </div>
   );
 }

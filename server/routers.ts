@@ -18,6 +18,7 @@ import {
   getActiveTokens,
   getAppSetting,
   getCreditsByUser,
+  getCreditsByUserForUser,
   getKnowledgeEntries,
   getLastSkillOutput,
   getRecentRuns,
@@ -387,9 +388,13 @@ export const appRouter = router({
               prompt,
               agentProfile: input.agentProfile,
               projectId: skillProjectId,
-              onProgress: async (msg: string) => {
+              onProgress: async (msg: string, taskId?: string) => {
                 statusLog.push({ ts: Date.now(), msg });
                 console.log(`[Run ${runId}] ${msg}`);
+                // Store manusTaskId as soon as we have it (first progress after task creation)
+                if (taskId) {
+                  await updateSkillRun(runId, { manusTaskId: taskId }).catch(() => {});
+                }
                 flushCounter++;
                 if (flushCounter % 3 === 0) await flushStatusLog();
               },
@@ -405,6 +410,7 @@ export const appRouter = router({
               statusLog,
               durationMs,
               creditUsage: result.creditUsage ?? null,
+              manusTaskId: result.taskId,
             });
           } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : String(err);
@@ -477,6 +483,126 @@ export const appRouter = router({
         if (!run) throw new TRPCError({ code: "NOT_FOUND" });
         if (run.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         return run;
+      }),
+
+    /**
+     * abortRun: Stop a running Manus task and mark the run as error/aborted.
+     * Uses the Manus task.stop API.
+     */
+    abortRun: protectedProcedure
+      .input(z.object({ runId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const run = await getRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        if (run.status !== "running") return { success: false, message: "Run is not currently running." };
+
+        const apiKey = process.env.MANUS_API_KEY;
+        if (!apiKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "MANUS_API_KEY not configured" });
+
+        const manusTaskId = (run as { manusTaskId?: string }).manusTaskId;
+        if (manusTaskId) {
+          try {
+            await axios.post(
+              "https://api.manus.ai/v2/task.stop",
+              { task_id: manusTaskId },
+              { headers: { "x-manus-api-key": apiKey, "Content-Type": "application/json" }, timeout: 15000 }
+            );
+          } catch (e) {
+            console.warn(`[abortRun] task.stop failed for ${manusTaskId}:`, e);
+          }
+        }
+
+        await updateSkillRun(input.runId, {
+          status: "error",
+          errorMessage: "Run aborted by user.",
+          durationMs: run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : undefined,
+        });
+        return { success: true };
+      }),
+
+    /**
+     * redeliverReport: Re-fetch attachments from a completed Manus task and update the run record.
+     * Useful when the agent completed but no report was captured (e.g., structural audit with no files).
+     */
+    redeliverReport: protectedProcedure
+      .input(z.object({ runId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const run = await getRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const apiKey = process.env.MANUS_API_KEY;
+        if (!apiKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "MANUS_API_KEY not configured" });
+
+        const manusTaskId = (run as { manusTaskId?: string }).manusTaskId;
+        if (!manusTaskId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No Manus task ID stored for this run. Cannot redeliver." });
+        }
+
+        const headers = { "x-manus-api-key": apiKey };
+
+        // Fetch all messages from the task
+        const allMessages: Array<Record<string, unknown>> = [];
+        let cursor: string | undefined;
+        do {
+          const resp = await axios.get("https://api.manus.ai/v2/task.listMessages", {
+            params: { task_id: manusTaskId, order: "asc", limit: 100, ...(cursor ? { cursor } : {}) },
+            headers,
+            timeout: 15000,
+          });
+          if (!resp.data?.ok) break;
+          const msgs: Array<Record<string, unknown>> = resp.data.messages ?? [];
+          allMessages.push(...msgs);
+          cursor = msgs.length === 100 ? resp.data.next_cursor : undefined;
+        } while (cursor);
+
+        // Extract attachments
+        const rawAttachments = allMessages
+          .flatMap((m) => (m.assistant_message as { attachments?: Array<{ url?: string; filename?: string; content_type?: string }> } | undefined)?.attachments ?? [])
+          .filter((a) => a.url && a.filename);
+
+        const attachments = rawAttachments.map((a) => ({
+          filename: a.filename!,
+          url: a.url!,
+          contentType: a.content_type ?? "application/octet-stream",
+        }));
+
+        // Download .md files for report
+        const mdAttachments = rawAttachments.filter((a) => a.filename?.endsWith(".md") && a.url);
+        const reportSections: string[] = [];
+        for (const att of mdAttachments) {
+          try {
+            const fileResp = await axios.get(att.url!, { timeout: 30000, responseType: "text", headers: att.url!.includes("api.manus.ai") ? headers : {} });
+            const content = typeof fileResp.data === "string" ? fileResp.data : JSON.stringify(fileResp.data);
+            if (content.trim()) reportSections.push(`## ${att.filename}\n\n${content}`);
+          } catch { /* skip failed files */ }
+        }
+
+        // Fallback to assistant messages if no .md files
+        let report = reportSections.join("\n\n---\n\n");
+        if (!report) {
+          const assistantMsgs = allMessages.filter(
+            (m) => m.type === "assistant_message" && (m.assistant_message as { content?: string } | undefined)?.content?.trim()
+          );
+          report = assistantMsgs.map((m) => (m.assistant_message as { content: string }).content).join("\n\n");
+        }
+
+        if (!report && attachments.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "No report content or attachments found in the Manus task." });
+        }
+
+        await updateSkillRun(input.runId, {
+          status: "success",
+          reportMarkdown: report || run.reportMarkdown || "Report redelivered — see attachments.",
+          attachments,
+        });
+
+        return {
+          success: true,
+          reportMarkdown: report || run.reportMarkdown || "",
+          attachments,
+        };
       }),
 
      allRuns: adminProcedure
@@ -635,57 +761,13 @@ export const appRouter = router({
       }
     }),
 
-    // monthlyCreditsUsed — now uses the admin-configured billing period (explicit dates or day-of-month)
-    monthlyCreditsUsed: protectedProcedure.query(async () => {
-      const apiKey = process.env.MANUS_API_KEY;
-      if (!apiKey) return { creditsUsed: null, source: "none" as const };
-
+    // monthlyCreditsUsed — per-user, billing-period-aware, DB-based.
+    // The Manus task.list API returns all workspace tasks (not per-user), so we
+    // use the DB which records credit_usage per skill run per user.
+    monthlyCreditsUsed: protectedProcedure.query(async ({ ctx }) => {
       const { periodStart, periodEnd } = await resolveBillingPeriod();
-
-      try {
-        const axiosInst = (await import("axios")).default;
-        const headers = { "x-manus-api-key": apiKey };
-        let totalCredits = 0;
-        let cursor: string | undefined;
-        const PAGE_SIZE = 50;
-
-        do {
-          const params: Record<string, string | number> = { limit: PAGE_SIZE };
-          if (cursor) params.cursor = cursor;
-          const resp = await axiosInst.get("https://api.manus.ai/v2/task.list", {
-            params,
-            headers,
-            timeout: 15000,
-          });
-          const respData = resp.data?.data ?? resp.data?.tasks ?? [];
-          const tasks: Array<{ created_at?: string; credit_usage?: number }> = respData;
-          if (!tasks.length && !resp.data?.next_cursor) break;
-          const periodTasks = tasks.filter((t) => {
-            if (!t.created_at) return false;
-            const d = new Date(Number(t.created_at) * 1000);
-            return d >= periodStart && d <= periodEnd;
-          });
-          totalCredits += periodTasks.reduce((sum, t) => sum + (t.credit_usage ?? 0), 0);
-          const oldest = tasks[tasks.length - 1];
-          const oldestTsMs = oldest?.created_at ? Number(oldest.created_at) * 1000 : 0;
-          const oldestDate = oldestTsMs ? new Date(oldestTsMs) : null;
-          cursor = (tasks.length === PAGE_SIZE && oldestDate && oldestDate >= periodStart)
-            ? (resp.data.next_cursor ?? undefined)
-            : undefined;
-        } while (cursor);
-
-        return { creditsUsed: totalCredits, source: "api" as const };
-      } catch {
-        const db = await (await import("./db.js")).getDb();
-        if (!db) return { creditsUsed: null, source: "none" as const };
-        const { skillRuns } = await import("../drizzle/schema.js");
-        const { sql, gte: gteOp, lte: lteOp, and: andOp } = await import("drizzle-orm");
-        const [row] = await db
-          .select({ total: sql<number>`COALESCE(SUM(creditUsage), 0)` })
-          .from(skillRuns)
-          .where(andOp(gteOp(skillRuns.startedAt, periodStart), lteOp(skillRuns.startedAt, periodEnd)));
-        return { creditsUsed: row?.total ?? 0, source: "db" as const };
-      }
+      const creditsUsed = await getCreditsByUserForUser(ctx.user.id, { periodStart, periodEnd });
+      return { creditsUsed, source: "db" as const, periodStart, periodEnd };
     }),
   }),
 

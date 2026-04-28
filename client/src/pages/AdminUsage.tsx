@@ -81,6 +81,7 @@ export default function AdminUsage() {
   const maxUser = Math.max(1, ...(userCounts as UserCount[]).map((u) => u.count));
 
   const grandTotal = (creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + (r.totalCredits ?? 0), 0);
+  const CREDITS_PER_SEAT = 8000;
 
   const filteredFeedback = (allFeedback as FeedbackRow[]).filter((f) => f.category === activeFeedbackTab);
 
@@ -162,7 +163,7 @@ export default function AdminUsage() {
             <table className="w-full text-xs">
               <thead>
                 <tr style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  {["User", "Total Credits", "Runs", "Avg Credits / Run"].map((h) => (
+                  {["User", "Total Credits Used", "% of 8k Seat", "Runs", "Avg Credits / Run"].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-2.5 text-left font-bold"
@@ -177,7 +178,8 @@ export default function AdminUsage() {
                 {(creditsByUser as CreditsByUserRow[]).map((row, i) => {
                   const displayName = row.userName || row.userEmail || `User #${row.userId}`;
                   const initial = displayName.charAt(0).toUpperCase();
-                  const sharePct = grandTotal > 0 ? Math.round(((row.totalCredits ?? 0) / grandTotal) * 100) : 0;
+                  // % used is based on 8,000 credits per individual seat (not share of team total)
+                  const sharePct = Math.min(100, Math.round(((row.totalCredits ?? 0) / CREDITS_PER_SEAT) * 100));
                   return (
                     <tr
                       key={row.userId}
@@ -195,12 +197,14 @@ export default function AdminUsage() {
                         </div>
                       </td>
                       <td className="px-5 py-3">
+                        <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>{(row.totalCredits ?? 0).toLocaleString()}</span>
+                      </td>
+                      <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
-                          <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>{(row.totalCredits ?? 0).toLocaleString()}</span>
                           <div className="flex-1 h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", minWidth: 60, maxWidth: 120 }}>
-                            <div className="h-full rounded-full" style={{ width: `${sharePct}%`, background: "#00BEEF" }} />
+                            <div className="h-full rounded-full" style={{ width: `${sharePct}%`, background: sharePct >= 90 ? "#ED135F" : sharePct >= 70 ? "#FFB400" : "#00BEEF" }} />
                           </div>
-                          <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.65rem" }}>{sharePct}%</span>
+                          <span style={{ color: sharePct >= 90 ? "#ED135F" : sharePct >= 70 ? "#FFB400" : "rgba(255,255,255,0.5)", fontSize: "0.65rem", fontWeight: 600 }}>{sharePct}%</span>
                         </div>
                       </td>
                       <td className="px-5 py-3">
@@ -216,8 +220,11 @@ export default function AdminUsage() {
               {creditsByUser.length > 1 && (
                 <tfoot>
                   <tr style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
-                    <td className="px-5 py-3 text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)" }}>Total</td>
+                    <td className="px-5 py-3 text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)" }}>Team Total</td>
                     <td className="px-5 py-3 text-sm font-bold" style={{ color: "#00BEEF" }}>{grandTotal.toLocaleString()}</td>
+                    <td className="px-5 py-3 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                      {(creditsByUser as CreditsByUserRow[]).length} seats × 8,000 = {((creditsByUser as CreditsByUserRow[]).length * CREDITS_PER_SEAT).toLocaleString()} total
+                    </td>
                     <td className="px-5 py-3 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
                       {(creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + r.runCount, 0)} runs
                     </td>

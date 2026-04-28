@@ -1,0 +1,1 @@
+ALTER TABLE `skill_runs` ADD `manusTaskId` varchar(128);

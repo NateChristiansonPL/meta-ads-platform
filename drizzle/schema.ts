@@ -78,6 +78,8 @@ export const skillRuns = mysqlTable("skill_runs", {
   durationMs: int("durationMs"),
   creditUsage: int("creditUsage"),
   agentProfile: varchar("agentProfile", { length: 32 }).default("manus-1.6-lite"),
+  /** Manus task ID returned by task.create — used for abort (task.stop) and redelivery */
+  manusTaskId: varchar("manusTaskId", { length: 128 }),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
 });

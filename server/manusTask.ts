@@ -31,7 +31,7 @@ interface ManusTaskOptions {
   prompt: string;
   agentProfile?: "manus-1.6" | "manus-1.6-lite" | "manus-1.6-max";
   projectId?: string;
-  onProgress?: (message: string) => void;
+  onProgress?: (message: string, taskId?: string) => void | Promise<void>;
 }
 
 interface ManusMessage {
@@ -468,22 +468,28 @@ export async function runManusSkillTask(
   const taskUrl: string =
     createResp.data.task?.url ?? `https://manus.im/app/tasks/${taskId}`;
 
-  onProgress?.(`Task created (${taskId}). Waiting for analysis to complete...`);
+  // Pass the taskId to the caller immediately so it can be stored for abort/redelivery
+  await onProgress?.(`Task created (${taskId}). Waiting for analysis to complete...`, taskId);
 
   // 2. Poll for completion — check status with a small fetch, then do full fetch at end
   let attempts = 0;
   const MAX_ATTEMPTS = 180; // 15 minutes at 5s intervals
   const POLL_INTERVAL_MS = 5000;
+  let lastAgentMessage = "";
 
   while (attempts < MAX_ATTEMPTS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     attempts++;
 
-    // Use a small fetch just to check status (desc order, limit 5 = just status messages)
+    const elapsedMin = Math.floor((attempts * 5) / 60);
+    const elapsedSec = (attempts * 5) % 60;
+    const elapsedStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec}s` : `${elapsedSec}s`;
+
+    // Fetch recent messages to check status AND surface any new agent activity
     const statusResp = await axios.get(
       `${MANUS_API_BASE}/v2/task.listMessages`,
       {
-        params: { task_id: taskId, order: "desc", limit: 5 },
+        params: { task_id: taskId, order: "desc", limit: 10 },
         headers,
         timeout: 15000,
       }
@@ -495,15 +501,28 @@ export async function runManusSkillTask(
     const statusUpdate = recentMessages.find((m) => m.type === "status_update");
     const agentStatus = statusUpdate?.status_update?.agent_status;
 
+    // Surface the most recent assistant message snippet as a live status update
+    const latestAssistant = recentMessages.find(
+      (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
+    );
+    if (latestAssistant?.assistant_message?.content) {
+      const snippet = latestAssistant.assistant_message.content.trim().slice(0, 120).replace(/\n/g, " ");
+      if (snippet && snippet !== lastAgentMessage) {
+        lastAgentMessage = snippet;
+        await onProgress?.(`Agent: ${snippet}${snippet.length === 120 ? "..." : ""} (${elapsedStr} elapsed)`);
+        continue;
+      }
+    }
+
     if (agentStatus === "running") {
-      onProgress?.(`Analysis in progress... (${Math.round(attempts * 5 / 60)}m ${(attempts * 5) % 60}s elapsed)`);
+      await onProgress?.(`Analysis in progress... (${elapsedStr} elapsed)`);
       continue;
     }
 
     if (agentStatus === "waiting") {
       const detail = statusUpdate?.status_update?.status_detail;
-      onProgress?.(
-        `Waiting: ${detail?.waiting_description ?? "Agent needs input"}`
+      await onProgress?.(
+        `Agent is waiting: ${detail?.waiting_description ?? "needs input"} (${elapsedStr} elapsed)`
       );
       continue;
     }
