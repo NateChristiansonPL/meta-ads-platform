@@ -569,6 +569,48 @@ export const appRouter = router({
         };
       }),
 
+    /**
+     * requestUpdate: Send a status-check message to a running Manus task.
+     * The agent will reply with a plain-language update on what it's currently doing.
+     * The reply will be surfaced in the next poll cycle via the live status log.
+     */
+    requestUpdate: protectedProcedure
+      .input(z.object({ runId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const run = await getRunById(input.runId);
+        if (!run) throw new TRPCError({ code: "NOT_FOUND" });
+        if (run.userId !== ctx.user.id && ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        if (run.status !== "running") return { success: false, message: "Run is not currently running." };
+
+        const apiKey = process.env.MANUS_API_KEY;
+        if (!apiKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "MANUS_API_KEY not configured" });
+
+        const manusTaskId = (run as { manusTaskId?: string }).manusTaskId;
+        if (!manusTaskId) return { success: false, message: "No task ID stored yet — run may still be initializing." };
+
+        try {
+          await axios.post(
+            "https://api.manus.ai/v2/task.sendMessage",
+            {
+              task_id: manusTaskId,
+              message: {
+                content: [
+                  {
+                    type: "text",
+                    text: "Please provide a brief status update: what step are you currently on, what have you completed so far, and are there any errors or issues you have encountered?",
+                  },
+                ],
+              },
+            },
+            { headers: { "x-manus-api-key": apiKey, "Content-Type": "application/json" }, timeout: 15000 }
+          );
+          return { success: true, message: "Update requested — response will appear in the live status feed shortly." };
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          return { success: false, message: `Failed to send update request: ${errMsg}` };
+        }
+      }),
+
      allRuns: adminProcedure
       .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
       .query(async ({ input }) => getRecentRuns(input.limit)),

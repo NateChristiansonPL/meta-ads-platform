@@ -517,6 +517,8 @@ export async function runManusSkillTask(
   const MAX_ATTEMPTS = 180; // 15 minutes at 5s intervals
   const POLL_INTERVAL_MS = 5000;
   let lastAgentMessage = "";
+  let lastProgressMsg = "";
+  let silentPolls = 0; // consecutive polls with no new agent message
 
   while (attempts < MAX_ATTEMPTS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -527,18 +529,26 @@ export async function runManusSkillTask(
     const elapsedStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec}s` : `${elapsedSec}s`;
 
     // Fetch recent messages to check status AND surface any new agent activity
-    const statusResp = await axios.get(
-      `${MANUS_API_BASE}/v2/task.listMessages`,
-      {
-        params: { task_id: taskId, order: "desc", limit: 10 },
-        headers,
-        timeout: 15000,
-      }
-    );
+    let statusRespData: { ok?: boolean; messages?: ManusMessage[] } | null = null;
+    try {
+      const statusResp = await axios.get(
+        `${MANUS_API_BASE}/v2/task.listMessages`,
+        {
+          params: { task_id: taskId, order: "desc", limit: 20 },
+          headers,
+          timeout: 15000,
+        }
+      );
+      statusRespData = statusResp.data as { ok?: boolean; messages?: ManusMessage[] };
+    } catch (pollErr) {
+      const errMsg = pollErr instanceof Error ? pollErr.message : String(pollErr);
+      await onProgress?.(`Poll error (will retry): ${errMsg} (${elapsedStr} elapsed)`);
+      continue;
+    }
 
-    if (!statusResp.data?.ok) continue;
+    if (!statusRespData?.ok) continue;
 
-    const recentMessages: ManusMessage[] = statusResp.data.messages ?? [];
+    const recentMessages: ManusMessage[] = statusRespData.messages ?? [];
     const statusUpdate = recentMessages.find((m) => m.type === "status_update");
     const agentStatus = statusUpdate?.status_update?.agent_status;
 
@@ -547,16 +557,41 @@ export async function runManusSkillTask(
       (m) => m.type === "assistant_message" && m.assistant_message?.content?.trim()
     );
     if (latestAssistant?.assistant_message?.content) {
-      const snippet = latestAssistant.assistant_message.content.trim().slice(0, 120).replace(/\n/g, " ");
+      const raw = latestAssistant.assistant_message.content.trim();
+      // Use up to 200 chars and prefer the first non-empty line for readability
+      const firstLine = raw.split("\n").find((l) => l.trim().length > 10) ?? raw;
+      const snippet = firstLine.trim().slice(0, 200).replace(/\n/g, " ");
       if (snippet && snippet !== lastAgentMessage) {
         lastAgentMessage = snippet;
-        await onProgress?.(`Agent: ${snippet}${snippet.length === 120 ? "..." : ""} (${elapsedStr} elapsed)`);
+        silentPolls = 0;
+        const progressMsg = `${snippet}${firstLine.length > 200 ? "..." : ""} (${elapsedStr} elapsed)`;
+        if (progressMsg !== lastProgressMsg) {
+          lastProgressMsg = progressMsg;
+          await onProgress?.(progressMsg);
+        }
         continue;
       }
     }
 
     if (agentStatus === "running") {
-      await onProgress?.(`Analysis in progress... (${elapsedStr} elapsed)`);
+      silentPolls++;
+      // Only emit a status update every 3 silent polls (~15s) to avoid log spam
+      if (silentPolls % 3 === 1) {
+        const idlePhase = elapsedMin < 3
+          ? "Initializing analysis environment..."
+          : elapsedMin < 6
+          ? "Fetching campaign and ad set data from Meta API..."
+          : elapsedMin < 10
+          ? "Running statistical analysis modules..."
+          : elapsedMin < 15
+          ? "Compiling insights and generating report..."
+          : "Finalizing report (this can take a few more minutes)...";
+        const progressMsg = `${idlePhase} (${elapsedStr} elapsed)`;
+        if (progressMsg !== lastProgressMsg) {
+          lastProgressMsg = progressMsg;
+          await onProgress?.(progressMsg);
+        }
+      }
       continue;
     }
 

@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import HelpTip from "@/components/HelpTip";
 import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, OctagonX, Play, RefreshCcw, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -86,11 +87,15 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [creditUsage, setCreditUsage] = useState<number | null>(null);
   const [isAborting, setIsAborting] = useState(false);
   const [isRedelivering, setIsRedelivering] = useState(false);
+  const [noReportOnSuccess, setNoReportOnSuccess] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const clockRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const abortRunMutation = trpc.runs.abortRun.useMutation();
   const redeliverMutation = trpc.runs.redeliverReport.useMutation();
+  const requestUpdateMutation = trpc.runs.requestUpdate.useMutation();
+  const [isRequestingUpdate, setIsRequestingUpdate] = useState(false);
+  const [updateRequestMsg, setUpdateRequestMsg] = useState<string | null>(null);
 
   // Load the most recent successful run output for this user + skill.
   // This persists across navigation so the user sees their last result when returning.
@@ -181,6 +186,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
               utils.runs.lastOutput.invalidate({ skillId: config.skillId });
             } else {
               // Task completed but no output — treat as error with redeliver option
+              setNoReportOnSuccess(true);
               setErrorMsg("The analysis completed but no report content was found. The agent may have encountered an issue generating the output files. Use 'Re-fetch Report' to try retrieving the output again, or view the full run on Manus.");
               setStatus("error");
             }
@@ -292,7 +298,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         style={{ width: 360 }}
       >
         {/* Account Selection */}
-        <Section title="Account Selection">
+        <Section title="Account Selection" hint="Select the Business Manager token that has access to your ad account, then pick the specific ad account you want to analyze. The token is managed by your admin in the Token Vault.">
           {/* Token */}
           <FormField label="Business Manager Token">
             {activeTokens.length === 0 ? (
@@ -404,7 +410,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         </Section>
 
         {/* Analysis Period */}
-        <Section title="Analysis Period">
+        <Section title="Analysis Period" hint="Choose the date range for the analysis. 'Last 7 Days' is the most common for weekly reviews. The 'Compare to prior period' toggle adds a side-by-side comparison window of the same length immediately before the selected range.">
           <FormField label="Date Range">
             <Select
               value={datePreset}
@@ -434,7 +440,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
         {/* Modules */}
         {config.hasModules && config.modules && (
-          <Section title="Analysis Modules">
+          <Section title="Analysis Modules" hint="Each module is a separate analysis component that runs in parallel. Deselect modules you don't need to reduce run time and credit usage. All modules are enabled by default.">
             <div className="grid grid-cols-2 gap-2">
               {config.modules.map((m) => {
                 const on = enabledModules.includes(m.id);
@@ -474,7 +480,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
         {/* Enrichment */}
         {config.hasEnrichment && (
-          <Section title="Enrich Analysis" optional>
+          <Section title="Enrich Analysis" optional hint="Optionally attach a recent Audience Overlap or Creative Lifecycle report to give the Performance Insights agent additional context. The agent will cross-reference those findings in its analysis. Only runs for the same ad account are shown.">
             <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
               Optionally attach a prior Audience Overlap or Creative Lifecycle run to inject its signals into this analysis.
             </p>
@@ -534,7 +540,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         )}
 
         {/* Additional Instructions */}
-        <Section title="Additional Instructions" optional>
+        <Section title="Additional Instructions" optional hint="Add any free-text context for the agent — e.g. 'Focus on prospecting campaigns only' or 'We launched a new creative on April 15'. This is injected directly into the agent's prompt.">
           <textarea
             value={additionalInstructions}
             onChange={(e) => setAdditionalInstructions(e.target.value)}
@@ -553,7 +559,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         </Section>
 
         {/* Model Selector */}
-        <Section title="Manus Model">
+        <Section title="Manus Model" hint="The Manus model controls the AI agent used for this run. Higher-tier models produce more detailed analysis but consume more credits. The default model is recommended for most runs.">
           <div className="grid grid-cols-3 gap-2">
             {(["manus-1.6-lite", "manus-1.6", "manus-1.6-max"] as const).map((m) => {
               const labels: Record<string, { short: string; sub: string }> = {
@@ -633,17 +639,47 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
                 <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>Analysis in progress</p>
                 <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Elapsed: {formatElapsed(elapsedSec)}</p>
               </div>
-              {/* Kill-switch */}
-              <button
-                onClick={handleAbort}
-                disabled={isAborting}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all shrink-0"
-                style={{ background: "rgba(237,19,95,0.12)", color: "#ED135F", border: "1px solid rgba(237,19,95,0.3)" }}
-                title="Abort this run"
-              >
-                {isAborting ? <Loader2 size={11} className="animate-spin" /> : <OctagonX size={11} />}
-                {isAborting ? "Aborting…" : "Abort Run"}
-              </button>
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Request Update button */}
+                <button
+                  onClick={async () => {
+                    if (!runId || isRequestingUpdate) return;
+                    setIsRequestingUpdate(true);
+                    setUpdateRequestMsg(null);
+                    try {
+                      const res = await requestUpdateMutation.mutateAsync({ runId });
+                      setUpdateRequestMsg(res.message ?? null);
+                      if (res.success) {
+                        setStatusLog((prev) => [...prev, { ts: Date.now(), msg: "Update requested — awaiting agent response…" }]);
+                      }
+                    } catch (e) {
+                      setUpdateRequestMsg(e instanceof Error ? e.message : "Failed to request update");
+                    } finally {
+                      setIsRequestingUpdate(false);
+                      setTimeout(() => setUpdateRequestMsg(null), 6000);
+                    }
+                  }}
+                  disabled={isRequestingUpdate}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all"
+                  style={{ background: "rgba(0,179,122,0.1)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.25)" }}
+                  title="Ask the agent for a plain-language status update"
+                >
+                  {isRequestingUpdate ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
+                  {isRequestingUpdate ? "Requesting…" : "Request Update"}
+                </button>
+                {/* Kill-switch */}
+                <button
+                  onClick={handleAbort}
+                  disabled={isAborting}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all"
+                  style={{ background: "rgba(237,19,95,0.12)", color: "#ED135F", border: "1px solid rgba(237,19,95,0.3)" }}
+                  title="Abort this run"
+                >
+                  {isAborting ? <Loader2 size={11} className="animate-spin" /> : <OctagonX size={11} />}
+                  {isAborting ? "Aborting…" : "Abort Run"}
+                </button>
+              </div>
             </div>
 
             {/* Rate limit alert */}
@@ -665,6 +701,14 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
                   <p className="text-xs font-bold" style={{ color: "#FF7800" }}>Taking longer than expected</p>
                   <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>The analysis is still running ({formatElapsed(elapsedSec)}). Large accounts with many campaigns can take 15–20 minutes. You can leave this page — the run will complete in the background and appear in Run Logs.</p>
                 </div>
+              </div>
+            )}
+
+            {/* Update request feedback */}
+            {updateRequestMsg && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style={{ background: "rgba(0,179,122,0.08)", border: "1px solid rgba(0,179,122,0.2)", color: "rgba(0,179,122,0.9)" }}>
+                <CheckCircle2 size={12} />
+                {updateRequestMsg}
               </div>
             )}
 
@@ -714,8 +758,8 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
               >
                 <RotateCcw size={12} /> Retry
               </button>
-              {/* Re-fetch report — tries to pull attachments from the completed Manus task */}
-              {runId && (
+              {/* Re-fetch report — only show when the task completed but returned no report/attachments */}
+              {runId && noReportOnSuccess && (
                 <button
                   onClick={handleRedeliver}
                   disabled={isRedelivering}
@@ -887,7 +931,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Section({ title, children, optional }: { title: string; children: React.ReactNode; optional?: boolean }) {
+function Section({ title, children, optional, hint }: { title: string; children: React.ReactNode; optional?: boolean; hint?: string }) {
   return (
     <div>
       <div className="flex items-center gap-2 mb-2.5">
@@ -895,6 +939,7 @@ function Section({ title, children, optional }: { title: string; children: React
           {title}
         </p>
         {optional && <span className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>(optional)</span>}
+        {hint && <HelpTip content={hint} side="right" size={11} />}
       </div>
       <div className="flex flex-col gap-3">{children}</div>
     </div>

@@ -21,6 +21,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { FeedbackModal } from "./FeedbackModal";
+import HelpTip from "./HelpTip";
 
 const SKILLS = [
   {
@@ -215,7 +216,14 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
         </Link>
 
         <div className="flex items-center gap-3">
-          <CreditsWidget />
+          <div className="flex items-center gap-1">
+            <CreditsWidget />
+            <HelpTip
+              content="Credits are consumed each time you run a skill. One credit ≈ one Manus agent action (API call, script execution, etc.). Your billing period resets on the configured cycle. Contact your admin if you need your limit adjusted."
+              side="bottom"
+              size={12}
+            />
+          </div>
           <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#ED135F", color: "#fff" }}>
@@ -265,9 +273,16 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
 
           {/* Skills section */}
           <div className="px-3 pt-3">
-            <p className="text-xs font-bold mb-2 px-2" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              Skills
-            </p>
+            <div className="flex items-center gap-1.5 mb-2 px-2">
+              <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Skills
+              </p>
+              <HelpTip
+                content="Skills are AI-powered analysis tools. Each skill runs a Manus agent against your Meta ad account data and returns a structured report. Select a skill, choose your account and date range, then click Run."
+                side="right"
+                size={11}
+              />
+            </div>
             <div className="flex flex-col gap-0.5">
               {SKILLS.map((s) => (
                 <NavItem
@@ -286,9 +301,16 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
 
           {/* Tools section */}
           <div className="px-3 pt-4">
-            <p className="text-xs font-bold mb-2 px-2" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              Tools
-            </p>
+            <div className="flex items-center gap-1.5 mb-2 px-2">
+              <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Tools
+              </p>
+              <HelpTip
+                content="Tools are standalone utilities for managing your Meta campaigns. Campaign Builder lets you build and launch campaigns directly from the platform. Manus AI is a free-form AI assistant for ad strategy questions."
+                side="right"
+                size={11}
+              />
+            </div>
             <div className="flex flex-col gap-0.5">
               {/* Campaign Builder */}
               <NavItem
@@ -307,6 +329,15 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                 path="/manus-ai"
                 active={location === "/manus-ai"}
                 color="#00BEEF"
+                running={false}
+              />
+              <NavItem
+                icon={BookOpen}
+                label="Knowledge Base"
+                sub="Platform docs"
+                path="/knowledge"
+                active={location === "/knowledge"}
+                color="#A78BFA"
                 running={false}
               />
             </div>

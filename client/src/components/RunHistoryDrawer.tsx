@@ -5,6 +5,7 @@
  * Clicking a run expands to show the full report inline.
  */
 
+import HelpTip from "@/components/HelpTip";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Streamdown } from "streamdown";
@@ -174,6 +175,8 @@ export function RunHistoryDrawer({ skillId, skillName }: RunHistoryDrawerProps) 
   const totalCount = runs?.length ?? 0;
 
   return (
+    <div className="flex items-center gap-1.5">
+      <HelpTip content="View all past runs for this skill — including the full report, credit usage, and duration. Click any row to expand the report inline." />
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button
@@ -229,5 +232,6 @@ export function RunHistoryDrawer({ skillId, skillName }: RunHistoryDrawerProps) 
         )}
       </SheetContent>
     </Sheet>
+    </div>
   );
 }

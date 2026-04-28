@@ -121,3 +121,10 @@
 - [x] Replace CampaignBuilder.tsx with new version using uploaded components
 - [x] Remove Coming Soon gate from AppShell sidebar for Campaign Builder
 - [x] TypeScript check and tests pass
+
+## Live Status & UX Improvements (Apr 28 batch 2)
+- [x] Replace repetitive "Analysis in progress..." live status with real agent step summaries
+- [x] Add "Request Update" button during active runs that pings the task and returns plain-language status
+- [x] Fix Re-fetch Report button to show on any completed run missing report files (not just aborted)
+- [x] Add onboarding tooltips (? icons) throughout the UI for key buttons and sections
+- [x] Create Knowledge Base page with full platform documentation

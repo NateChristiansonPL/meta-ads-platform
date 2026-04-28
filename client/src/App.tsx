@@ -17,6 +17,7 @@ import AdminUsage from "./pages/AdminUsage";
 import AdminKnowledge from "./pages/AdminKnowledge";
 import ManusAI from "./pages/ManusAI";
 import CampaignBuilder from "./pages/CampaignBuilder";
+import KnowledgeBase from "./pages/KnowledgeBase";
 
 // Skill paths that should stay mounted (keep-alive) to preserve active run state
 const SKILL_PATHS = [
@@ -77,6 +78,7 @@ function Router() {
           <Route path="/admin/knowledge" component={AdminKnowledge} />
           <Route path="/manus-ai" component={ManusAI} />
           <Route path="/campaign-builder" component={CampaignBuilder} />
+          <Route path="/knowledge" component={KnowledgeBase} />
           <Route path="/404" component={NotFound} />
           <Route component={NotFound} />
         </Switch>
