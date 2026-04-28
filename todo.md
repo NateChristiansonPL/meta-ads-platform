@@ -128,3 +128,11 @@
 - [x] Fix Re-fetch Report button to show on any completed run missing report files (not just aborted)
 - [x] Add onboarding tooltips (? icons) throughout the UI for key buttons and sections
 - [x] Create Knowledge Base page with full platform documentation
+
+## UI/UX Updates (Apr 28 batch 3)
+- [x] Update Performance Insights enrichment section description copy
+- [x] Remove 1.6 max model option from all skill runners
+- [x] Add per-skill date range recommendation notes next to skill header
+- [x] Add "Recommend using 1.6 Lite model for credit efficiency" note next to model selector
+- [x] Hide Manus AI tool from sidebar
+- [x] Rename "Tools" to "Coming Soon" and add Creative Decay, Audience Saturation, Allocation Drift auto-detect blocks

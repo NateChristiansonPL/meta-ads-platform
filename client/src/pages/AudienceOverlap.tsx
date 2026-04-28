@@ -9,6 +9,7 @@ const CONFIG = {
   badge: "pl-audience-overlap-spend",
   color: "#a78bfa",
   hasDateRange: true,
+  dateNote: "Recommend analyzing at least 21+ days of data.",
 };
 
 export default function AudienceOverlap() {

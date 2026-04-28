@@ -21,6 +21,7 @@ const CONFIG = {
   hasModules: true,
   modules: MODULES,
   hasEnrichment: true,
+  dateNote: "Recommend analyzing at least 21+ days of data.",
 };
 
 export default function PerformanceInsights() {

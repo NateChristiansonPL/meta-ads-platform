@@ -10,6 +10,7 @@ const CONFIG = {
   color: "#00BEEF",
   hasDateRange: true,
   hasCompare: true,
+  dateNote: "Recommend analyzing 7–14 days of data, but also works fine with greater date ranges.",
 };
 
 export default function WeeklyOptimization() {

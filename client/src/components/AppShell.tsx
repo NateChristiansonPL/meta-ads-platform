@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   BarChart2,
   BookOpen,
@@ -299,14 +300,14 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
             </div>
           </div>
 
-          {/* Tools section */}
+          {/* Coming Soon section */}
           <div className="px-3 pt-4">
             <div className="flex items-center gap-1.5 mb-2 px-2">
               <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Tools
+                Coming Soon
               </p>
               <HelpTip
-                content="Tools are standalone utilities for managing your Meta campaigns. Campaign Builder lets you build and launch campaigns directly from the platform. Manus AI is a free-form AI assistant for ad strategy questions."
+                content="Campaign Builder lets you build and launch campaigns directly from the platform. Additional automation tools are in development."
                 side="right"
                 size={11}
               />
@@ -322,15 +323,48 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                 active={location === "/campaign-builder"}
                 running={false}
               />
-              <NavItem
-                icon={Bot}
-                label="Manus AI"
-                sub="Ask anything"
-                path="/manus-ai"
-                active={location === "/manus-ai"}
-                color="#00BEEF"
-                running={false}
-              />
+              {/* Placeholder: Creative Decay Auto-Detect */}
+              <button
+                onClick={() => toast.info("Feature coming soon")}
+                className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
+                style={{ background: "transparent", border: "none", cursor: "pointer", opacity: 0.5 }}
+              >
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+                  <Zap size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Creative Decay Auto-Detect</p>
+                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
+                </div>
+              </button>
+              {/* Placeholder: Audience Saturation Auto-Detect */}
+              <button
+                onClick={() => toast.info("Feature coming soon")}
+                className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
+                style={{ background: "transparent", border: "none", cursor: "pointer", opacity: 0.5 }}
+              >
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+                  <Users size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Audience Saturation Auto-Detect</p>
+                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
+                </div>
+              </button>
+              {/* Placeholder: Allocation Drift Auto-Detect */}
+              <button
+                onClick={() => toast.info("Feature coming soon")}
+                className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
+                style={{ background: "transparent", border: "none", cursor: "pointer", opacity: 0.5 }}
+              >
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+                  <TrendingUp size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Allocation Drift Auto-Detect</p>
+                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
+                </div>
+              </button>
               <NavItem
                 icon={BookOpen}
                 label="Knowledge Base"

@@ -21,6 +21,8 @@ export interface SkillConfig {
    * sidecar JSON into the skill prompt.
    */
   hasEnrichment?: boolean;
+  /** Optional note shown next to the skill header about recommended date ranges */
+  dateNote?: string;
 }
 
 interface SkillRunnerProps {
@@ -57,7 +59,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [enabledModules, setEnabledModules] = useState<string[]>(config.modules?.map((m) => m.id) ?? []);
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [compare, setCompare] = useState(false);
-  const [agentProfile, setAgentProfile] = useState<"manus-1.6" | "manus-1.6-lite" | "manus-1.6-max">("manus-1.6-lite");
+  const [agentProfile, setAgentProfile] = useState<"manus-1.6" | "manus-1.6-lite">("manus-1.6-lite");
 
   // Enrichment: selected run IDs from prior Audience Overlap / Creative Lifecycle runs
   const [enrichOverlapRunId, setEnrichOverlapRunId] = useState<number | null>(null);
@@ -297,6 +299,13 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         className="flex flex-col gap-4 shrink-0 overflow-y-auto"
         style={{ width: 360 }}
       >
+        {/* Date Range Note */}
+        {config.dateNote && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>{config.dateNote}</span>
+          </div>
+        )}
+
         {/* Account Selection */}
         <Section title="Account Selection" hint="Select the Business Manager token that has access to your ad account, then pick the specific ad account you want to analyze. The token is managed by your admin in the Token Vault.">
           {/* Token */}
@@ -480,9 +489,12 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
         {/* Enrichment */}
         {config.hasEnrichment && (
-          <Section title="Enrich Analysis" optional hint="Optionally attach a recent Audience Overlap or Creative Lifecycle report to give the Performance Insights agent additional context. The agent will cross-reference those findings in its analysis. Only runs for the same ad account are shown.">
-            <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
-              Optionally attach a prior Audience Overlap or Creative Lifecycle run to inject its signals into this analysis.
+          <Section title="Enrich Analysis" optional hint="Performance Insights can be enriched with data from recent Audience Overlap and Creative Lifecycle runs for the same campaign within an ad account, off the same date range. When you select prior runs, the agent will cross-reference those findings — for example, flagging creatives that are both fatigued (from Creative Lifecycle) and running in overlapping audiences (from Audience Overlap), enabling deeper insight.">
+            <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.6 }}>
+              Performance Insights can be enriched with data from recent Audience Overlap and Creative Lifecycle runs for the same campaign within an ad account, off the same date range. When you select prior runs in the Enrich Analysis section, the agent will cross-reference those findings — for example, flagging creatives that are both fatigued (from Creative Lifecycle) and running in overlapping audiences (from Audience Overlap), enabling deeper insight.
+            </p>
+            <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.25)", lineHeight: 1.5 }}>
+              To use this feature, you first must run the Audience Overlap and/or Creative Lifecycle skills. The enrichment data (via JSON files from the skill output) is injected into the agent&apos;s prompt.
             </p>
             <FormField label="Audience Overlap Run">
               {!adAccountId ? (
@@ -559,13 +571,15 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         </Section>
 
         {/* Model Selector */}
-        <Section title="Manus Model" hint="The Manus model controls the AI agent used for this run. Higher-tier models produce more detailed analysis but consume more credits. The default model is recommended for most runs.">
-          <div className="grid grid-cols-3 gap-2">
-            {(["manus-1.6-lite", "manus-1.6", "manus-1.6-max"] as const).map((m) => {
+        <Section title="Manus Model" hint="The Manus model controls the AI agent used for this run. 1.6 Lite is recommended for most runs for credit efficiency. Use 1.6 for more complex analyses that benefit from deeper reasoning.">
+          <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>
+            Recommend using <span style={{ color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>1.6 Lite</span> model for credit efficiency.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {(["manus-1.6-lite", "manus-1.6"] as const).map((m) => {
               const labels: Record<string, { short: string; sub: string }> = {
                 "manus-1.6-lite": { short: "1.6 Lite", sub: "Faster · fewer credits" },
                 "manus-1.6": { short: "1.6", sub: "Balanced" },
-                "manus-1.6-max": { short: "1.6 Max", sub: "Most thorough" },
               };
               const active = agentProfile === m;
               return (

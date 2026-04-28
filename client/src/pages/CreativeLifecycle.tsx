@@ -9,6 +9,7 @@ const CONFIG = {
   badge: "pl-creative-lifecycle-v3",
   color: "#00B37A",
   hasDateRange: true,
+  dateNote: "Recommend analyzing at least 21+ days of data.",
 };
 
 export default function CreativeLifecycle() {

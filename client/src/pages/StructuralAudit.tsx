@@ -9,6 +9,7 @@ const CONFIG = {
   badge: "meta-ads-structural-audit",
   color: "#ED135F",
   hasDateRange: true,
+  dateNote: "Recommend analyzing at least 14+ days of data.",
 };
 
 export default function StructuralAudit() {
