@@ -1823,9 +1823,309 @@ export const metaRouter = router({
         });
       }
     }),
-});
 
-// ─── Targeting spec merge helper (for overlap analysis) ───────────────────────
+  /**
+   * Batch reach + CPM estimates for multiple targeting specs.
+   * Used by the Campaign Builder Ad Sets tab Reach Estimate feature.
+   */
+  batchReachEstimates: publicProcedure
+    .input(
+      z.object({
+        accessToken: z.string().min(1),
+        adAccountId: z.string().min(1),
+        adSets: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          targetingSpec: z.record(z.string(), z.unknown()),
+          optimizationGoal: z.string().optional(),
+        })),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { accessToken, adAccountId, adSets } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+      const OPT_GOAL_MAP: Record<string, string> = {
+        LANDING_PAGE_VIEWS: 'LANDING_PAGE_VIEWS',
+        LINK_CLICKS: 'LINK_CLICKS',
+        REACH: 'REACH',
+        IMPRESSIONS: 'IMPRESSIONS',
+        THRUPLAY: 'THRUPLAY',
+        AD_RECALL_LIFT: 'AD_RECALL_LIFT',
+        POST_ENGAGEMENT: 'POST_ENGAGEMENT',
+        PAGE_LIKES: 'PAGE_LIKES',
+        VIDEO_VIEWS: 'VIDEO_VIEWS',
+        CONVERSIONS: 'OFFSITE_CONVERSIONS',
+        VALUE: 'VALUE',
+        LEAD_GENERATION: 'LEAD_GENERATION',
+      };
+      const results = await Promise.all(adSets.map(async (adSet) => {
+        try {
+          const reachData = await metaGet(
+            `/${accountId}/reachestimate`,
+            { targeting_spec: JSON.stringify(adSet.targetingSpec) },
+            accessToken
+          );
+          const lower = (reachData.users_lower_bound as number) || 0;
+          const upper = (reachData.users_upper_bound as number) || 0;
+          let cpm: number | null = null;
+          const optGoal = OPT_GOAL_MAP[adSet.optimizationGoal || ''] || 'LINK_CLICKS';
+          try {
+            const deliveryData = await metaGet(
+              `/${accountId}/delivery_estimate`,
+              {
+                targeting_spec: JSON.stringify(adSet.targetingSpec),
+                optimization_goal: optGoal,
+              },
+              accessToken
+            );
+            const est = (deliveryData?.data as { estimate_cpm?: string }[])?.[0];
+            if (est?.estimate_cpm) cpm = parseFloat(est.estimate_cpm) / 100;
+          } catch { /* CPM optional */ }
+          return {
+            id: adSet.id,
+            name: adSet.name,
+            reachLower: lower,
+            reachUpper: upper,
+            reachMid: Math.round((lower + upper) / 2),
+            cpm,
+            error: null as string | null,
+          };
+        } catch (err) {
+          return {
+            id: adSet.id,
+            name: adSet.name,
+            reachLower: 0,
+            reachUpper: 0,
+            reachMid: 0,
+            cpm: null,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }));
+      return { results };
+    }),
+
+  /**
+   * Audience overlap analysis for builder ad sets using the dual-anchor methodology.
+   * Implements the same algorithm as Overlap.gs:
+   *   - Single-entry flex: A-anchor only (HIGH confidence)
+   *   - Narrowed (AND logic): dual-anchor cross-validation when within layer limit
+   *   - Combined layer count > 4: A-anchor with truncation (MEDIUM confidence)
+   */
+  builderAudienceOverlap: publicProcedure
+    .input(
+      z.object({
+        accessToken: z.string().min(1),
+        adAccountId: z.string().min(1),
+        adSets: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          campaignName: z.string(),
+          targetingSpec: z.record(z.string(), z.unknown()),
+          isNarrowed: z.boolean(),
+        })),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { accessToken, adAccountId, adSets } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+      const FLEX_SPEC_MAX_LAYERS = 4;
+      const AGE_MAX_DEFAULT = 65;
+
+      function mergeSpecsAnchored(
+        anchorSpec: Record<string, unknown>,
+        otherSpec: Record<string, unknown>
+      ): Record<string, unknown> {
+        const merged: Record<string, unknown> = {};
+        merged.geo_locations = anchorSpec.geo_locations || { countries: ['US'] };
+        const ageMinA = (anchorSpec.age_min as number) || 18;
+        const ageMinB = (otherSpec.age_min as number) || 18;
+        const ageMaxA = (anchorSpec.age_max as number) || AGE_MAX_DEFAULT;
+        const ageMaxB = (otherSpec.age_max as number) || AGE_MAX_DEFAULT;
+        const intAgeMin = Math.max(ageMinA, ageMinB);
+        const intAgeMax = Math.min(ageMaxA, ageMaxB);
+        if (intAgeMin > intAgeMax) return { geo_locations: { countries: ['US'] }, age_min: 99, age_max: 99 };
+        merged.age_min = intAgeMin;
+        merged.age_max = intAgeMax;
+        const gA = (anchorSpec.genders as number[]) || [];
+        const gB = (otherSpec.genders as number[]) || [];
+        if (gA.length && gB.length) {
+          const shared = gA.filter(g => gB.includes(g));
+          if (!shared.length) return { geo_locations: { countries: ['US'] }, age_min: 99, age_max: 99 };
+          merged.genders = shared;
+        } else if (gA.length) {
+          merged.genders = gA;
+        } else if (gB.length) {
+          merged.genders = gB;
+        }
+        const flexA = (anchorSpec.flexible_spec as unknown[]) || [];
+        const flexB = (otherSpec.flexible_spec as unknown[]) || [];
+        let combined = [...flexA, ...flexB];
+        if (combined.length > FLEX_SPEC_MAX_LAYERS) combined = combined.slice(0, FLEX_SPEC_MAX_LAYERS);
+        if (combined.length) merged.flexible_spec = combined;
+        return merged;
+      }
+
+      async function batchReach(specs: Record<string, unknown>[]): Promise<number[]> {
+        return Promise.all(specs.map(async (spec) => {
+          try {
+            const data = await metaGet(
+              `/${accountId}/reachestimate`,
+              { targeting_spec: JSON.stringify(spec) },
+              accessToken
+            );
+            return (((data.users_lower_bound as number) || 0) + ((data.users_upper_bound as number) || 0)) / 2;
+          } catch { return 0; }
+        }));
+      }
+
+      const individualReaches = await batchReach(adSets.map(a => a.targetingSpec));
+      const adSetsWithReach = adSets.map((a, i) => ({ ...a, reach: individualReaches[i] }));
+
+      interface PairEntry {
+        ii: number; jj: number;
+        eitherNarrowed: boolean; skipBAnchor: boolean;
+        specA: Record<string, unknown>;
+        specB?: Record<string, unknown>;
+        intersectionReach: number;
+        confidence: string;
+      }
+      const pairs: PairEntry[] = [];
+
+      for (let ii = 0; ii < adSetsWithReach.length; ii++) {
+        for (let jj = ii + 1; jj < adSetsWithReach.length; jj++) {
+          if (adSetsWithReach[ii].campaignName !== adSetsWithReach[jj].campaignName) continue;
+          const flexLayersA = ((adSetsWithReach[ii].targetingSpec.flexible_spec as unknown[]) || []).length;
+          const flexLayersB = ((adSetsWithReach[jj].targetingSpec.flexible_spec as unknown[]) || []).length;
+          const totalLayers = flexLayersA + flexLayersB;
+          const eitherNarrowed = adSetsWithReach[ii].isNarrowed || adSetsWithReach[jj].isNarrowed;
+          const skipBAnchor = eitherNarrowed && totalLayers > FLEX_SPEC_MAX_LAYERS;
+          pairs.push({
+            ii, jj, eitherNarrowed, skipBAnchor,
+            specA: mergeSpecsAnchored(adSetsWithReach[ii].targetingSpec, adSetsWithReach[jj].targetingSpec),
+            specB: (!eitherNarrowed || skipBAnchor) ? undefined :
+              mergeSpecsAnchored(adSetsWithReach[jj].targetingSpec, adSetsWithReach[ii].targetingSpec),
+            intersectionReach: 0,
+            confidence: 'HIGH',
+          });
+        }
+      }
+
+      const aReaches = await batchReach(pairs.map(p => p.specA));
+      const bAnchorIndices: number[] = [];
+      const bAnchorSpecs: Record<string, unknown>[] = [];
+      pairs.forEach((p, pi) => {
+        if (p.eitherNarrowed && !p.skipBAnchor && p.specB) {
+          bAnchorIndices.push(pi);
+          bAnchorSpecs.push(p.specB);
+        }
+      });
+      const bReaches = bAnchorSpecs.length ? await batchReach(bAnchorSpecs) : [];
+      const bReachByPairIndex: Record<number, number> = {};
+      bAnchorIndices.forEach((pi, ni) => { bReachByPairIndex[pi] = bReaches[ni]; });
+
+      pairs.forEach((pair, pi) => {
+        const reachA = adSetsWithReach[pair.ii].reach;
+        const reachB = adSetsWithReach[pair.jj].reach;
+        const maxPossible = Math.min(reachA, reachB);
+        const midA = aReaches[pi];
+        const clampA = Math.min(midA, maxPossible);
+        if (!pair.eitherNarrowed) {
+          pair.intersectionReach = clampA;
+          pair.confidence = 'HIGH';
+        } else if (pair.skipBAnchor) {
+          pair.intersectionReach = clampA;
+          pair.confidence = 'MEDIUM';
+        } else {
+          const midB = bReachByPairIndex[pi] || 0;
+          const clampB = Math.min(midB, maxPossible);
+          if (clampA > 0 && clampB > 0) {
+            const ratio = Math.max(clampA, clampB) / Math.min(clampA, clampB);
+            if (ratio <= 1.2) {
+              pair.intersectionReach = Math.sqrt(clampA * clampB);
+              pair.confidence = 'HIGH';
+            } else {
+              pair.intersectionReach = Math.min(clampA, clampB);
+              pair.confidence = 'LOW_CONF';
+            }
+          } else if (clampA > 0) {
+            pair.intersectionReach = clampA;
+            pair.confidence = 'MEDIUM';
+          } else if (clampB > 0) {
+            pair.intersectionReach = clampB;
+            pair.confidence = 'MEDIUM';
+          } else {
+            pair.intersectionReach = 0;
+            pair.confidence = 'LOW_CONF';
+          }
+        }
+      });
+
+      const overlapResults = adSetsWithReach.map((asA, i) => {
+        const pairsForA = pairs
+          .filter(p => p.ii === i || p.jj === i)
+          .map(p => {
+            const otherIdx = p.ii === i ? p.jj : p.ii;
+            const other = adSetsWithReach[otherIdx];
+            const pct = asA.reach > 0
+              ? Math.min(100, Math.round((p.intersectionReach / asA.reach) * 1000) / 10)
+              : 0;
+            return { pct, name: other.name, confidence: p.confidence };
+          })
+          .sort((a, b) => b.pct - a.pct);
+        return {
+          id: asA.id,
+          name: asA.name,
+          reach: Math.round(asA.reach),
+          overlaps: pairsForA,
+        };
+      });
+
+      const pairList = pairs.map(p => ({
+        adSetA: { id: adSetsWithReach[p.ii].id, name: adSetsWithReach[p.ii].name },
+        adSetB: { id: adSetsWithReach[p.jj].id, name: adSetsWithReach[p.jj].name },
+        intersectionReach: Math.round(p.intersectionReach),
+        overlapPctA: adSetsWithReach[p.ii].reach > 0
+          ? Math.min(100, Math.round((p.intersectionReach / adSetsWithReach[p.ii].reach) * 1000) / 10)
+          : 0,
+        overlapPctB: adSetsWithReach[p.jj].reach > 0
+          ? Math.min(100, Math.round((p.intersectionReach / adSetsWithReach[p.jj].reach) * 1000) / 10)
+          : 0,
+        confidence: p.confidence,
+      })).sort((a, b) => b.overlapPctA - a.overlapPctA);
+
+      return { overlapResults, pairList };
+    }),
+
+  // ── Lead Gen Forms ────────────────────────────────────────────────────────────
+  getLeadGenForms: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, pageId } = input;
+      try {
+        const data = await metaGet(
+          `/${pageId}/leadgen_forms`,
+          { fields: 'id,name,status,leads_count,created_time', limit: '100' },
+          accessToken,
+        );
+        const forms = (data.data || []) as Array<{
+          id: string;
+          name: string;
+          status: string;
+          leads_count?: number;
+          created_time?: string;
+        }>;
+        return { forms };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch lead gen forms: ${msg}` });
+      }
+    }),
+});
+// ─── Targeting spec merge helperr (for overlap analysis) ───────────────────────
 function mergeTargetingSpecs(
   a: Record<string, unknown>,
   b: Record<string, unknown>

@@ -25,21 +25,28 @@ import {
   billingChoiceApplicable, billingChoiceOptions,
   conversionEventApplicable, leadGenApplicable, sacRestrictsTargeting,
   engagementGoalApplicable, fbPageRequiredAtAdSet,
+  ReachEstimateRun, OverlapRun,
 } from '@/lib/campaignStore';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 import { trpc } from '@/lib/trpc';
 import { BuildSettings } from '@/lib/campaignStore';
+import { ReachEstimatePanel, AudienceOverlapPanel } from '@/components/BuilderReachOverlapPanel';
 
 interface Props {
   rows: AdSetRow[];
   campaigns: CampaignRow[];
   onChange: (rows: AdSetRow[]) => void;
   settings?: BuildSettings;
+  reachHistory: ReachEstimateRun[];
+  overlapHistory: OverlapRun[];
+  onReachHistoryChange: (h: ReachEstimateRun[]) => void;
+  onOverlapHistoryChange: (h: OverlapRun[]) => void;
 }
 
 type PanelType = 'location' | 'audience' | 'optional' | 'dayparting';
+type AudienceFocus = 'interests' | 'custom';
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Th({ children, required, muted, className }: {
@@ -481,7 +488,9 @@ function DayPartingGrid({ value, onChange }: {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function AdSetsTable({ rows, campaigns, onChange, settings }: Props) {
+export default function AdSetsTable({ rows, campaigns, onChange, settings, reachHistory, overlapHistory, onReachHistoryChange, onOverlapHistoryChange }: Props) {
+  const utils = trpc.useUtils();
+  const [activeAnalysisPanel, setActiveAnalysisPanel] = useState<'reach' | 'overlap' | null>(null);
   const hasCredentials = !!(settings?.accessToken && settings?.adAccountId);
   const hasPixel = !!(settings?.pixelId && hasCredentials);
 
@@ -532,8 +541,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
     { enabled: hasCredentials && narrowQuery.length >= 2, staleTime: 60 * 1000 }
   );
   const [expandedPanel, setExpandedPanel] = useState<{ rowId: string; panel: PanelType } | null>(null);
+  const [audienceFocus, setAudienceFocus] = useState<AudienceFocus>('interests');
   const [openPlacement, setOpenPlacement] = useState<string | null>(null);
   const [activeOptFields, setActiveOptFields] = useState<Record<string, Set<string>>>({});
+  const [bulkLocModal, setBulkLocModal] = useState<{ rowId: string } | null>(null);
+  const [bulkLocText, setBulkLocText] = useState('');
+  const [bulkLocType, setBulkLocType] = useState<'city' | 'region' | 'country' | 'zip'>('city');
+  const [bulkLocMatching, setBulkLocMatching] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Close panels on outside click
@@ -618,12 +632,64 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
           <span className="text-[10px] text-muted-foreground/50 bg-surface-2 px-1.5 py-0.5 rounded font-mono">{rows.length}</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Reach Estimate button */}
+          <button
+            onClick={() => setActiveAnalysisPanel(p => p === 'reach' ? null : 'reach')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
+              activeAnalysisPanel === 'reach'
+                ? 'bg-primary/20 border-primary/50 text-primary'
+                : 'bg-surface-2/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+            )}>
+            <SlidersHorizontal size={12} />
+            Reach Estimate
+            {reachHistory.length > 0 && (
+              <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{reachHistory.length}</span>
+            )}
+          </button>
+          {/* Audience Overlap button */}
+          <button
+            onClick={() => setActiveAnalysisPanel(p => p === 'overlap' ? null : 'overlap')}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
+              activeAnalysisPanel === 'overlap'
+                ? 'bg-primary/20 border-primary/50 text-primary'
+                : 'bg-surface-2/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+            )}>
+            <Users size={12} />
+            Audience Overlap
+            {overlapHistory.length > 0 && (
+              <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{overlapHistory.length}</span>
+            )}
+          </button>
           <button onClick={addRow}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 border border-primary/30 text-primary text-[11px] font-600 hover:bg-primary/20 transition-colors">
             <Plus size={12} /> Add Ad Set
           </button>
         </div>
       </div>
+
+      {/* Analysis panels */}
+      {activeAnalysisPanel === 'reach' && (
+        <div className="px-4 py-4 border-b border-border bg-surface-1/60">
+          <ReachEstimatePanel
+            rows={rows}
+            settings={settings}
+            history={reachHistory}
+            onHistoryChange={onReachHistoryChange}
+          />
+        </div>
+      )}
+      {activeAnalysisPanel === 'overlap' && (
+        <div className="px-4 py-4 border-b border-border bg-surface-1/60">
+          <AudienceOverlapPanel
+            rows={rows}
+            settings={settings}
+            history={overlapHistory}
+            onHistoryChange={onOverlapHistoryChange}
+          />
+        </div>
+      )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
@@ -643,7 +709,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
               <Th>Age</Th>
               <Th>Gender</Th>
               <Th>Location</Th>
-              <Th>Audience</Th>
+              <Th>Interests</Th>
+              <Th>Custom/LAL</Th>
               <Th>Optional Fields</Th>
               <Th className="w-16" />
             </tr>
@@ -960,23 +1027,40 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                       </button>
                     </td>
 
-                    {/* Audience expand button */}
-                    <td className="border-r border-border/30 p-0 min-w-[100px]">
+                    {/* Interests expand button */}
+                    <td className="border-r border-border/30 p-0 min-w-[90px]">
                       <button
-                        onClick={() => togglePanel(row.id, 'audience')}
+                        onClick={() => { setAudienceFocus('interests'); togglePanel(row.id, 'audience'); }}
                         className={cn(
                           'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
-                          isExpanded && expandedPanel?.panel === 'audience' && 'text-primary'
+                          isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'interests' && 'text-primary'
                         )}
                       >
-                        <Users size={11} className={
-                          (row.detailedInterests || row.targetedAudiences) ? 'text-primary' : 'text-muted-foreground/40'
-                        } />
-                        <span className={cn('text-[11px]',
-                          (row.detailedInterests || row.targetedAudiences) ? 'text-foreground' : 'text-muted-foreground/40')}>
-                          {(row.detailedInterests || row.targetedAudiences) ? 'Set' : 'Add…'}
+                        <Users size={11} className={row.detailedInterests ? 'text-primary' : 'text-muted-foreground/40'} />
+                        <span className={cn('text-[11px] truncate max-w-[60px]',
+                          row.detailedInterests ? 'text-foreground' : 'text-muted-foreground/40')}>
+                          {row.detailedInterests ? 'Set' : 'Add…'}
                         </span>
-                        {isExpanded && expandedPanel?.panel === 'audience'
+                        {isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'interests'
+                          ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
+                          : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
+                      </button>
+                    </td>
+                    {/* Custom/LAL expand button */}
+                    <td className="border-r border-border/30 p-0 min-w-[90px]">
+                      <button
+                        onClick={() => { setAudienceFocus('custom'); togglePanel(row.id, 'audience'); }}
+                        className={cn(
+                          'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
+                          isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'custom' && 'text-primary'
+                        )}
+                      >
+                        <Users size={11} className={row.targetedAudiences ? 'text-emerald-400' : 'text-muted-foreground/40'} />
+                        <span className={cn('text-[11px] truncate max-w-[60px]',
+                          row.targetedAudiences ? 'text-foreground' : 'text-muted-foreground/40')}>
+                          {row.targetedAudiences ? 'Set' : 'Add…'}
+                        </span>
+                        {isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'custom'
                           ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
                           : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
                       </button>
@@ -1019,14 +1103,20 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                   {/* Expanded panel row */}
                   {isExpanded && (
                     <tr key={`${row.id}-expanded`} className="border-b border-border bg-surface-2/10">
-                      <td colSpan={14} className="p-0">
-                        <div className="px-6 py-4 space-y-4">
+                      <td colSpan={15} className="p-0 overflow-hidden">
+                        <div className="sticky left-0 px-6 py-4 space-y-4" style={{ width: 'min(100vw - 2rem, 860px)' }}>
 
                           {/* LOCATION PANEL */}
                           {expandedPanel?.panel === 'location' && (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <span className="text-[12px] font-700 text-foreground">Location Targeting</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[12px] font-700 text-foreground">Location Targeting</span>
+                                  <button onClick={() => { setBulkLocModal({ rowId: row.id }); setBulkLocText(''); }}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded border border-border text-[10px] font-600 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
+                                    <Plus size={9} /> Bulk Paste
+                                  </button>
+                                </div>
                                 <button onClick={() => { setExpandedPanel(null); setLocationQuery(''); setLocationRowId(null); }}
                                   className="text-[11px] text-primary hover:text-primary/80 font-600 transition-colors">
                                   Done
@@ -1058,8 +1148,12 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                             onClick={() => {
                                               const label = [loc.name, loc.region, loc.countryName].filter(Boolean).join(', ');
                                               const current = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
+                                              const currentObjs = row.geoLocationObjects || [];
                                               if (!current.includes(label)) {
-                                                update(row.id, { geoLocations: [...current, label].join('\n') });
+                                                update(row.id, {
+                                                  geoLocations: [...current, label].join('\n'),
+                                                  geoLocationObjects: [...currentObjs, { key: loc.key, type: loc.type || 'country', name: label }],
+                                                });
                                               }
                                               setLocationQuery('');
                                               setLocationRowId(null);
@@ -1085,7 +1179,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                           {loc}
                                           <button onClick={() => {
                                             const updated = row.geoLocations!.split('\n').filter((l, li) => li !== i).join('\n');
-                                            update(row.id, { geoLocations: updated });
+                                            const updatedObjs = (row.geoLocationObjects || []).filter((_, oi) => oi !== i);
+                                            update(row.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
                                           }} className="hover:text-red-400 transition-colors"><X size={10} /></button>
                                         </span>
                                       ))}
@@ -1113,14 +1208,29 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                           {expandedPanel?.panel === 'audience' && (
                             <div className="space-y-4">
                               <div className="flex items-center justify-between">
-                                <span className="text-[12px] font-700 text-foreground">Audience Targeting</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[12px] font-700 text-foreground">Audience Targeting</span>
+                                  <div className="flex gap-0.5">
+                                    {(['interests', 'custom'] as AudienceFocus[]).map(f => (
+                                      <button key={f} onClick={() => setAudienceFocus(f)}
+                                        className={cn(
+                                          'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                                          audienceFocus === f
+                                            ? 'bg-primary/15 border-primary/40 text-primary'
+                                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
+                                        )}>
+                                        {f === 'interests' ? 'Interests & Behaviors' : 'Custom / LAL Audiences'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
                                 <button onClick={() => setExpandedPanel(null)}
                                   className="text-[11px] text-primary hover:text-primary/80 font-600 transition-colors">
                                   Done
                                 </button>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-6">
+                              <div className="grid grid-cols-2 gap-6" style={{ display: audienceFocus === 'interests' ? 'grid' : 'none' }}>
                                 {/* Left: Interest targeting */}
                                 <div className="space-y-3">
                                   {/* Detailed Interests — live typeahead */}
@@ -1153,11 +1263,15 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                     {/* Dropdown results */}
                                     {detailedRowId === row.id && detailedQuery.length >= 2 && (detailedResults?.results?.length ?? 0) > 0 && (
                                       <div className="border border-border rounded-lg bg-surface-1 shadow-xl mt-1 max-h-40 overflow-y-auto divide-y divide-border/30 z-50">
-                                        {(detailedResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; audienceSizeLower?: number }) => (
+                                        {(detailedResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; type?: string; audienceSizeLower?: number }) => (
                                           <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
                                             const current = row.detailedInterests ? row.detailedInterests.split('\n').filter(Boolean) : [];
+                                            const currentObjs = row.detailedInterestObjects || [];
                                             if (!current.includes(r.name)) {
-                                              update(row.id, { detailedInterests: [...current, r.name].join('\n') });
+                                              update(row.id, {
+                                                detailedInterests: [...current, r.name].join('\n'),
+                                                detailedInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                                              });
                                             }
                                             setDetailedQuery('');
                                             setDetailedRowId(null);
@@ -1177,7 +1291,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                         {row.detailedInterests.split('\n').filter(Boolean).map((interest, i) => (
                                           <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[10px] text-primary">
                                             {interest}
-                                            <button onClick={() => update(row.id, { detailedInterests: row.detailedInterests!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-primary/60"><X size={9} /></button>
+                                            <button onClick={() => {
+                                              const updatedObjs = (row.detailedInterestObjects || []).filter((_, oi) => oi !== i);
+                                              update(row.id, {
+                                                detailedInterests: row.detailedInterests!.split('\n').filter((_, li) => li !== i).join('\n'),
+                                                detailedInterestObjects: updatedObjs,
+                                              });
+                                            }} className="hover:text-primary/60"><X size={9} /></button>
                                           </span>
                                         ))}
                                       </div>
@@ -1223,12 +1343,17 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                     {/* Dropdown results */}
                                     {narrowRowId === row.id && narrowQuery.length >= 2 && (narrowResults?.results?.length ?? 0) > 0 && (
                                       <div className="border border-border rounded-lg bg-surface-1 shadow-xl mt-1 max-h-40 overflow-y-auto divide-y divide-border/30 z-50">
-                                        {(narrowResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; audienceSizeLower?: number }) => (
+                                        {(narrowResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; type?: string; audienceSizeLower?: number }) => (
                                           <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
                                             const current = row.narrowInterests ? row.narrowInterests.split('\n').filter(Boolean) : [];
+                                            const currentObjs = row.narrowInterestObjects || [];
                                             if (!current.includes(r.name)) {
-                                              update(row.id, { narrowInterests: [...current, r.name].join('\n') });
+                                              update(row.id, {
+                                                narrowInterests: [...current, r.name].join('\n'),
+                                                narrowInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                                              });
                                             }
+                                            // narrowInterestObjects is already the correct field name
                                             setNarrowQuery('');
                                             setNarrowRowId(null);
                                           }}
@@ -1266,7 +1391,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                 </div>
 
                                 {/* Right: Custom/LAL audiences */}
-                                <div className="space-y-3">
+                                <div className="space-y-3" style={{ display: audienceFocus === 'interests' ? 'block' : 'none' }}>
                                   {/* Custom audience picker */}
                                   <div>
                                     <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">
@@ -1403,6 +1528,92 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Custom/LAL full view when focused */}
+                              {audienceFocus === 'custom' && (
+                                <div className="grid grid-cols-2 gap-6">
+                                  <div className="space-y-3">
+                                    <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Targeted Custom / LAL Audiences</label>
+                                    {hasCredentials ? (
+                                      <>
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                          <input value={audienceSearch} onChange={e => setAudienceSearch(e.target.value)}
+                                            placeholder="Search audiences…"
+                                            className="flex-1 px-2 py-1.5 text-[11px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 placeholder:text-muted-foreground/30" />
+                                          {loadingAudiences && <span className="text-[10px] text-muted-foreground">Loading…</span>}
+                                        </div>
+                                        {customAudiences.length > 0 && (
+                                          <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
+                                            {customAudiences.map((aud: { id: string; name: string; approximateCount?: number; subtype?: string }) => {
+                                              const isSel = (row.targetedAudiences || '').includes(aud.name);
+                                              return (
+                                                <button key={aud.id} onClick={() => {
+                                                  const cur = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
+                                                  update(row.id, { targetedAudiences: isSel ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                                                }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
+                                                  isSel ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2 text-foreground')}>
+                                                  <span>{aud.name}</span>
+                                                  <span className="text-[10px] text-muted-foreground/60">{aud.subtype} {aud.approximateCount ? `• ${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</span>
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        {row.targetedAudiences && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {row.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                                              <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[10px] text-primary">
+                                                {a}
+                                                <button onClick={() => update(row.id, { targetedAudiences: row.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <textarea value={row.targetedAudiences} onChange={e => update(row.id, { targetedAudiences: e.target.value })}
+                                        placeholder="Website Visitors 180d, Email List LAL 1%…" rows={3}
+                                        className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30" />
+                                    )}
+                                  </div>
+                                  <div className="space-y-3">
+                                    <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Excluded Custom / LAL Audiences</label>
+                                    {hasCredentials && customAudiences.length > 0 ? (
+                                      <>
+                                        <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
+                                          {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
+                                            const isExcl = (row.excludedAudiences || '').includes(aud.name);
+                                            return (
+                                              <button key={aud.id} onClick={() => {
+                                                const cur = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
+                                                update(row.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                                              }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
+                                                isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-surface-2 text-foreground')}>
+                                                <span>{aud.name}</span>
+                                                <span className="text-[10px] text-muted-foreground/60">{aud.subtype}</span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                        {row.excludedAudiences && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5">
+                                            {row.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                                              <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
+                                                {a}
+                                                <button onClick={() => update(row.id, { excludedAudiences: row.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <textarea value={row.excludedAudiences} onChange={e => update(row.id, { excludedAudiences: e.target.value })}
+                                        placeholder="Existing Customers, Purchasers 180d…" rows={3}
+                                        className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30" />
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1573,6 +1784,96 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings }: Pro
           </div>
         )}
       </div>
+
+      {/* Bulk Location Paste Modal */}
+      {bulkLocModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setBulkLocModal(null)}>
+          <div className="bg-surface-1 border border-border rounded-xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] font-700 text-foreground">Bulk Paste Locations</span>
+              <button onClick={() => setBulkLocModal(null)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+            </div>
+            <div>
+              <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Location Type</label>
+              <div className="flex gap-1.5">
+                {(['city', 'region', 'country', 'zip'] as const).map(t => (
+                  <button key={t} onClick={() => setBulkLocType(t)}
+                    className={cn(
+                      'px-3 py-1 rounded border text-[11px] font-600 capitalize transition-all',
+                      bulkLocType === t
+                        ? 'bg-primary/15 border-primary/40 text-primary'
+                        : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
+                    )}>
+                    {t === 'region' ? 'State/Region' : t === 'zip' ? 'Zip/Postal' : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Paste Locations (one per line)</label>
+              <textarea
+                value={bulkLocText}
+                onChange={e => setBulkLocText(e.target.value)}
+                placeholder={bulkLocType === 'city' ? 'New York\nLos Angeles\nChicago' : bulkLocType === 'region' ? 'California\nTexas\nNew York' : bulkLocType === 'zip' ? '10001\n90210\n60601' : 'United States\nCanada\nUnited Kingdom'}
+                rows={8}
+                className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30 font-mono"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-muted-foreground">{bulkLocText.split('\n').filter(s => s.trim()).length} location{bulkLocText.split('\n').filter(s => s.trim()).length !== 1 ? 's' : ''} entered</span>
+              <div className="flex gap-2">
+                <button onClick={() => setBulkLocModal(null)}
+                  className="px-3 py-1.5 rounded border border-border text-[12px] font-600 text-muted-foreground hover:text-foreground transition-colors">
+                  Cancel
+                </button>
+                <button
+                  disabled={bulkLocMatching || !bulkLocText.trim()}
+                  onClick={async () => {
+                    if (!bulkLocModal) return;
+                    const lines = bulkLocText.split('\n').map(s => s.trim()).filter(Boolean);
+                    if (!lines.length) return;
+                    setBulkLocMatching(true);
+                    try {
+                      const row = rows.find(r => r.id === bulkLocModal.rowId);
+                      if (!row) return;
+                      const matched: { key: string; type: string; name: string }[] = [];
+                      const labels: string[] = [];
+                      for (const line of lines) {
+                        try {
+                          const res = await utils.meta.searchGeoLocations.fetch({
+                            accessToken: settings?.accessToken ?? '',
+                            query: line,
+                            location_types: [bulkLocType],
+                          });
+                          if (res?.results?.length) {
+                            const loc = res.results[0];
+                            const label = [loc.name, loc.region, loc.countryName].filter(Boolean).join(', ');
+                            matched.push({ key: loc.key, type: loc.type || bulkLocType, name: label });
+                            labels.push(label);
+                          }
+                        } catch { /* skip failed lookups */ }
+                      }
+                      const currentLabels = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
+                      const currentObjs = row.geoLocationObjects || [];
+                      const newLabels = labels.filter(l => !currentLabels.includes(l));
+                      const newObjs = matched.filter(m => !currentLabels.includes(m.name));
+                      update(bulkLocModal.rowId, {
+                        geoLocations: [...currentLabels, ...newLabels].join('\n'),
+                        geoLocationObjects: [...currentObjs, ...newObjs],
+                      });
+                      setBulkLocModal(null);
+                    } finally {
+                      setBulkLocMatching(false);
+                    }
+                  }}
+                  className="px-4 py-1.5 rounded bg-primary text-primary-foreground text-[12px] font-600 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                  {bulkLocMatching ? <><span className="animate-spin">⟳</span> Matching…</> : 'Match Locations'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

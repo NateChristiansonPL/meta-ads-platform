@@ -136,3 +136,36 @@
 - [x] Add "Recommend using 1.6 Lite model for credit efficiency" note next to model selector
 - [x] Hide Manus AI tool from sidebar
 - [x] Rename "Tools" to "Coming Soon" and add Creative Decay, Audience Saturation, Allocation Drift auto-detect blocks
+
+## Campaign Builder - Round 2 Updates
+
+- [x] Fix ad set ID pre-population bug in AdsMatrix (only use numeric Meta IDs)
+- [x] Add geoLocationObjects and interestObjects structured fields to AdSetRow
+- [x] Update AdSetsTable location picker to store key+type alongside display label
+- [x] Update AdSetsTable interest picker to store id+type alongside display name
+- [x] Add reach estimate tRPC procedure (Meta /reachestimate endpoint)
+- [x] Add delivery estimate tRPC procedure (Meta /delivery_estimate for CPM)
+- [x] Add audience overlap tRPC procedure (dual-anchor methodology)
+- [x] Build Reach Estimate panel in Ad Sets tab with session-persistent history
+- [x] Build Audience Overlap panel in Ad Sets tab with session-persistent history
+- [x] Remove Find & Replace button from Ads tab toolbar
+- [x] Remove Audience Overlap panel from Export tab
+- [x] Creative Library: add Asset Upload button/modal (hard asset + URL, with name field)
+- [x] Creative Library: add list/tile toggle to media browser
+- [x] Creative Library: add per-placement URL customization button in website URL cell
+- [x] Creative Library: add per-placement copy customization button (headline/primary text)
+- [x] Creative Library: remove Lead Gen Form button from toolbar
+- [x] Creative Library: remove Source Post ID column
+- [x] Creative Library: remove Preview Link column
+- [x] Ad Sets: fix typeahead dropdown positioning (sticky left-0 panel)
+- [x] Ad Sets: split Audience column into Detailed Targeting and Custom/LAL Audiences
+- [x] Ad Sets: Custom/LAL column uses live account custom/LAL audience search
+- [x] Ad Sets: fix settings/session button backgrounds (add solid bg)
+- [x] Ad Sets: engagement objective logic (page visits, page likes, on your ads)
+- [x] Ad Sets: bulk location paste option
+- [x] Ads tab: add primary text, headline, description, CTA columns after website URL override
+- [x] Ads tab: Lead Gen Form column added (recalls forms from connected page)
+- [x] Ads tab: add Lead Gen Form column after UTM override
+- [x] Ads tab: move Source Post ID column to after Lead Gen Form column
+- [x] Ads tab: Lead Gen Form uses page-recall picker (simplified per user request)
+- [x] Wire pl-campaign-creation skill to Export Launch button

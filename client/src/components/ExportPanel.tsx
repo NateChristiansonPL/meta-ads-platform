@@ -10,20 +10,29 @@
  * - Launch button
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CheckCircle2, XCircle, AlertCircle, AlertTriangle, Copy, Rocket,
-  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2
+  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CampaignBuilderState, AdRow } from '@/lib/campaignStore';
 import { LaunchProgress } from '@/hooks/useLaunchBuild';
-import AudienceOverlapPanel from './AudienceOverlapPanel';
+import { trpc } from '@/lib/trpc';
 
 interface Props {
   state: CampaignBuilderState;
   onLaunch: () => void;
   launchProgress?: LaunchProgress;
+}
+
+interface ManusLaunchState {
+  phase: 'idle' | 'launching' | 'running' | 'done' | 'error';
+  runId?: number;
+  statusMessages: string[];
+  taskUrl?: string;
+  errorMessage?: string;
+  reportMarkdown?: string;
 }
 
 interface Check {
@@ -234,7 +243,69 @@ function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRo
 export default function ExportPanel({ state, onLaunch, launchProgress }: Props) {
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   const [localAds, setLocalAds] = useState<AdRow[]>(state.ads);
-  const [commandCopied, setCommandCopied] = useState(false);
+  const [manusLaunch, setManusLaunch] = useState<ManusLaunchState>({
+    phase: 'idle',
+    statusMessages: [],
+  });
+
+  const launchCampaignBuild = trpc.runs.launchCampaignBuild.useMutation();
+  const getRunStatus = trpc.runs.getRunStatus.useQuery(
+    { runId: manusLaunch.runId! },
+    {
+      enabled: manusLaunch.runId !== undefined && (manusLaunch.phase === 'running' || manusLaunch.phase === 'launching'),
+      refetchInterval: 4000,
+    }
+  );
+
+  useEffect(() => {
+    const run = getRunStatus.data;
+    if (!run) return;
+    const statusLog: Array<{ ts: number; msg: string }> = (run as { statusLog?: Array<{ ts: number; msg: string }> }).statusLog ?? [];
+    const msgs = statusLog.map((s) => s.msg);
+    if (run.status === 'success') {
+      setManusLaunch(prev => ({
+        ...prev,
+        phase: 'done',
+        statusMessages: msgs,
+        taskUrl: (run as { taskUrl?: string }).taskUrl ?? undefined,
+        reportMarkdown: run.reportMarkdown ?? undefined,
+      }));
+    } else if (run.status === 'error') {
+      setManusLaunch(prev => ({
+        ...prev,
+        phase: 'error',
+        statusMessages: msgs,
+        errorMessage: run.errorMessage ?? 'Unknown error',
+        taskUrl: (run as { taskUrl?: string }).taskUrl ?? undefined,
+      }));
+    } else {
+      setManusLaunch(prev => ({ ...prev, phase: 'running', statusMessages: msgs }));
+    }
+  }, [getRunStatus.data]);
+
+  const handleManusLaunch = async () => {
+    const { settings, buildMode } = state;
+    if (!settings.adAccountId.trim()) { toast.error('Ad Account ID is required.'); return; }
+    if (!settings.facebookPageId?.trim()) { toast.error('Facebook Page ID is required in Settings.'); return; }
+    setManusLaunch({ phase: 'launching', statusMessages: ['Submitting build to Manus...'] });
+    try {
+      const result = await launchCampaignBuild.mutateAsync({
+        adAccountId: settings.adAccountId,
+        adAccountName: settings.adAccountName,
+        facebookPageId: settings.facebookPageId,
+        instagramUserId: settings.instagramUserId,
+        pixelId: settings.pixelId,
+        buildMode,
+        stateJson: JSON.stringify(state),
+        agentProfile: 'manus-1.6-lite',
+      });
+      setManusLaunch(prev => ({ ...prev, phase: 'running', runId: result.runId, statusMessages: ['Build submitted. Manus agent is running...'] }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setManusLaunch({ phase: 'error', statusMessages: [], errorMessage: msg });
+      toast.error(`Launch failed: ${msg}`);
+    }
+  };
 
   const { campaigns, adSets, creatives, ads, settings, buildMode } = state;
 
@@ -317,15 +388,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
   const failCount = checks.filter(c => !c.pass && !c.warn).length;
   const warnCount = checks.filter(c => c.warn && !c.pass).length;
 
-  const manusCommand = useMemo(() => generateManusCommand(state), [state]);
 
-  const copyCommand = () => {
-    navigator.clipboard.writeText(manusCommand).then(() => {
-      setCommandCopied(true);
-      toast.success('Command copied to clipboard');
-      setTimeout(() => setCommandCopied(false), 2000);
-    });
-  };
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -334,7 +397,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         <div>
           <h2 className="text-base font-700 text-foreground">Export &amp; Launch</h2>
           <p className="text-[12px] text-muted-foreground mt-0.5">
-            Review your build, make final edits, then copy the Manus command to push to Meta.
+            Review your build, make final edits, then launch via Manus to push to Meta.
           </p>
         </div>
 
@@ -408,120 +471,89 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
             ))}
           </div>
         </div>
-
-        {/* Audience Overlap */}
-        <AudienceOverlapPanel settings={settings} />
-
-        {/* Find & Replace */}
-        <FindReplace ads={localAds} onUpdate={setLocalAds} />
-
         {/* Ad override table */}
         <AdOverrideTable ads={localAds} onUpdate={setLocalAds} />
 
-        {/* Manus command */}
+        {/* Launch via Manus Panel */}
         <div className="bg-surface-1 rounded-xl border border-border overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div>
               <h3 className="text-[12px] font-700 text-foreground flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-primary" /> Manus Command
+                <Rocket className="w-3.5 h-3.5 text-primary" /> Launch via Manus
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Copy and run in a Manus session with the /pl-campaign-creation skill.</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Runs the pl-campaign-creation skill to push your build to Meta. Progress is tracked in real time.</p>
             </div>
-            <button
-              onClick={copyCommand}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surface-2 hover:bg-surface-3 text-xs font-600 text-foreground border border-border transition-all"
-            >
-              <Copy className="w-3.5 h-3.5" /> {commandCopied ? 'Copied!' : 'Copy'}
-            </button>
+            {manusLaunch.phase !== 'idle' && (
+              <button
+                onClick={() => setManusLaunch({ phase: 'idle', statusMessages: [] })}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Reset
+              </button>
+            )}
           </div>
-          <pre className="p-4 text-[11px] font-mono text-foreground/80 overflow-x-auto whitespace-pre-wrap leading-relaxed bg-surface-0 max-h-72">
-            {manusCommand}
-          </pre>
-        </div>
-
-        {/* Launch progress */}
-        {launchProgress && launchProgress.phase !== 'idle' && (
-          <div className={`rounded-xl border p-4 space-y-3 ${
-            launchProgress.phase === 'done' ? 'bg-emerald-500/10 border-emerald-500/20' :
-            launchProgress.phase === 'error' ? 'bg-red-500/10 border-red-500/20' :
-            'bg-primary/10 border-primary/20'
-          }`}>
-            <div className="flex items-center gap-2">
-              {launchProgress.phase === 'done' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              ) : launchProgress.phase === 'error' ? (
-                <XCircle className="w-4 h-4 text-red-400" />
-              ) : (
-                <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              )}
-              <span className={`text-[12px] font-700 ${
-                launchProgress.phase === 'done' ? 'text-emerald-300' :
-                launchProgress.phase === 'error' ? 'text-red-300' :
-                'text-primary'
-              }`}>
-                {launchProgress.phase === 'done' ? 'Build complete!' :
-                 launchProgress.phase === 'error' ? `Build finished with ${launchProgress.errors.length} error${launchProgress.errors.length !== 1 ? 's' : ''}` :
-                 launchProgress.phase === 'campaigns' ? 'Creating campaigns...' :
-                 launchProgress.phase === 'adsets' ? 'Creating ad sets...' :
-                 'Creating ads...'}
-              </span>
-              {launchProgress.total > 0 && (
-                <span className="text-[11px] text-muted-foreground ml-auto">
-                  {launchProgress.completed} / {launchProgress.total}
-                </span>
-              )}
-            </div>
-            {launchProgress.currentItem && launchProgress.phase !== 'done' && launchProgress.phase !== 'error' && (
-              <p className="text-[11px] text-muted-foreground font-mono truncate">{launchProgress.currentItem}</p>
+          <div className="p-4 space-y-3">
+            {manusLaunch.phase === 'idle' && (
+              <p className="text-[11px] text-muted-foreground">
+                Click <strong>Launch Build</strong> below to submit this build to a Manus agent running the pl-campaign-creation skill.
+                The agent will create your campaigns, ad sets, and ads in Meta Ads Manager.
+              </p>
             )}
-            {/* Progress bar */}
-            {launchProgress.total > 0 && (
-              <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    launchProgress.phase === 'done' ? 'bg-emerald-500' :
-                    launchProgress.phase === 'error' ? 'bg-red-500' :
-                    'bg-primary'
-                  }`}
-                  style={{ width: `${Math.round((launchProgress.completed / launchProgress.total) * 100)}%` }}
-                />
-              </div>
-            )}
-            {/* Errors */}
-            {launchProgress.errors.length > 0 && (
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {launchProgress.errors.map((err, i) => (
-                  <p key={i} className="text-[10px] text-red-300/80 font-mono leading-relaxed pl-2 border-l border-red-500/30">{err}</p>
-                ))}
-              </div>
-            )}
-            {/* Sheet write-back status */}
-            {launchProgress.sheetWriteBack && (
-              <div className={`flex items-start gap-2 p-2.5 rounded-lg border text-[11px] ${
-                launchProgress.sheetWriteBack.status === 'success'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                  : launchProgress.sheetWriteBack.status === 'error'
-                  ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                  : 'bg-surface-2 border-border text-muted-foreground'
-              }`}>
-                {launchProgress.sheetWriteBack.status === 'success' ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                ) : launchProgress.sheetWriteBack.status === 'error' ? (
-                  <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                ) : (
-                  <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            {(manusLaunch.phase === 'launching' || manusLaunch.phase === 'running') && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[12px] text-primary">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Manus agent is running...</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 bg-surface-0 rounded-lg p-3">
+                  {manusLaunch.statusMessages.map((msg, i) => (
+                    <p key={i} className="text-[10px] font-mono text-foreground/70 leading-relaxed">{msg}</p>
+                  ))}
+                </div>
+                {manusLaunch.taskUrl && (
+                  <a href={manusLaunch.taskUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" /> View task in Manus
+                  </a>
                 )}
-                <span>
-                  <span className="font-700">Sheet write-back: </span>
-                  {launchProgress.sheetWriteBack.status === 'success'
-                    ? `${launchProgress.sheetWriteBack.written} cells updated in Google Sheet.`
-                    : launchProgress.sheetWriteBack.message || 'No data written.'}
-                </span>
+              </div>
+            )}
+            {manusLaunch.phase === 'done' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[12px] text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Build complete!</span>
+                </div>
+                {manusLaunch.taskUrl && (
+                  <a href={manusLaunch.taskUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" /> View full report in Manus
+                  </a>
+                )}
+                {manusLaunch.reportMarkdown && (
+                  <div className="max-h-48 overflow-y-auto bg-surface-0 rounded-lg p-3">
+                    <pre className="text-[10px] font-mono text-foreground/70 whitespace-pre-wrap leading-relaxed">{manusLaunch.reportMarkdown.slice(0, 2000)}{manusLaunch.reportMarkdown.length > 2000 ? '\n...(see full report in Manus)' : ''}</pre>
+                  </div>
+                )}
+              </div>
+            )}
+            {manusLaunch.phase === 'error' && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[12px] text-red-400">
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Launch failed</span>
+                </div>
+                <p className="text-[11px] text-red-300/80 font-mono bg-surface-0 rounded-lg p-3">{manusLaunch.errorMessage}</p>
+                {manusLaunch.taskUrl && (
+                  <a href={manusLaunch.taskUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" /> View task in Manus
+                  </a>
+                )}
               </div>
             )}
           </div>
-        )}
-
+        </div>
         {/* Launch */}
         <div className="flex items-center justify-between pt-2 pb-8">
           <div className="text-[11px]">
@@ -538,16 +570,16 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
             )}
           </div>
           <button
-            onClick={onLaunch}
-            disabled={!allPass || (launchProgress?.phase !== 'idle' && launchProgress?.phase !== 'done' && launchProgress?.phase !== 'error')}
+            onClick={handleManusLaunch}
+            disabled={!allPass || manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 transition-all ${
-              allPass && (launchProgress?.phase === 'idle' || launchProgress?.phase === 'done' || launchProgress?.phase === 'error' || !launchProgress)
+              allPass && manusLaunch.phase !== 'launching' && manusLaunch.phase !== 'running'
                 ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-500/20'
                 : 'bg-surface-2 text-muted-foreground cursor-not-allowed border border-border'
             }`}
           >
-            {launchProgress && launchProgress.phase !== 'idle' && launchProgress.phase !== 'done' && launchProgress.phase !== 'error' ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Launching...</>
+            {manusLaunch.phase === 'launching' || manusLaunch.phase === 'running' ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Running...</>
             ) : (
               <><Rocket className="w-4 h-4" /> Launch Build</>
             )}

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, Search, Image as ImageIcon, Film, Check, RefreshCw } from 'lucide-react';
+import { X, Search, Image as ImageIcon, Film, Check, RefreshCw, LayoutGrid, List } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { BuildSettings } from '@/lib/campaignStore';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export default function MediaBrowserModal({ settings, onSelect, onClose, default
   const [tab, setTab] = useState<'images' | 'videos'>(defaultTab);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<MediaSelection | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const hasCredentials = !!(settings.accessToken && settings.adAccountId);
 
@@ -93,6 +94,14 @@ export default function MediaBrowserModal({ settings, onSelect, onClose, default
               className="w-full pl-7 pr-3 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
             />
           </div>
+          <div className="flex items-center gap-0.5 bg-surface-2 rounded-lg p-0.5">
+            <button onClick={() => setViewMode('grid')}
+              className={cn('p-1.5 rounded-md transition-all', viewMode === 'grid' ? 'bg-surface-1 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+              title="Grid view"><LayoutGrid size={13} /></button>
+            <button onClick={() => setViewMode('list')}
+              className={cn('p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-surface-1 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+              title="List view"><List size={13} /></button>
+          </div>
           <button
             onClick={() => tab === 'images' ? refetchImages() : refetchVideos()}
             className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -118,38 +127,64 @@ export default function MediaBrowserModal({ settings, onSelect, onClose, default
                 <div className="flex items-center justify-center h-40 text-[12px] text-muted-foreground">No images found.</div>
               )}
               {!loadingImages && images.length > 0 && (
-                <div className="grid grid-cols-5 gap-2">
-                  {images.map((img: { hash: string; url?: string; name?: string; width?: number; height?: number }) => {
-                    const isSelected = selected?.type === 'image' && selected.hash === img.hash;
-                    return (
-                      <button
-                        key={img.hash}
-                        onClick={() => setSelected({ type: 'image', hash: img.hash, url: img.url, name: img.name })}
-                        className={cn(
-                          'relative rounded-lg overflow-hidden border-2 transition-all aspect-square bg-surface-2',
-                          isSelected ? 'border-primary shadow-lg shadow-primary/20' : 'border-transparent hover:border-border'
-                        )}>
-                        {img.url ? (
-                          <img src={img.url} alt={img.name || img.hash} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <ImageIcon size={20} className="text-muted-foreground/30" />
+                viewMode === 'grid' ? (
+                  <div className="grid grid-cols-5 gap-2">
+                    {images.filter((img: { hash: string; url?: string; name?: string; width?: number; height?: number }) => !search || (img.name || img.hash).toLowerCase().includes(search.toLowerCase())).map((img: { hash: string; url?: string; name?: string; width?: number; height?: number }) => {
+                      const isSelected = selected?.type === 'image' && selected.hash === img.hash;
+                      return (
+                        <button
+                          key={img.hash}
+                          onClick={() => setSelected({ type: 'image', hash: img.hash, url: img.url, name: img.name })}
+                          className={cn(
+                            'relative rounded-lg overflow-hidden border-2 transition-all aspect-square bg-surface-2',
+                            isSelected ? 'border-primary shadow-lg shadow-primary/20' : 'border-transparent hover:border-border'
+                          )}>
+                          {img.url ? (
+                            <img src={img.url} alt={img.name || img.hash} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <ImageIcon size={20} className="text-muted-foreground/30" />
+                            </div>
+                          )}
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                              <Check size={11} className="text-white" />
+                            </div>
+                          )}
+                          {img.name && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5">
+                              <p className="text-[9px] text-white truncate">{img.name}</p>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {images.filter((img: { hash: string; url?: string; name?: string; width?: number; height?: number }) => !search || (img.name || img.hash).toLowerCase().includes(search.toLowerCase())).map((img: { hash: string; url?: string; name?: string; width?: number; height?: number }) => {
+                      const isSelected = selected?.type === 'image' && selected.hash === img.hash;
+                      return (
+                        <button
+                          key={img.hash}
+                          onClick={() => setSelected({ type: 'image', hash: img.hash, url: img.url, name: img.name })}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left',
+                            isSelected ? 'border-primary bg-primary/5' : 'border-transparent hover:border-border hover:bg-surface-2'
+                          )}>
+                          <div className="w-10 h-10 rounded bg-surface-2 flex-shrink-0 overflow-hidden">
+                            {img.url ? <img src={img.url} alt={img.name || img.hash} className="w-full h-full object-cover" /> : <ImageIcon size={16} className="text-muted-foreground/30 m-auto mt-2" />}
                           </div>
-                        )}
-                        {isSelected && (
-                          <div className="absolute top-1 right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check size={11} className="text-white" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-600 text-foreground truncate">{img.name || 'Untitled'}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">{img.hash}</p>
                           </div>
-                        )}
-                        {img.name && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5">
-                            <p className="text-[9px] text-white truncate">{img.name}</p>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          {isSelected && <Check size={14} className="text-primary flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </>
           )}
@@ -163,44 +198,70 @@ export default function MediaBrowserModal({ settings, onSelect, onClose, default
                 <div className="flex items-center justify-center h-40 text-[12px] text-muted-foreground">No videos found.</div>
               )}
               {!loadingVideos && videos.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {videos.map((vid: { id: string; title?: string; thumbnailUrl?: string; lengthSeconds?: number }) => {
-                    const isSelected = selected?.type === 'video' && selected.videoId === vid.id;
-                    return (
-                      <button
-                        key={vid.id}
-                        onClick={() => setSelected({ type: 'video', videoId: vid.id, url: vid.thumbnailUrl, name: vid.title })}
-                        className={cn(
-                          'relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-surface-2',
-                          isSelected ? 'border-primary shadow-lg shadow-primary/20' : 'border-transparent hover:border-border'
-                        )}>
-                        {vid.thumbnailUrl ? (
-                          <img src={vid.thumbnailUrl} alt={vid.title || vid.id} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Film size={20} className="text-muted-foreground/30" />
+                viewMode === 'grid' ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {videos.filter((vid: { id: string; title?: string; thumbnailUrl?: string; lengthSeconds?: number }) => !search || (vid.title || vid.id).toLowerCase().includes(search.toLowerCase())).map((vid: { id: string; title?: string; thumbnailUrl?: string; lengthSeconds?: number }) => {
+                      const isSelected = selected?.type === 'video' && selected.videoId === vid.id;
+                      return (
+                        <button
+                          key={vid.id}
+                          onClick={() => setSelected({ type: 'video', videoId: vid.id, url: vid.thumbnailUrl, name: vid.title })}
+                          className={cn(
+                            'relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-surface-2',
+                            isSelected ? 'border-primary shadow-lg shadow-primary/20' : 'border-transparent hover:border-border'
+                          )}>
+                          {vid.thumbnailUrl ? (
+                            <img src={vid.thumbnailUrl} alt={vid.title || vid.id} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Film size={20} className="text-muted-foreground/30" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
+                              <Film size={14} className="text-white" />
+                            </div>
                           </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
-                            <Film size={14} className="text-white" />
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                              <Check size={11} className="text-white" />
+                            </div>
+                          )}
+                          {vid.title && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5">
+                              <p className="text-[9px] text-white truncate">{vid.title}</p>
+                              {vid.lengthSeconds && <p className="text-[9px] text-white/60">{vid.lengthSeconds}s</p>}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {videos.filter((vid: { id: string; title?: string; thumbnailUrl?: string; lengthSeconds?: number }) => !search || (vid.title || vid.id).toLowerCase().includes(search.toLowerCase())).map((vid: { id: string; title?: string; thumbnailUrl?: string; lengthSeconds?: number }) => {
+                      const isSelected = selected?.type === 'video' && selected.videoId === vid.id;
+                      return (
+                        <button
+                          key={vid.id}
+                          onClick={() => setSelected({ type: 'video', videoId: vid.id, url: vid.thumbnailUrl, name: vid.title })}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left',
+                            isSelected ? 'border-primary bg-primary/5' : 'border-transparent hover:border-border hover:bg-surface-2'
+                          )}>
+                          <div className="w-12 h-8 rounded bg-surface-2 flex-shrink-0 overflow-hidden relative">
+                            {vid.thumbnailUrl ? <img src={vid.thumbnailUrl} alt={vid.title || vid.id} className="w-full h-full object-cover" /> : <Film size={14} className="text-muted-foreground/30 absolute inset-0 m-auto" />}
                           </div>
-                        </div>
-                        {isSelected && (
-                          <div className="absolute top-1 right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check size={11} className="text-white" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-600 text-foreground truncate">{vid.title || 'Untitled'}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">{vid.id}{vid.lengthSeconds ? ` · ${vid.lengthSeconds}s` : ''}</p>
                           </div>
-                        )}
-                        {vid.title && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5">
-                            <p className="text-[9px] text-white truncate">{vid.title}</p>
-                            {vid.lengthSeconds && <p className="text-[9px] text-white/60">{vid.lengthSeconds}s</p>}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          {isSelected && <Check size={14} className="text-primary flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </>
           )}

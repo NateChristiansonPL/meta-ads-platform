@@ -23,6 +23,7 @@ export const SKILL_IDS: Record<string, string> = {
   "creative-lifecycle": "pl-creative-lifecycle-v3",
   "structural-audit": "meta-ads-audit",
   "audience-overlap": "pl-audience-overlap-spend",
+  "campaign-creation": "pl-campaign-creation",
 };
 
 interface ManusTaskOptions {
@@ -774,4 +775,61 @@ export async function listManusSkills(apiKey: string) {
     timeout: 15000,
   });
   return resp.data?.skills ?? [];
+}
+
+/**
+ * Build a prompt for the pl-campaign-creation skill from a Campaign Builder state snapshot.
+ * This is called by the launchCampaignBuild procedure in routers.ts.
+ */
+export function buildCampaignCreationPrompt(params: {
+  accessToken: string;
+  adAccountId: string;
+  facebookPageId: string;
+  instagramUserId?: string;
+  pixelId?: string;
+  buildMode: "full" | "ads-only" | "update";
+  stateJson: string; // full CampaignBuilderState as JSON
+}): string {
+  const { accessToken, adAccountId, facebookPageId, instagramUserId, pixelId, buildMode, stateJson } = params;
+  const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+
+  const tokenExport = `export META_ACCESS_TOKEN="${accessToken}"\n`;
+
+  return `Please run the **pl-campaign-creation** skill to create Meta Ads campaigns from the following builder configuration.
+
+${tokenExport}
+**Ad Account ID:** ${accountId}
+**Facebook Page ID:** ${facebookPageId}
+${instagramUserId ? `**Instagram User ID:** ${instagramUserId}` : ""}
+${pixelId ? `**Pixel ID:** ${pixelId}` : ""}
+**Build Mode:** ${buildMode}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-campaign-creation/SKILL.md\` first, then use the following campaign builder state to create the campaigns, ad sets, and ads.
+
+The campaign builder state below contains all the data needed to create the campaigns. Use it to populate the Google Sheet template or directly call the Meta API as instructed by the skill.
+
+## Campaign Builder State (JSON)
+
+\`\`\`json
+${stateJson}
+\`\`\`
+
+## Build Instructions
+
+- **Build Mode: ${buildMode}**
+  - \`full\`: Create campaigns, ad sets, and ads from scratch
+  - \`ads-only\`: Only create ads (ad sets and campaigns already exist — use the adSetId values in the ad set rows)
+  - \`update-ads\`: Update existing ads where \`needsUpdate: true\` in the ads array (use the adId values)
+
+- For each ad set, the \`geoLocationObjects\` array contains structured geo targets with \`key\` and \`type\` fields for the Meta API
+- For each ad set, the \`detailedInterestObjects\` array contains interest targets with \`id\` and \`type\` fields
+- For each creative, the \`placementAssets\` array contains placement-specific media and copy overrides
+- For each ad, the \`leadGenFormId\` field (if set) should be used as the lead gen form ID
+
+After completing the build:
+1. Report the IDs of all created/updated campaigns, ad sets, and ads
+2. Note any errors or skipped items
+3. Provide a summary of what was created vs. what failed`;
 }

@@ -98,8 +98,8 @@ export default function SessionManager({ state, onLoad }: Props) {
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-600 border transition-all',
           open
-            ? 'bg-primary/10 text-primary border-primary/30'
-            : 'text-muted-foreground hover:text-foreground border-border hover:border-border/80 bg-surface-2/50'
+            ? 'bg-primary/20 text-primary border-primary/40'
+            : 'text-foreground border-border bg-surface-2 hover:bg-surface-1 hover:border-border/80'
         )}>
         <FolderOpen size={13} />
         Sessions

@@ -1,10 +1,11 @@
 // CreativesTable — row-per-creative bulk-entry table
-// Columns: # | ID | Asset Type (buttons) | Dimensions (pills) | Creative Concept | Asset Length | Asset(s) | Website URL | Headline (40) | Primary Text (125) | Description (30) | CTA | UTM Params | Source Post ID | Preview Link
+// Columns: # | ID | Asset Type (buttons) | Dimensions (pills) | Creative Concept | Asset Length | Asset(s) | Website URL | Headline (40) | Primary Text (125) | Description (30) | CTA | UTM Params
 // Multiple dimensions = placement-customized (stacked asset inputs with per-placement URL/copy overrides)
 // Single dimension = can use post ID / dark post / social proof
 
-import { useRef, KeyboardEvent, useState } from 'react';
-import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, FileText } from 'lucide-react';
+import { useRef, KeyboardEvent, useState, useCallback } from 'react';
+import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2 } from 'lucide-react';
+import { trpc } from '@/lib/trpc';
 import {
   CreativeRow, CarouselCard, PlacementDimension, PlacementAsset,
   PLACEMENT_DIMENSIONS, newCreative, newCarouselCard, CTA_OPTIONS,
@@ -20,8 +21,189 @@ interface Props {
   carouselRows: CreativeRow[];
   onChange: (rows: CreativeRow[]) => void;
   onCarouselChange: (rows: CreativeRow[]) => void;
-  onOpenLeadGenForm?: () => void;
   settings?: BuildSettings;
+}
+
+interface AssetUploadModalProps {
+  settings: BuildSettings;
+  onClose: () => void;
+}
+
+function AssetUploadModal({ settings, onClose }: AssetUploadModalProps) {
+  const [assetName, setAssetName] = useState('');
+  const [assetType, setAssetType] = useState<'image' | 'video'>('image');
+  const [file, setFile] = useState<File | null>(null);
+  const [urlInput, setUrlInput] = useState('');
+  const [mode, setMode] = useState<'file' | 'url'>('file');
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{ hash?: string; videoId?: string; name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadImageMut = trpc.meta.uploadImage.useMutation();
+  const uploadVideoMut = trpc.meta.uploadVideo.useMutation();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (!assetName) setAssetName(f.name.replace(/\.[^.]+$/, ''));
+    setAssetType(f.type.startsWith('video') ? 'video' : 'image');
+  };
+
+  const handleUpload = async () => {
+    if (!settings.accessToken || !settings.adAccountId) {
+      toast.error('Configure access token and ad account in Settings first.');
+      return;
+    }
+    const name = assetName.trim() || 'Untitled Asset';
+    setUploading(true);
+    try {
+      if (mode === 'file' && file) {
+        const reader = new FileReader();
+        const b64 = await new Promise<string>((res, rej) => {
+          reader.onload = () => res((reader.result as string).split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(file);
+        });
+        if (assetType === 'image') {
+          const r = await uploadImageMut.mutateAsync({
+            accessToken: settings.accessToken,
+            adAccountId: settings.adAccountId,
+            imageBase64: b64,
+            fileName: file.name,
+          });
+          setResult({ hash: r.hash, name });
+          toast.success(`Image uploaded — hash: ${r.hash}`);
+        } else {
+          const r = await uploadVideoMut.mutateAsync({
+            accessToken: settings.accessToken,
+            adAccountId: settings.adAccountId,
+            videoBase64: b64,
+            fileName: file.name,
+            title: name,
+          });
+          setResult({ videoId: r.videoId, name });
+          toast.success(`Video uploaded — ID: ${r.videoId}`);
+        }
+      } else if (mode === 'url' && urlInput.trim()) {
+        // For URL-based: fetch and re-upload
+        toast.info('Fetching asset from URL…');
+        const resp = await fetch(urlInput.trim());
+        const blob = await resp.blob();
+        const isVideo = blob.type.startsWith('video');
+        const reader = new FileReader();
+        const b64 = await new Promise<string>((res, rej) => {
+          reader.onload = () => res((reader.result as string).split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        });
+        const ext = isVideo ? 'mp4' : 'jpg';
+        const fn = `${name}.${ext}`;
+        if (isVideo) {
+          const r = await uploadVideoMut.mutateAsync({
+            accessToken: settings.accessToken,
+            adAccountId: settings.adAccountId,
+            videoBase64: b64,
+            fileName: fn,
+            title: name,
+          });
+          setResult({ videoId: r.videoId, name });
+          toast.success(`Video uploaded — ID: ${r.videoId}`);
+        } else {
+          const r = await uploadImageMut.mutateAsync({
+            accessToken: settings.accessToken,
+            adAccountId: settings.adAccountId,
+            imageBase64: b64,
+            fileName: fn,
+          });
+          setResult({ hash: r.hash, name });
+          toast.success(`Image uploaded — hash: ${r.hash}`);
+        }
+      } else {
+        toast.error('Select a file or enter a URL.');
+      }
+    } catch (err) {
+      toast.error(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-surface-1 border border-border rounded-xl shadow-2xl w-[500px] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+          <div>
+            <h2 className="text-sm font-700 text-foreground">Asset Upload</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Upload an image or video directly to your ad account library</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Asset Name */}
+          <div>
+            <label className="text-[11px] font-600 text-muted-foreground block mb-1">Asset Name</label>
+            <input value={assetName} onChange={e => setAssetName(e.target.value)}
+              placeholder="e.g. Summer Campaign Hero" className="cell-input w-full" />
+          </div>
+          {/* Mode toggle */}
+          <div className="flex items-center gap-1 bg-surface-2 rounded-lg p-0.5 w-fit">
+            {(['file', 'url'] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className={`px-3 py-1.5 rounded-md text-xs font-600 transition-all capitalize ${
+                  mode === m ? 'bg-surface-1 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}>{m === 'file' ? 'Upload File' : 'From URL'}</button>
+            ))}
+          </div>
+          {mode === 'file' ? (
+            <div>
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileChange} className="hidden" />
+              <button onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
+                {file ? (
+                  <div className="space-y-1">
+                    <p className="text-sm font-600 text-foreground">{file.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.type}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <Upload className="w-6 h-6 text-muted-foreground/50 mx-auto" />
+                    <p className="text-[12px] text-muted-foreground">Click to select image or video file</p>
+                  </div>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[11px] font-600 text-muted-foreground block mb-1">Asset URL</label>
+              <input value={urlInput} onChange={e => setUrlInput(e.target.value)}
+                placeholder="https://example.com/image.jpg" className="cell-input w-full font-mono text-[11px]" />
+              <p className="text-[10px] text-muted-foreground mt-1">The asset will be fetched and uploaded to your ad account library.</p>
+            </div>
+          )}
+          {result && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <p className="text-[11px] font-700 text-emerald-400">Upload successful!</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {result.hash ? `Image hash: ${result.hash}` : `Video ID: ${result.videoId}`}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Name: {result.name}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
+          <button onClick={onClose} className="px-4 py-1.5 rounded-lg text-xs font-600 text-muted-foreground hover:text-foreground border border-border hover:bg-surface-2 transition-all">Close</button>
+          {!result && (
+            <button onClick={handleUpload} disabled={uploading || (!file && !urlInput.trim())}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-700 bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {uploading ? 'Uploading…' : 'Upload to Library'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const AD_TYPES: { value: AdType; label: string }[] = [
@@ -497,8 +679,6 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               <Th w={160} limit={30}>Description</Th>
               <Th w={120}>CTA</Th>
               <Th w={200}>Link to UTM</Th>
-              <Th w={150}>Source Post ID</Th>
-              <Th w={150} muted>Preview Link</Th>
               <Th w={64}></Th>
             </tr>
           </thead>
@@ -669,6 +849,14 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                       onChange={e => set(i, 'websiteUrl', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 4)}
                       placeholder="https://..." className="cell-input w-full font-mono text-[11px]" />
+                    {!isPlacementCustom && row.adType !== 'carousel' && (
+                      <button
+                        onClick={() => set(i, 'placementDimensions', ['4:5', '9:16'])}
+                        className="w-full text-[9px] text-indigo-400/70 hover:text-indigo-400 py-0.5 px-1 text-left transition-colors"
+                        title="Split into per-placement URL and copy overrides">
+                        + Customize by placement
+                      </button>
+                    )}
                   </td>
 
                   {/* Headline (40) — up to 5 variants */}
@@ -710,21 +898,6 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                       onChange={e => set(i, 'urlParams', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 9)}
                       placeholder="utm_source=meta&utm_medium=paid_social" className="cell-input w-full font-mono text-[10px]" />
-                  </td>
-
-                  {/* Source Post ID */}
-                  <td className="p-0 border-r border-border">
-                    <input value={row.postId}
-                      onChange={e => set(i, 'postId', e.target.value)}
-                      placeholder={isPlacementCustom ? '— (placement custom)' : 'Post ID'}
-                      disabled={isPlacementCustom}
-                      className={`cell-input w-full font-mono text-[11px] ${isPlacementCustom ? 'opacity-30 cursor-not-allowed' : ''}`} />
-                  </td>
-
-                  {/* Preview Link (write-back) */}
-                  <td className="p-0 border-r border-border">
-                    <input value={''} readOnly placeholder="auto-populated"
-                      className="cell-input w-full font-mono text-[10px] text-muted-foreground/50 cursor-default" />
                   </td>
 
                   {/* Actions */}
@@ -912,10 +1085,10 @@ function CarouselTable({ rows, onChange, settings }: { rows: CreativeRow[]; onCh
   );
 }
 
-export default function CreativesTable({ rows, carouselRows, onChange, onCarouselChange, onOpenLeadGenForm, settings }: Props) {
+export default function CreativesTable({ rows, carouselRows, onChange, onCarouselChange, settings }: Props) {
   const filledCount = rows.filter(r => r.concept.trim() || r.creativeId.trim()).length;
   const carouselCount = carouselRows.length;
-
+  const [showAssetUpload, setShowAssetUpload] = useState(false);
   return (
     <div className="flex flex-col h-full bg-surface-0">
       {/* Main toolbar */}
@@ -936,17 +1109,19 @@ export default function CreativesTable({ rows, carouselRows, onChange, onCarouse
             Single dim — dark post OK
           </span>
           <span className="font-mono">{filledCount} static/video · {carouselCount} carousel</span>
-          {onOpenLeadGenForm && (
+          {settings?.accessToken && settings?.adAccountId && (
             <button
-              onClick={onOpenLeadGenForm}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/30 font-700 text-[11px] transition-all"
+              onClick={() => setShowAssetUpload(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-700 text-[11px] transition-all"
             >
-              <FileText className="w-3.5 h-3.5" /> Lead Gen Form
+              <Upload className="w-3.5 h-3.5" /> Asset Upload
             </button>
           )}
         </div>
       </div>
-
+      {showAssetUpload && settings && (
+        <AssetUploadModal settings={settings} onClose={() => setShowAssetUpload(false)} />
+      )}
       {/* Scrollable content */}
       <div className="flex-1 overflow-auto">
         <StaticVideoTable rows={rows} onChange={onChange} settings={settings} />

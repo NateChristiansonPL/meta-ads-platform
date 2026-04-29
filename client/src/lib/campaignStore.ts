@@ -81,6 +81,18 @@ export interface LeadGenForm {
   formId: string;
 }
 
+// ── Structured targeting objects (needed for Meta API reach/overlap calls) ────
+export interface GeoLocationObject {
+  key: string;   // Meta geo key (e.g. "2460644" for a city)
+  type: string;  // 'city' | 'region' | 'country' | 'zip' | 'geo_market' | 'medium_geo_area'
+  name: string;  // display label
+}
+export interface InterestObject {
+  id: string;    // Meta interest/behavior/demographic ID
+  type: string;  // 'adinterest' | 'behaviors' | 'demographics'
+  name: string;  // display label
+}
+
 // ── Frequency Control ─────────────────────────────────────────────────────────
 export interface FrequencyControl {
   // For Reach: 'target' | 'cap'; For Ad Recall: 'default' | 'custom'; For ThruPlay/2secVV: enabled toggle
@@ -129,11 +141,14 @@ export interface AdSetRow {
   platforms: string[];
   placements: string[];
   geoLocations: string;
+  geoLocationObjects: GeoLocationObject[];  // structured: key+type+name for API calls
   ageMin: string;
   ageMax: string;
   genders: string;
   detailedInterests: string;           // renamed from 'interests'
+  detailedInterestObjects: InterestObject[];  // structured: id+type+name for API calls
   narrowInterests: string;             // new: narrow detailed interests
+  narrowInterestObjects: InterestObject[];    // structured: id+type+name for API calls
   targetedAudiences: string;           // renamed from 'customAudiences'
   excludedAudiences: string;
   attributionWindow: string;
@@ -197,8 +212,10 @@ export interface AdRow {
   overrideUtmParams?: string;
   overridePrimaryText?: string;
   overrideHeadline?: string;
+  overrideDescription?: string;
   overrideWebsiteUrl?: string;
   overrideCta?: string;
+  leadGenFormId?: string;  // selected lead gen form ID for this ad
   needsUpdate: boolean;
 }
 
@@ -219,6 +236,44 @@ export interface BuildSettings {
   sheetUrl: string;
 }
 
+// ── Reach / Overlap history types ───────────────────────────────────────────
+export interface ReachEstimateResult {
+  id: string;
+  name: string;
+  reachLower: number;
+  reachUpper: number;
+  reachMid: number;
+  cpm: number | null;
+  error: string | null;
+}
+
+export interface ReachEstimateRun {
+  runAt: number;
+  results: ReachEstimateResult[];
+}
+
+export interface OverlapPair {
+  adSetA: { id: string; name: string };
+  adSetB: { id: string; name: string };
+  intersectionReach: number;
+  overlapPctA: number;
+  overlapPctB: number;
+  confidence: string;
+}
+
+export interface OverlapAdSetResult {
+  id: string;
+  name: string;
+  reach: number;
+  overlaps: { pct: number; name: string; confidence: string }[];
+}
+
+export interface OverlapRun {
+  runAt: number;
+  overlapResults: OverlapAdSetResult[];
+  pairList: OverlapPair[];
+}
+
 // ── Full state ────────────────────────────────────────────────────────────────
 export interface CampaignBuilderState {
   buildMode: BuildMode;
@@ -229,6 +284,8 @@ export interface CampaignBuilderState {
   ads: AdRow[];
   settings: BuildSettings;
   leadGenForms: LeadGenForm[];
+  reachHistory: ReachEstimateRun[];
+  overlapHistory: OverlapRun[];
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -468,11 +525,14 @@ export function newAdSet(overrides: Partial<AdSetRow> = {}): AdSetRow {
     platforms: [],
     placements: [],
     geoLocations: '',
+    geoLocationObjects: [],
     ageMin: '18',
     ageMax: '65',
     genders: 'all',
     detailedInterests: '',
+    detailedInterestObjects: [],
     narrowInterests: '',
+    narrowInterestObjects: [],
     targetedAudiences: '',
     excludedAudiences: '',
     attributionWindow: '7d_click_1d_engaged_1d_view',

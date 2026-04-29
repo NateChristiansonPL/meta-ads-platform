@@ -60,6 +60,8 @@ function makeInitialState(): CampaignBuilderState {
     ads: [],
     settings: makeInitialSettings(),
     leadGenForms: [],
+    reachHistory: [],
+    overlapHistory: [],
   };
 }
 
@@ -137,9 +139,9 @@ export default function CampaignBuilder() {
         onClick={() => setSettingsOpen(true)}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
         style={{
-          background: settingsReady ? "rgba(0,190,239,0.12)" : "rgba(255,255,255,0.06)",
-          color: settingsReady ? "#00BEEF" : "rgba(255,255,255,0.5)",
-          border: `1px solid ${settingsReady ? "rgba(0,190,239,0.25)" : "rgba(255,255,255,0.1)"}`,
+          background: settingsReady ? "rgba(0,190,239,0.18)" : "rgba(255,255,255,0.10)",
+          color: settingsReady ? "#00BEEF" : "rgba(255,255,255,0.75)",
+          border: `1px solid ${settingsReady ? "rgba(0,190,239,0.35)" : "rgba(255,255,255,0.18)"}`,
         }}
         title="Account settings"
       >
@@ -236,6 +238,10 @@ export default function CampaignBuilder() {
                 campaigns={state.campaigns}
                 onChange={rows => update("adSets", rows)}
                 settings={state.settings}
+                reachHistory={state.reachHistory}
+                overlapHistory={state.overlapHistory}
+                onReachHistoryChange={h => update("reachHistory", h)}
+                onOverlapHistoryChange={h => update("overlapHistory", h)}
               />
             </div>
           )}
@@ -247,7 +253,6 @@ export default function CampaignBuilder() {
                 carouselRows={state.carouselCreatives}
                 onChange={rows => update("creatives", rows)}
                 onCarouselChange={rows => update("carouselCreatives", rows)}
-                onOpenLeadGenForm={openLeadGenForm}
                 settings={state.settings}
               />
             </div>
@@ -261,6 +266,10 @@ export default function CampaignBuilder() {
                 creatives={[...state.creatives, ...state.carouselCreatives]}
                 campaigns={state.campaigns}
                 buildMode={state.buildMode}
+                settings={state.settings.accessToken ? {
+                  accessToken: state.settings.accessToken,
+                  facebookPageId: state.settings.facebookPageId,
+                } : undefined}
                 onChange={ads => update("ads", ads)}
               />
             </div>

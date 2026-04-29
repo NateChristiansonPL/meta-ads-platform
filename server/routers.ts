@@ -40,7 +40,7 @@ import {
   updateToken,
 } from "./db";
 import axios from "axios";
-import { buildSkillPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
+import { buildSkillPrompt, buildCampaignCreationPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
@@ -790,6 +790,128 @@ export const appRouter = router({
       const creditsUsed = await getCreditsByUserForUser(ctx.user.id, { periodStart, periodEnd });
       return { creditsUsed, source: "db" as const, periodStart, periodEnd };
     }),
+
+    /**
+     * launchCampaignBuild: Fires the pl-campaign-creation skill with the full
+     * Campaign Builder state as the prompt. Returns a runId immediately; the
+     * frontend polls getRunStatus for progress (same pattern as execute).
+     */
+    launchCampaignBuild: protectedProcedure
+      .input(z.object({
+        adAccountId: z.string().min(1),
+        adAccountName: z.string().optional(),
+        businessManagerId: z.string().optional(),
+        tokenId: z.number().int().positive().optional(),
+        facebookPageId: z.string().min(1),
+        instagramUserId: z.string().optional(),
+        pixelId: z.string().optional(),
+        buildMode: z.enum(["full", "ads-only", "update"]),
+        stateJson: z.string().min(1), // full CampaignBuilderState as JSON
+        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6-lite"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const apiKey = process.env.MANUS_API_KEY;
+        if (!apiKey) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "MANUS_API_KEY is not configured. Please ask your admin to add it in the Token Vault.",
+          });
+        }
+
+        // Fetch the Meta access token
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No active Meta access token found. Please add one in the Token Vault.",
+          });
+        }
+
+        // Look up the Manus project ID configured for campaign-creation
+        const skillProjectId = await getAppSetting("skillProjectId:campaign-creation") ?? undefined;
+
+        // Create the run record immediately
+        const runId = await createSkillRun({
+          userId: ctx.user.id,
+          skillId: "campaign-creation",
+          skillName: "Campaign Builder Launch",
+          status: "running",
+          adAccountId: input.adAccountId,
+          adAccountName: input.adAccountName ?? null,
+          businessManagerId: input.businessManagerId ?? null,
+          datePreset: null,
+          campaignIds: [],
+          extraParams: { buildMode: input.buildMode },
+        });
+
+        const startedAt = Date.now();
+
+        // Fire-and-forget background execution
+        (async () => {
+          try {
+            const prompt = buildCampaignCreationPrompt({
+              accessToken: metaAccessToken!,
+              adAccountId: input.adAccountId,
+              facebookPageId: input.facebookPageId,
+              instagramUserId: input.instagramUserId,
+              pixelId: input.pixelId,
+              buildMode: input.buildMode,
+              stateJson: input.stateJson,
+            });
+
+            const statusLog: Array<{ ts: number; msg: string }> = [];
+            let flushCounter = 0;
+            const flushStatusLog = async () => {
+              await updateSkillRun(runId, { statusLog }).catch(() => {});
+            };
+
+            const result = await runManusSkillTask({
+              apiKey,
+              skillId: "campaign-creation",
+              prompt,
+              agentProfile: input.agentProfile,
+              projectId: skillProjectId,
+              onProgress: async (msg: string, taskId?: string) => {
+                statusLog.push({ ts: Date.now(), msg });
+                if (taskId) {
+                  await updateSkillRun(runId, { manusTaskId: taskId }).catch(() => {});
+                }
+                flushCounter++;
+                if (flushCounter % 3 === 0) await flushStatusLog();
+              },
+            });
+
+            const durationMs = Date.now() - startedAt;
+            await updateSkillRun(runId, {
+              status: result.status,
+              reportMarkdown: result.report || undefined,
+              errorMessage: result.errorMessage || undefined,
+              durationMs,
+              taskUrl: result.taskUrl,
+              attachments: result.attachments,
+              creditUsage: result.creditUsage,
+              statusLog,
+            });
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            await updateSkillRun(runId, {
+              status: "error",
+              errorMessage: errMsg,
+              durationMs: Date.now() - startedAt,
+            }).catch(() => {});
+          }
+        })();
+
+        return { runId };
+      }),
   }),
 
   settings: router({
