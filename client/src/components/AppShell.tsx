@@ -323,7 +323,15 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                 active={location === "/campaign-builder"}
                 running={false}
               />
-              {/* Placeholder: Creative Decay Auto-Detect */}
+
+              {/* Early Detection sub-section */}
+              <div className="flex items-center gap-1.5 mt-3 mb-1 px-2">
+                <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.2)", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: "0.6rem" }}>
+                  Early Detection
+                </p>
+              </div>
+
+              {/* Placeholder: Creative Decay */}
               <button
                 onClick={() => toast.info("Feature coming soon")}
                 className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
@@ -333,11 +341,11 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                   <Zap size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Creative Decay Auto-Detect</p>
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Creative Decay</p>
                   <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
                 </div>
               </button>
-              {/* Placeholder: Audience Saturation Auto-Detect */}
+              {/* Placeholder: Audience Saturation */}
               <button
                 onClick={() => toast.info("Feature coming soon")}
                 className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
@@ -347,11 +355,11 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                   <Users size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Audience Saturation Auto-Detect</p>
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Audience Saturation</p>
                   <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
                 </div>
               </button>
-              {/* Placeholder: Allocation Drift Auto-Detect */}
+              {/* Placeholder: Allocation Drift */}
               <button
                 onClick={() => toast.info("Feature coming soon")}
                 className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
@@ -361,7 +369,7 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                   <TrendingUp size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Allocation Drift Auto-Detect</p>
+                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Allocation Drift</p>
                   <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
                 </div>
               </button>

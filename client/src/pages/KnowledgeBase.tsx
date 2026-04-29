@@ -11,12 +11,14 @@ import {
   TrendingUp,
   Users,
   Zap,
-  Bot,
   Key,
   Clock,
   AlertCircle,
   CheckCircle2,
   Info,
+  Radar,
+  Activity,
+  GitBranch,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -27,6 +29,7 @@ interface DocSection {
   icon: React.ElementType;
   color: string;
   entries: DocEntry[];
+  folder?: string; // optional folder/group label
 }
 
 interface DocEntry {
@@ -351,6 +354,158 @@ const SECTIONS: DocSection[] = [
       },
     ],
   },
+  // ── Early Detection folder ─────────────────────────────────────────────────
+  {
+    id: "creative-decay",
+    title: "Creative Decay",
+    icon: Activity,
+    color: "#F7901E",
+    folder: "Early Detection",
+    entries: [
+      {
+        title: "What it does",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Creative Decay monitors individual ads daily to detect when a creative begins losing effectiveness before it materially impacts the metrics tied to the ad set's optimization goal.
+            </p>
+            <p>
+              The primary signal is always the optimization-aligned metric — CPA for conversion campaigns, CTR for traffic and engagement objectives, CPM for reach and awareness — with frequency and CPM as universal supporting signals and Hook Rate and Hold Rate as leading indicators for video creatives.
+            </p>
+            <p>
+              Analysis lives at the ad level because aggregating upward masks which specific creative is degrading, and a daily cadence catches acceleration before Meta deprioritizes the ad and compounds waste.
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: "Signal methodology",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong style={{ color: "#FAFAFA" }}>Primary signal</strong> — Optimization-aligned metric (CPA, CTR, or CPM depending on campaign objective)</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Universal supporting signals</strong> — Frequency and CPM trends across all ad types</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Video leading indicators</strong> — Hook Rate and Hold Rate, which surface decay before downstream metrics move</li>
+            </ul>
+          </div>
+        ),
+      },
+      {
+        title: "Why ad-level, daily cadence",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Aggregating performance to the ad set or campaign level masks which specific creative is degrading — a strong performer can hide a declining one in a blended average. Running at the ad level isolates each creative's trajectory independently.
+            </p>
+            <p>
+              Daily cadence is necessary because creative decay can accelerate quickly once Meta's delivery system begins deprioritizing an ad. Catching the signal early — before the algorithm compounds the waste — creates a window to act before the impact reaches the ad set's optimization metrics.
+            </p>
+          </div>
+        ),
+      },
+    ],
+  },
+  {
+    id: "audience-saturation",
+    title: "Audience Saturation",
+    icon: Radar,
+    color: "#A78BFA",
+    folder: "Early Detection",
+    entries: [
+      {
+        title: "What it does",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Audience Saturation detects when a defined audience pool is exhausting itself by anchoring on frequency and CPM first, then confirming with the optimization-aligned metric — CPA erosion for conversion ad sets, CTR decline for click and traffic objectives.
+            </p>
+            <p>
+              It runs at the ad set level daily, since that is where audience boundaries and frequency accumulate. The saturation signal is triggered when frequency and CPM rise while the objective-aligned metric simultaneously deteriorates.
+            </p>
+            <p>
+              Early detection allows for audience expansion or exclusion updates before delivery quality degrades.
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: "Signal methodology",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong style={{ color: "#FAFAFA" }}>Primary anchors</strong> — Rising frequency and CPM as the first-order saturation signal</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Confirmation signal</strong> — Simultaneous deterioration of the objective-aligned metric (CPA, CTR) to distinguish saturation from normal CPM fluctuation</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Cadence</strong> — Daily at the ad set level, where audience boundaries and frequency caps are enforced</li>
+            </ul>
+          </div>
+        ),
+      },
+      {
+        title: "Why ad-set level, daily cadence",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Audience boundaries are defined at the ad set level — targeting parameters, exclusions, and custom audiences all live there. Frequency accumulates at the ad set level as well, making it the correct unit of analysis for saturation detection.
+            </p>
+            <p>
+              Daily cadence ensures that early-stage saturation signals are caught before they compound. Once an audience is fully saturated, CPMs spike and delivery quality collapses quickly — early detection creates a window to expand the audience or add exclusions before that inflection point.
+            </p>
+          </div>
+        ),
+      },
+    ],
+  },
+  {
+    id: "allocation-drift",
+    title: "Allocation Drift",
+    icon: GitBranch,
+    color: "#00B37A",
+    folder: "Early Detection",
+    entries: [
+      {
+        title: "What it does",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Allocation Drift identifies when Meta is concentrating spend into segments that underperform against the campaign's optimization goal — a pattern that is invisible at the blended account or campaign level.
+            </p>
+            <p>
+              A proportion z-test measures spend share movement against a 30-day baseline, validated by the objective-aligned metric for that segment — CPA ratio for conversion campaigns, CTR or CPM divergence for other objectives.
+            </p>
+            <p>
+              Weekly cadence at the breakdown level within ad sets gives spend share proportions time to stabilize, and early detection creates a statistically grounded basis for sizing value rules directly from the confirmed performance gap.
+            </p>
+          </div>
+        ),
+      },
+      {
+        title: "Signal methodology",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <ul className="list-disc list-inside space-y-2">
+              <li><strong style={{ color: "#FAFAFA" }}>Drift detection</strong> — Proportion z-test comparing current spend share to a 30-day baseline per breakdown segment</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Performance validation</strong> — Objective-aligned metric (CPA ratio, CTR divergence, CPM divergence) confirms whether the drift is toward under- or over-performing segments</li>
+              <li><strong style={{ color: "#FAFAFA" }}>Cadence</strong> — Weekly at the breakdown level within ad sets, allowing spend proportions to stabilize before testing</li>
+            </ul>
+          </div>
+        ),
+      },
+      {
+        title: "Why breakdown level, weekly cadence",
+        body: (
+          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <p>
+              Blended campaign metrics hide how Meta's delivery system is distributing spend across age, gender, placement, and device segments. A campaign can show stable blended CPA while Meta is quietly concentrating delivery into segments with 2–3× higher CPA — a structural problem that compounds over time.
+            </p>
+            <p>
+              Weekly cadence is appropriate because spend share proportions need time to stabilize before statistical testing is meaningful. Daily fluctuations in spend allocation are normal; weekly drift against a 30-day baseline is the signal that warrants action. Early detection creates a statistically grounded basis for sizing value rules directly from the confirmed performance gap.
+            </p>
+          </div>
+        ),
+      },
+    ],
+  },
+  // ── Tools ──────────────────────────────────────────────────────────────────
   {
     id: "tools",
     title: "Tools",
@@ -366,19 +521,6 @@ const SECTIONS: DocSection[] = [
             </p>
             <p>
               When available, it will support campaign, ad set, and ad creation with a spreadsheet-style interface, direct Meta API integration, and session-based draft saving.
-            </p>
-          </div>
-        ),
-      },
-      {
-        title: "Manus AI",
-        body: (
-          <div className="space-y-3 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
-            <p>
-              Manus AI is a free-form AI assistant available directly in the platform. Use it for ad strategy questions, copywriting, audience research, or anything else you'd ask a knowledgeable media buying assistant.
-            </p>
-            <p>
-              Unlike the skills, Manus AI does not have direct access to your Meta account data. It works from your prompts and general knowledge. For data-grounded analysis, use the skills.
             </p>
           </div>
         ),
@@ -506,15 +648,60 @@ export default function KnowledgeBase() {
 
   const currentSection = SECTIONS.find((s) => s.id === activeSection) ?? SECTIONS[0];
 
+  // Build nav items with folder grouping
+  const earlyDetectionSections = SECTIONS.filter(s => s.folder === "Early Detection");
+  const otherSections = SECTIONS.filter(s => !s.folder);
+
   return (
     <AppShell title="Knowledge Base" subtitle="Platform documentation and guides" badge="docs">
       <div className="flex gap-6 h-full min-h-0" style={{ maxWidth: 1100 }}>
         {/* ── Left nav ── */}
         <div
-          className="flex flex-col gap-1 shrink-0"
+          className="flex flex-col gap-1 shrink-0 overflow-y-auto"
           style={{ width: 220 }}
         >
-          {SECTIONS.map((s) => {
+          {/* Regular sections */}
+          {otherSections.map((s) => {
+            const Icon = s.icon;
+            const active = s.id === activeSection;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all"
+                style={{
+                  background: active ? `${s.color}18` : "transparent",
+                  border: active ? `1px solid ${s.color}30` : "1px solid transparent",
+                }}
+                onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+              >
+                <div
+                  className="rounded flex items-center justify-center shrink-0"
+                  style={{ width: 26, height: 26, background: active ? `${s.color}25` : "rgba(255,255,255,0.06)" }}
+                >
+                  <Icon size={13} style={{ color: active ? s.color : "rgba(255,255,255,0.45)" }} />
+                </div>
+                <span
+                  className="text-xs font-semibold"
+                  style={{ color: active ? s.color : "rgba(255,255,255,0.7)" }}
+                >
+                  {s.title}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Early Detection folder */}
+          <div className="mt-2 mb-1 px-3">
+            <span
+              className="text-[10px] font-bold tracking-wider uppercase"
+              style={{ color: "rgba(255,255,255,0.3)" }}
+            >
+              Early Detection
+            </span>
+          </div>
+          {earlyDetectionSections.map((s) => {
             const Icon = s.icon;
             const active = s.id === activeSection;
             return (
@@ -556,6 +743,11 @@ export default function KnowledgeBase() {
               <currentSection.icon size={18} style={{ color: currentSection.color }} />
             </div>
             <div>
+              {currentSection.folder && (
+                <p className="text-[10px] font-bold tracking-wider uppercase mb-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  {currentSection.folder}
+                </p>
+              )}
               <h2 className="text-base font-bold" style={{ color: "#FAFAFA" }}>{currentSection.title}</h2>
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
                 {currentSection.entries.length} {currentSection.entries.length === 1 ? "topic" : "topics"}

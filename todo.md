@@ -186,3 +186,10 @@
 - [x] Add model selector (1.6 Lite / 1.6) to Export tab Launch via Manus section
 - [x] Verify Meta API payload shapes for placements, locations, interests, custom audiences
 - [x] Explain write-back architecture for ad IDs, ad set IDs, campaign IDs, source post IDs, preview links
+
+## Knowledge Base & Sidebar Updates
+
+- [x] Add "Early Detection" folder/section to Knowledge Base with Creative Decay, Audience Saturation, Allocation Drift articles
+- [x] Remove Manus AI from Tools section in Knowledge Base
+- [x] Update sidebar nav: rename three Coming Soon items to Creative Decay, Audience Saturation, Allocation Drift
+- [x] Add Early Detection grouping label in sidebar nav
