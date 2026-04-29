@@ -63,6 +63,52 @@ async function metaPost(
 
 type RawAdAccount = { id: string; name: string; account_status: number; currency: string };
 
+/**
+ * Fetches all pages of a Meta Graph API edge that supports cursor-based pagination.
+ * Follows the `paging.cursors.after` cursor until no next page is returned.
+ * Caps at 20 pages (4,000 accounts) as a safety guard.
+ */
+async function metaGetAllPages(
+  path: string,
+  params: Record<string, string>,
+  accessToken: string
+): Promise<unknown[]> {
+  const MAX_PAGES = 20;
+  const results: unknown[] = [];
+  let after: string | undefined;
+  let page = 0;
+
+  while (page < MAX_PAGES) {
+    const pageParams: Record<string, string> = { ...params, access_token: accessToken };
+    if (after) pageParams.after = after;
+
+    const url = `${META_BASE}${path}`;
+    let data: { data?: unknown[]; paging?: { cursors?: { after?: string }; next?: string } };
+    try {
+      const resp = await axios.get(url, { params: pageParams, timeout: 30000 });
+      data = resp.data;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+        const metaMsg = axiosErr.response?.data?.error?.message;
+        if (metaMsg) throw new Error(`Meta API: ${metaMsg}`);
+      }
+      throw err;
+    }
+
+    const items = data.data || [];
+    results.push(...items);
+    page++;
+
+    // Stop if there's no next page cursor
+    const nextAfter = data.paging?.cursors?.after;
+    if (!nextAfter || !data.paging?.next) break;
+    after = nextAfter;
+  }
+
+  return results;
+}
+
 function normalizeAdAccountId(raw: string): string {
   const stripped = raw.replace(/^act_/, "");
   return `act_${stripped}`;
@@ -1651,7 +1697,7 @@ export const metaRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Token not found" });
       }
       try {
-        // Fetch BOTH owned and client ad accounts in parallel — a BM can have both
+        // Fetch ALL pages of both owned and client ad accounts in parallel
         const bmId = tokenRecord.businessManagerId;
         const mapAccounts = (raw: unknown[]) =>
           (raw || []).map((a) => {
@@ -1660,12 +1706,12 @@ export const metaRouter = router({
           });
 
         const [ownedResult, clientResult] = await Promise.allSettled([
-          metaGet(`/${bmId}/owned_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
-          metaGet(`/${bmId}/client_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
+          metaGetAllPages(`/${bmId}/owned_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
+          metaGetAllPages(`/${bmId}/client_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
         ]);
 
-        const ownedAccounts = ownedResult.status === "fulfilled" ? mapAccounts(ownedResult.value.data || []) : [];
-        const clientAccounts = clientResult.status === "fulfilled" ? mapAccounts(clientResult.value.data || []) : [];
+        const ownedAccounts = ownedResult.status === "fulfilled" ? mapAccounts(ownedResult.value) : [];
+        const clientAccounts = clientResult.status === "fulfilled" ? mapAccounts(clientResult.value) : [];
 
         // Merge and deduplicate by account id
         const seen = new Set<string>();
