@@ -15,7 +15,7 @@ const CONFIG = {
 
 export default function WeeklyOptimization() {
   return (
-    <AppShell title="Weekly Optimization" subtitle="Breakdown-level insights" badge="pl-weekly-optimization" headerActions={<RunHistoryDrawer skillId="weekly-optimization" skillName="Weekly Optimization" />}>
+    <AppShell title="Weekly Optimization" subtitle="Breakdown-level insights" badge="pl-weekly-optimization" dateNote={CONFIG.dateNote} headerActions={<RunHistoryDrawer skillId="weekly-optimization" skillName="Weekly Optimization" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

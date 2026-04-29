@@ -26,7 +26,7 @@ const CONFIG = {
 
 export default function PerformanceInsights() {
   return (
-    <AppShell title="Performance Insights" subtitle="KPI-anchored analysis" badge="pl-performance-analysis-insights-v3" headerActions={<RunHistoryDrawer skillId="performance-insights" skillName="Performance Insights" />}>
+    <AppShell title="Performance Insights" subtitle="KPI-anchored analysis" badge="pl-performance-analysis-insights-v3" dateNote={CONFIG.dateNote} headerActions={<RunHistoryDrawer skillId="performance-insights" skillName="Performance Insights" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

@@ -148,10 +148,11 @@ interface AppShellProps {
   title: string;
   subtitle?: string;
   badge?: string;
+  dateNote?: string;
   headerActions?: React.ReactNode;
 }
 
-export default function AppShell({ children, title, subtitle, badge, headerActions }: AppShellProps) {
+export default function AppShell({ children, title, subtitle, badge, dateNote, headerActions }: AppShellProps) {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [location] = useLocation();
   const [adminOpen, setAdminOpen] = useState(false);
@@ -470,6 +471,15 @@ export default function AppShell({ children, title, subtitle, badge, headerActio
                   </span>
                 )}
               </div>
+              {/* Center: date note */}
+              {dateNote && (
+                <span
+                  className="text-xs hidden md:block"
+                  style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.4, maxWidth: 340, textAlign: "center" }}
+                >
+                  {dateNote}
+                </span>
+              )}
               {headerActions && (
                 <div className="flex items-center gap-2">
                   {headerActions}

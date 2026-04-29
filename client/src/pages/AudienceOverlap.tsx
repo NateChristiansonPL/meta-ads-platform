@@ -14,7 +14,7 @@ const CONFIG = {
 
 export default function AudienceOverlap() {
   return (
-    <AppShell title="Audience Overlap & Wasted Spend" subtitle="Overlap & wasted spend" badge="pl-audience-overlap-spend" headerActions={<RunHistoryDrawer skillId="audience-overlap" skillName="Audience Overlap & Wasted Spend" />}>
+    <AppShell title="Audience Overlap & Wasted Spend" subtitle="Overlap & wasted spend" badge="pl-audience-overlap-spend" dateNote={CONFIG.dateNote} headerActions={<RunHistoryDrawer skillId="audience-overlap" skillName="Audience Overlap & Wasted Spend" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

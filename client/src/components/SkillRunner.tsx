@@ -299,13 +299,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         className="flex flex-col gap-4 shrink-0 overflow-y-auto"
         style={{ width: 360 }}
       >
-        {/* Date Range Note */}
-        {config.dateNote && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>{config.dateNote}</span>
-          </div>
-        )}
-
         {/* Account Selection */}
         <Section title="Account Selection" hint="Select the Business Manager token that has access to your ad account, then pick the specific ad account you want to analyze. The token is managed by your admin in the Token Vault.">
           {/* Token */}
@@ -601,11 +594,11 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         </Section>
 
         {/* Run Button */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-1.5 mt-2">
           <button
             onClick={handleRun}
             disabled={!canRun}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all"
             style={{
               background: canRun ? config.color : "rgba(255,255,255,0.08)",
               color: canRun ? "#141349" : "rgba(255,255,255,0.25)",
@@ -615,16 +608,18 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             {status === "running" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
             {status === "running" ? "Running…" : `Run ${config.skillName}`}
           </button>
-          {!adAccountId && (
-            <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
-              Select an ad account to enable
-            </span>
-          )}
-          {status !== "idle" && (
-            <button onClick={handleReset} className="p-2 rounded-lg transition-colors" style={{ color: "rgba(255,255,255,0.4)" }} title="Reset">
-              <RotateCcw size={14} />
-            </button>
-          )}
+          <div className="flex items-center justify-between">
+            {!adAccountId && (
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                Select an ad account to enable
+              </span>
+            )}
+            {status !== "idle" && (
+              <button onClick={handleReset} className="p-2 rounded-lg transition-colors ml-auto" style={{ color: "rgba(255,255,255,0.4)" }} title="Reset">
+                <RotateCcw size={14} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

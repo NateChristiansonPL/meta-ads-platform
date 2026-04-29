@@ -14,7 +14,7 @@ const CONFIG = {
 
 export default function CreativeLifecycle() {
   return (
-    <AppShell title="Creative Lifecycle" subtitle="Fatigue detection" badge="pl-creative-lifecycle-v3" headerActions={<RunHistoryDrawer skillId="creative-lifecycle" skillName="Creative Lifecycle" />}>
+    <AppShell title="Creative Lifecycle" subtitle="Fatigue detection" badge="pl-creative-lifecycle-v3" dateNote={CONFIG.dateNote} headerActions={<RunHistoryDrawer skillId="creative-lifecycle" skillName="Creative Lifecycle" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );

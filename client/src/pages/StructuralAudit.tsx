@@ -14,7 +14,7 @@ const CONFIG = {
 
 export default function StructuralAudit() {
   return (
-    <AppShell title="Structural Audit" subtitle="Andromeda account audit" badge="meta-ads-structural-audit" headerActions={<RunHistoryDrawer skillId="structural-audit" skillName="Structural Audit" />}>
+    <AppShell title="Structural Audit" subtitle="Andromeda account audit" badge="meta-ads-structural-audit" dateNote={CONFIG.dateNote} headerActions={<RunHistoryDrawer skillId="structural-audit" skillName="Structural Audit" />}>
       <SkillRunner config={CONFIG} />
     </AppShell>
   );
