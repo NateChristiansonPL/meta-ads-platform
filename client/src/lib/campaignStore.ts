@@ -323,21 +323,30 @@ export function generateCreativeId(concept: string, adType: AdType, assetLength:
   return `${prefix}-${typePart}${lengthPart}`;
 }
 
-/** Generate ad name using dashes as separator, with launch date appended */
+/** Generate ad name: Creative Concept - Asset Type - Length (if applicable) - Month-Yr
+ * Format: "Summer Sale - Video - 15s - May-26" or "Summer Sale - Static - May-26"
+ * Launch date must be in "Mon-YY" format (e.g. "May-26") or will default to current month.
+ */
 export function generateAdName(creative: CreativeRow, launchDate?: string): string {
   const concept = creative.concept || 'Untitled';
-  const date = launchDate || currentLaunchDate();
+  // Normalize launch date: accept "Mon/YY" or "Mon-YY" format, output "Mon-YY"
+  const rawDate = launchDate || currentLaunchDate();
+  const date = rawDate.replace('/', '-');
+
+  const parts: string[] = [concept];
+
   if (creative.adType === 'video') {
-    const len = creative.assetLength ? ` - ${creative.assetLength}s` : '';
-    return `[Video] ${concept}${len} - ${date}`;
+    parts.push('Video');
+    if (creative.assetLength) parts.push(`${creative.assetLength}s`);
+  } else if (creative.adType === 'carousel') {
+    parts.push('Carousel');
+  } else {
+    // static
+    parts.push('Static');
   }
-  if (creative.adType === 'carousel') {
-    return `[Carousel] ${concept} - ${date}`;
-  }
-  if (creative.placementDimensions.length === 1) {
-    return `[Static] ${concept} - ${creative.placementDimensions[0]} - ${date}`;
-  }
-  return `[Static] ${concept} - Placement Custom - ${date}`;
+
+  parts.push(date);
+  return parts.join(' - ');
 }
 
 export function sacRestrictsTargeting(specialAdCategory: SpecialAdCategory): boolean {
@@ -711,7 +720,6 @@ export const TREE_FIELDS: { key: keyof AdSetRow; label: string; description: str
   { key: 'adScheduling',     label: 'Day Parting',        description: 'Day-parting schedule' },
   { key: 'attributionWindow',label: 'Attribution Window', description: 'Click/view attribution' },
   { key: 'attributionModel', label: 'Attribution Model',  description: 'Standard or Incremental (conversions only)' },
-  { key: 'leadGenFormId',    label: 'Lead Gen Form',      description: 'Lead gen objective only' },
 ];
 
 export const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

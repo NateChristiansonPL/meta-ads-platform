@@ -504,6 +504,13 @@ function CarouselCards({ cards, onUpdate, settings }: {
                         previewUrl: card.localPreviewUrl ?? '',
                         type: 'image',
                         size: card.localFile.size,
+                      } : card.localPreviewUrl ? {
+                        // Media browser selection — no local file, but has CDN preview URL
+                        file: new File([], card.fileName || 'asset'),
+                        name: card.fileName || card.fileHash,
+                        previewUrl: card.localPreviewUrl,
+                        type: 'image',
+                        size: 0,
                       } : null}
                       accept="image/*"
                       textValue={card.fileHash}
@@ -554,10 +561,15 @@ function CarouselCards({ cards, onUpdate, settings }: {
           settings={settings}
           defaultTab="images"
           onSelect={(media: MediaSelection) => {
-            const assetUrl = media.type === 'image' ? (media.hash || '') : (media.videoId || '');
             const cardId = mediaBrowserTarget.cardId;
-            setCard(cardId, 'fileHash', assetUrl);
-            if (media.name) setCard(cardId, 'fileName', media.name);
+            // Update hash, fileName, and preview URL atomically in one onUpdate call
+            const assetHash = media.type === 'image' ? (media.hash || '') : (media.videoId || '');
+            onUpdate(cards.map(c => c.id === cardId ? {
+              ...c,
+              fileHash: assetHash,
+              fileName: media.name || c.fileName,
+              localPreviewUrl: media.url || c.localPreviewUrl,
+            } : c));
             setMediaBrowserTarget(null);
           }}
           onClose={() => setMediaBrowserTarget(null)}

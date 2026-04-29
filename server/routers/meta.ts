@@ -29,11 +29,22 @@ async function metaGet(
   accessToken: string
 ) {
   const url = `${META_BASE}${path}`;
-  const resp = await axios.get(url, {
-    params: { ...params, access_token: accessToken },
-    timeout: 30000,
-  });
-  return resp.data;
+  try {
+    const resp = await axios.get(url, {
+      params: { ...params, access_token: accessToken },
+      timeout: 30000,
+    });
+    return resp.data;
+  } catch (err: unknown) {
+    // Extract the actual Meta API error message from the axios response body
+    if (err && typeof err === 'object' && 'response' in err) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string; error_user_msg?: string } } } };
+      const metaMsg = axiosErr.response?.data?.error?.message
+        || axiosErr.response?.data?.error?.error_user_msg;
+      if (metaMsg) throw new Error(`Meta API: ${metaMsg}`);
+    }
+    throw err;
+  }
 }
 
 async function metaPost(

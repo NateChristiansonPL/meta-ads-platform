@@ -169,3 +169,20 @@
 - [x] Ads tab: move Source Post ID column to after Lead Gen Form column
 - [x] Ads tab: Lead Gen Form uses page-recall picker (simplified per user request)
 - [x] Wire pl-campaign-creation skill to Export Launch button
+
+## Campaign Builder - Round 3 Fixes
+
+- [x] Fix reach estimate 400 errors (debug Meta API payload)
+- [x] Fix Settings/Sessions panel transparent background (black bg)
+- [x] Fix asset upload false error (suppress error when upload actually succeeded)
+- [x] Fix media browser hash return bug in carousel cards
+- [x] Fix ad name convention: "Creative Concept - Asset Type - Length - Month-Yr" (no brackets, no placement custom)
+- [x] Carry over website URL, primary text, headline, description, CTA, UTMs to ads table when generating from ad trafficker
+- [x] Fix typeahead positioning: all panels (location, interests, custom/LAL) should appear under Opt Goal column area
+- [x] Restructure audience targeting into unified Targeting panel with Location/Interests/Custom-LAL tabs
+- [x] Remove Custom/LAL audiences from Interests & Behaviors section
+- [x] Fix Custom/LAL panel: don't show all audiences until user searches; only show selected after selection
+- [x] Remove Lead Gen Form from optional fields in ad sets table
+- [x] Add model selector (1.6 Lite / 1.6) to Export tab Launch via Manus section
+- [x] Verify Meta API payload shapes for placements, locations, interests, custom audiences
+- [x] Explain write-back architecture for ad IDs, ad set IDs, campaign IDs, source post IDs, preview links

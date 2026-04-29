@@ -93,7 +93,7 @@ function buildTargetingSpec(row: AdSetRow): Record<string, unknown> {
     spec.geo_locations = { countries: ['US'] };
   }
 
-  // Detailed interests
+  // Detailed interests — id must be a string for Meta API, skip empty arrays
   const interestObjs: InterestObject[] = row.detailedInterestObjects || [];
   const narrowObjs: InterestObject[] = row.narrowInterestObjects || [];
 
@@ -101,18 +101,19 @@ function buildTargetingSpec(row: AdSetRow): Record<string, unknown> {
     const flexSpec: Record<string, unknown>[] = [];
     if (interestObjs.length > 0) {
       flexSpec.push({
-        interests: interestObjs.map(i => ({ id: i.id, name: i.name })),
+        interests: interestObjs.map(i => ({ id: String(i.id), name: i.name })),
       });
     }
     if (narrowObjs.length > 0) {
       flexSpec.push({
-        interests: narrowObjs.map(i => ({ id: i.id, name: i.name })),
+        interests: narrowObjs.map(i => ({ id: String(i.id), name: i.name })),
       });
     }
-    spec.flexible_spec = flexSpec;
+    if (flexSpec.length > 0) spec.flexible_spec = flexSpec;
   }
 
-  // Placements
+  // Placements — 'threads' is NOT a valid publisher_platform for targeting
+  const VALID_PUBLISHER_PLATFORMS = new Set(['facebook', 'instagram', 'audience_network', 'messenger']);
   if (row.placementType === 'advantage_plus') {
     spec.publisher_platforms = ['facebook', 'instagram'];
   } else if (row.placements.length > 0) {
@@ -124,8 +125,11 @@ function buildTargetingSpec(row: AdSetRow): Record<string, unknown> {
       else if (p.startsWith('instagram_')) { platforms.add('instagram'); igPositions.push(p.replace('instagram_', '')); }
       else if (p.startsWith('audience_network_')) platforms.add('audience_network');
       else if (p.startsWith('messenger_')) platforms.add('messenger');
+      // 'threads' and other non-standard platforms are intentionally skipped
     }
-    spec.publisher_platforms = Array.from(platforms);
+    // Only include valid platforms
+    const validPlatforms = Array.from(platforms).filter(p => VALID_PUBLISHER_PLATFORMS.has(p));
+    if (validPlatforms.length > 0) spec.publisher_platforms = validPlatforms;
     if (fbPositions.length) spec.facebook_positions = fbPositions;
     if (igPositions.length) spec.instagram_positions = igPositions;
   }

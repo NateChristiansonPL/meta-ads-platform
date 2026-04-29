@@ -243,6 +243,7 @@ function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRo
 export default function ExportPanel({ state, onLaunch, launchProgress }: Props) {
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   const [localAds, setLocalAds] = useState<AdRow[]>(state.ads);
+  const [agentProfile, setAgentProfile] = useState<'manus-1.6-lite' | 'manus-1.6'>('manus-1.6-lite');
   const [manusLaunch, setManusLaunch] = useState<ManusLaunchState>({
     phase: 'idle',
     statusMessages: [],
@@ -297,7 +298,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         pixelId: settings.pixelId,
         buildMode,
         stateJson: JSON.stringify(state),
-        agentProfile: 'manus-1.6-lite',
+        agentProfile,
       });
       setManusLaunch(prev => ({ ...prev, phase: 'running', runId: result.runId, statusMessages: ['Build submitted. Manus agent is running...'] }));
     } catch (err) {
@@ -473,6 +474,30 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         </div>
         {/* Ad override table */}
         <AdOverrideTable ads={localAds} onUpdate={setLocalAds} />
+
+        {/* Model selector */}
+        <div className="bg-surface-1 rounded-xl border border-border p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[12px] font-700 text-foreground">Manus Model</span>
+            <span className="text-[10px] text-muted-foreground">Select the agent model for this build</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {(['manus-1.6-lite', 'manus-1.6'] as const).map(profile => (
+              <button
+                key={profile}
+                onClick={() => setAgentProfile(profile)}
+                className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                  agentProfile === profile
+                    ? 'bg-primary/10 border-primary/40 text-primary'
+                    : 'bg-surface-2/30 border-border text-muted-foreground hover:border-primary/30 hover:text-foreground'
+                }`}
+              >
+                <span className="text-[12px] font-700">{profile === 'manus-1.6-lite' ? 'Manus 1.6 Lite' : 'Manus 1.6'}</span>
+                <span className="text-[10px] mt-0.5">{profile === 'manus-1.6-lite' ? 'Faster · fewer credits' : 'Deeper reasoning · more credits'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Launch via Manus Panel */}
         <div className="bg-surface-1 rounded-xl border border-border overflow-hidden">

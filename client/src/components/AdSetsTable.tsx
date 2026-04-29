@@ -45,8 +45,8 @@ interface Props {
   onOverlapHistoryChange: (h: OverlapRun[]) => void;
 }
 
-type PanelType = 'location' | 'audience' | 'optional' | 'dayparting';
-type AudienceFocus = 'interests' | 'custom';
+type PanelType = 'targeting' | 'optional' | 'dayparting';
+type AudienceFocus = 'location' | 'interests' | 'custom';
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Th({ children, required, muted, className }: {
@@ -505,7 +505,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   const [audienceSearch, setAudienceSearch] = useState('');
   const { data: customAudiencesData, isLoading: loadingAudiences } = trpc.meta.getCustomAudiences.useQuery(
     { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', search: audienceSearch || undefined },
-    { enabled: hasCredentials, staleTime: 2 * 60 * 1000 }
+    { enabled: hasCredentials && audienceSearch.trim().length > 0, staleTime: 2 * 60 * 1000 }
   );
   const { data: savedAudiencesData } = trpc.meta.getSavedAudiences.useQuery(
     { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '' },
@@ -593,9 +593,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   };
 
   const togglePanel = (rowId: string, panel: PanelType) => {
-    setExpandedPanel(prev =>
-      prev?.rowId === rowId && prev?.panel === panel ? null : { rowId, panel }
-    );
+    setExpandedPanel(prev => {
+      if (prev?.rowId === rowId && prev?.panel === panel) return null;
+      if (panel === 'targeting') setAudienceFocus('location');
+      return { rowId, panel };
+    });
   };
 
   const getOptFields = (rowId: string) => activeOptFields[rowId] ?? new Set<string>();
@@ -708,9 +710,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
               <Th required>Placements</Th>
               <Th>Age</Th>
               <Th>Gender</Th>
-              <Th>Location</Th>
-              <Th>Interests</Th>
-              <Th>Custom/LAL</Th>
+              <Th>Targeting</Th>
               <Th>Optional Fields</Th>
               <Th className="w-16" />
             </tr>
@@ -1007,60 +1007,22 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                       </div>
                     </td>
 
-                    {/* Location expand button */}
-                    <td className="border-r border-border/30 p-0 min-w-[100px]">
+                    {/* Unified Targeting expand button */}
+                    <td className="border-r border-border/30 p-0 min-w-[130px]">
                       <button
-                        onClick={() => togglePanel(row.id, 'location')}
+                        onClick={() => togglePanel(row.id, 'targeting')}
                         className={cn(
                           'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
-                          isExpanded && expandedPanel?.panel === 'location' && 'text-primary'
+                          isExpanded && expandedPanel?.panel === 'targeting' && 'text-primary'
                         )}
                       >
                         <MapPin size={11} className={row.geoLocations ? 'text-primary' : 'text-muted-foreground/40'} />
-                        <span className={cn('text-[11px] truncate max-w-[80px]',
-                          row.geoLocations ? 'text-foreground' : 'text-muted-foreground/40')}>
-                          {row.geoLocations || 'Add…'}
+                        <span className={cn('text-[11px] truncate max-w-[90px]',
+                          (row.geoLocations || row.detailedInterests || row.targetedAudiences) ? 'text-foreground' : 'text-muted-foreground/40')}>
+                          {[row.geoLocations && 'Loc', row.detailedInterests && 'Int', row.targetedAudiences && 'Aud']
+                            .filter(Boolean).join(' · ') || 'Add…'}
                         </span>
-                        {isExpanded && expandedPanel?.panel === 'location'
-                          ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
-                          : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
-                      </button>
-                    </td>
-
-                    {/* Interests expand button */}
-                    <td className="border-r border-border/30 p-0 min-w-[90px]">
-                      <button
-                        onClick={() => { setAudienceFocus('interests'); togglePanel(row.id, 'audience'); }}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
-                          isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'interests' && 'text-primary'
-                        )}
-                      >
-                        <Users size={11} className={row.detailedInterests ? 'text-primary' : 'text-muted-foreground/40'} />
-                        <span className={cn('text-[11px] truncate max-w-[60px]',
-                          row.detailedInterests ? 'text-foreground' : 'text-muted-foreground/40')}>
-                          {row.detailedInterests ? 'Set' : 'Add…'}
-                        </span>
-                        {isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'interests'
-                          ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
-                          : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
-                      </button>
-                    </td>
-                    {/* Custom/LAL expand button */}
-                    <td className="border-r border-border/30 p-0 min-w-[90px]">
-                      <button
-                        onClick={() => { setAudienceFocus('custom'); togglePanel(row.id, 'audience'); }}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
-                          isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'custom' && 'text-primary'
-                        )}
-                      >
-                        <Users size={11} className={row.targetedAudiences ? 'text-emerald-400' : 'text-muted-foreground/40'} />
-                        <span className={cn('text-[11px] truncate max-w-[60px]',
-                          row.targetedAudiences ? 'text-foreground' : 'text-muted-foreground/40')}>
-                          {row.targetedAudiences ? 'Set' : 'Add…'}
-                        </span>
-                        {isExpanded && expandedPanel?.panel === 'audience' && audienceFocus === 'custom'
+                        {isExpanded && expandedPanel?.panel === 'targeting'
                           ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
                           : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
                       </button>
@@ -1106,23 +1068,41 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                       <td colSpan={15} className="p-0 overflow-hidden">
                         <div className="sticky left-0 px-6 py-4 space-y-4" style={{ width: 'min(100vw - 2rem, 860px)' }}>
 
-                          {/* LOCATION PANEL */}
-                          {expandedPanel?.panel === 'location' && (
+                          {/* UNIFIED TARGETING PANEL */}
+                          {expandedPanel?.panel === 'targeting' && (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[12px] font-700 text-foreground">Location Targeting</span>
-                                  <button onClick={() => { setBulkLocModal({ rowId: row.id }); setBulkLocText(''); }}
-                                    className="flex items-center gap-1 px-2 py-0.5 rounded border border-border text-[10px] font-600 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
-                                    <Plus size={9} /> Bulk Paste
-                                  </button>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[12px] font-700 text-foreground">Targeting</span>
+                                  <div className="flex gap-0.5">
+                                    {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => (
+                                      <button key={f} onClick={() => setAudienceFocus(f)}
+                                        className={cn(
+                                          'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                                          audienceFocus === f
+                                            ? 'bg-primary/15 border-primary/40 text-primary'
+                                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
+                                        )}>
+                                        {f === 'location' ? 'Location' : f === 'interests' ? 'Interests & Behaviors' : 'Custom / LAL'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {audienceFocus === 'location' && (
+                                    <button onClick={() => { setBulkLocModal({ rowId: row.id }); setBulkLocText(''); }}
+                                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-border text-[10px] font-600 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors">
+                                      <Plus size={9} /> Bulk Paste
+                                    </button>
+                                  )}
                                 </div>
                                 <button onClick={() => { setExpandedPanel(null); setLocationQuery(''); setLocationRowId(null); }}
                                   className="text-[11px] text-primary hover:text-primary/80 font-600 transition-colors">
                                   Done
                                 </button>
                               </div>
-                              <div className="max-w-2xl space-y-3">
+
+                              {/* LOCATION TAB */}
+                              {audienceFocus === 'location' && (
+                                <div className="max-w-2xl space-y-3">
                                 {/* Typeahead search */}
                                 {hasCredentials ? (
                                   <div className="relative">
@@ -1200,37 +1180,12 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30"
                                   />
                                 </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* AUDIENCE PANEL */}
-                          {expandedPanel?.panel === 'audience' && (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-[12px] font-700 text-foreground">Audience Targeting</span>
-                                  <div className="flex gap-0.5">
-                                    {(['interests', 'custom'] as AudienceFocus[]).map(f => (
-                                      <button key={f} onClick={() => setAudienceFocus(f)}
-                                        className={cn(
-                                          'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
-                                          audienceFocus === f
-                                            ? 'bg-primary/15 border-primary/40 text-primary'
-                                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground'
-                                        )}>
-                                        {f === 'interests' ? 'Interests & Behaviors' : 'Custom / LAL Audiences'}
-                                      </button>
-                                    ))}
-                                  </div>
                                 </div>
-                                <button onClick={() => setExpandedPanel(null)}
-                                  className="text-[11px] text-primary hover:text-primary/80 font-600 transition-colors">
-                                  Done
-                                </button>
-                              </div>
+                              )}
 
-                              <div className="grid grid-cols-2 gap-6" style={{ display: audienceFocus === 'interests' ? 'grid' : 'none' }}>
+                              {/* INTERESTS & BEHAVIORS TAB */}
+                              {audienceFocus === 'interests' && (
+                                <div className="grid grid-cols-2 gap-6">
                                 {/* Left: Interest targeting */}
                                 <div className="space-y-3">
                                   {/* Detailed Interests — live typeahead */}
@@ -1389,145 +1344,9 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     )}
                                   </div>
                                 </div>
-
-                                {/* Right: Custom/LAL audiences */}
-                                <div className="space-y-3" style={{ display: audienceFocus === 'interests' ? 'block' : 'none' }}>
-                                  {/* Custom audience picker */}
-                                  <div>
-                                    <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">
-                                      Targeted Custom / LAL Audiences
-                                    </label>
-                                    {hasCredentials ? (
-                                      <>
-                                        <div className="flex items-center gap-2 mb-1.5">
-                                          <input
-                                            value={audienceSearch}
-                                            onChange={e => setAudienceSearch(e.target.value)}
-                                            placeholder="Search audiences…"
-                                            className="flex-1 px-2 py-1.5 text-[11px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
-                                          />
-                                          {loadingAudiences && <span className="text-[10px] text-muted-foreground">Loading…</span>}
-                                        </div>
-                                        {/* Custom + LAL audiences list */}
-                                        {customAudiences.length > 0 && (
-                                          <div className="max-h-32 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
-                                            {customAudiences.map((aud: { id: string; name: string; approximateCount?: number; subtype?: string }) => {
-                                              const isSelected = (row.targetedAudiences || '').includes(aud.name);
-                                              return (
-                                                <button key={aud.id} onClick={() => {
-                                                  const current = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
-                                                  if (isSelected) {
-                                                    update(row.id, { targetedAudiences: current.filter(a => a !== aud.name).join('\n') });
-                                                  } else {
-                                                    update(row.id, { targetedAudiences: [...current, aud.name].join('\n') });
-                                                  }
-                                                }}
-                                                  className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                                    isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2 text-foreground')}>
-                                                  <span>{aud.name}</span>
-                                                  <span className="text-[10px] text-muted-foreground/60">{aud.subtype} {aud.approximateCount ? `• ${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</span>
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-                                        )}
-                                        {/* Saved audiences */}
-                                        {savedAudiences.length > 0 && (
-                                          <div className="mt-2">
-                                            <label className="text-[9px] font-700 text-muted-foreground/60 tracking-wider uppercase block mb-1">Saved Audiences</label>
-                                            <div className="max-h-24 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
-                                              {savedAudiences.map((aud: { id: string; name: string; approximateCount?: number }) => {
-                                                const isSelected = (row.targetedAudiences || '').includes(aud.name);
-                                                return (
-                                                  <button key={aud.id} onClick={() => {
-                                                    const current = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
-                                                    if (isSelected) {
-                                                      update(row.id, { targetedAudiences: current.filter(a => a !== aud.name).join('\n') });
-                                                    } else {
-                                                      update(row.id, { targetedAudiences: [...current, aud.name].join('\n') });
-                                                    }
-                                                  }}
-                                                    className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                                      isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2 text-foreground')}>
-                                                    <span>{aud.name}</span>
-                                                    <span className="text-[10px] text-muted-foreground/60">{aud.approximateCount ? `${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</span>
-                                                  </button>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        )}
-                                        {/* Selected chips */}
-                                        {row.targetedAudiences && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {row.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
-                                              <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[10px] text-primary">
-                                                {a}
-                                                <button onClick={() => update(row.id, { targetedAudiences: row.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <textarea
-                                        value={row.targetedAudiences}
-                                        onChange={e => update(row.id, { targetedAudiences: e.target.value })}
-                                        placeholder="Website Visitors 180d, Email List LAL 1%…"
-                                        rows={3}
-                                        className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30"
-                                      />
-                                    )}
-                                  </div>
-
-                                  {/* Excluded audiences */}
-                                  <div>
-                                    <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Excluded Custom / LAL Audiences</label>
-                                    {hasCredentials && customAudiences.length > 0 ? (
-                                      <>
-                                        <div className="max-h-28 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
-                                          {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                                            const isExcluded = (row.excludedAudiences || '').includes(aud.name);
-                                            return (
-                                              <button key={aud.id} onClick={() => {
-                                                const current = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
-                                                if (isExcluded) {
-                                                  update(row.id, { excludedAudiences: current.filter(a => a !== aud.name).join('\n') });
-                                                } else {
-                                                  update(row.id, { excludedAudiences: [...current, aud.name].join('\n') });
-                                                }
-                                              }}
-                                                className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                                  isExcluded ? 'bg-red-500/10 text-red-400' : 'hover:bg-surface-2 text-foreground')}>
-                                                <span>{aud.name}</span>
-                                                <span className="text-[10px] text-muted-foreground/60">{aud.subtype}</span>
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                        {row.excludedAudiences && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {row.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
-                                              <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
-                                                {a}
-                                                <button onClick={() => update(row.id, { excludedAudiences: row.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <textarea
-                                        value={row.excludedAudiences}
-                                        onChange={e => update(row.id, { excludedAudiences: e.target.value })}
-                                        placeholder="Existing Customers, Purchasers 180d…"
-                                        rows={3}
-                                        className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 resize-none placeholder:text-muted-foreground/30"
-                                      />
-                                    )}
-                                  </div>
                                 </div>
-                              </div>
+                              )}
+
 
                               {/* Custom/LAL full view when focused */}
                               {audienceFocus === 'custom' && (
@@ -1542,6 +1361,9 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                             className="flex-1 px-2 py-1.5 text-[11px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 placeholder:text-muted-foreground/30" />
                                           {loadingAudiences && <span className="text-[10px] text-muted-foreground">Loading…</span>}
                                         </div>
+                                        {audienceSearch.trim().length === 0 && (
+                                          <p className="text-[10px] text-muted-foreground/50 italic px-1">Type to search your account audiences…</p>
+                                        )}
                                         {customAudiences.length > 0 && (
                                           <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
                                             {customAudiences.map((aud: { id: string; name: string; approximateCount?: number; subtype?: string }) => {
@@ -1578,23 +1400,28 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                   </div>
                                   <div className="space-y-3">
                                     <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Excluded Custom / LAL Audiences</label>
-                                    {hasCredentials && customAudiences.length > 0 ? (
+                                    {hasCredentials ? (
                                       <>
-                                        <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
-                                          {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                                            const isExcl = (row.excludedAudiences || '').includes(aud.name);
-                                            return (
-                                              <button key={aud.id} onClick={() => {
-                                                const cur = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
-                                                update(row.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
-                                              }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                                isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-surface-2 text-foreground')}>
-                                                <span>{aud.name}</span>
-                                                <span className="text-[10px] text-muted-foreground/60">{aud.subtype}</span>
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
+                                        {audienceSearch.trim().length === 0 && (
+                                          <p className="text-[10px] text-muted-foreground/50 italic px-1">Use the search above to find audiences to exclude…</p>
+                                        )}
+                                        {customAudiences.length > 0 && (
+                                          <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
+                                            {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
+                                              const isExcl = (row.excludedAudiences || '').includes(aud.name);
+                                              return (
+                                                <button key={aud.id} onClick={() => {
+                                                  const cur = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
+                                                  update(row.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                                                }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
+                                                  isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-surface-2 text-foreground')}>
+                                                  <span>{aud.name}</span>
+                                                  <span className="text-[10px] text-muted-foreground/60">{aud.subtype}</span>
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                         {row.excludedAudiences && (
                                           <div className="flex flex-wrap gap-1 mt-1.5">
                                             {row.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (

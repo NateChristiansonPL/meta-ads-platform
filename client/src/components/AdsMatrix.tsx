@@ -32,24 +32,26 @@ function matrixKey(creativeId: string, adSetId: string): MatrixKey {
   return `${creativeId}__${adSetId}`;
 }
 
-// Build ad name: [Type] Concept - Dimension/Length
+// Build ad name: Creative Concept - Asset Type - Length (if applicable) - Month-Yr
 function buildAdName(
-  adSetName: string,
+  _adSetName: string,
   concept: string,
   adType: string,
   assetLength: string,
-  dimensions: string[],
+  _dimensions: string[],
   launchDate?: string,
 ): string {
-  const typeLabel = adType === 'video' ? 'Video' : adType === 'carousel' ? 'Carousel' : 'Static';
-  const dimPart = adType === 'video'
-    ? (assetLength ? `${assetLength}s` : '')
-    : dimensions.length > 1
-      ? 'Placement Custom'
-      : dimensions[0] || '';
-  const datePart = launchDate ? ` - ${launchDate}` : '';
-  const suffix = dimPart ? ` - ${dimPart}${datePart}` : datePart;
-  return `[${typeLabel}] ${concept || 'Untitled'}${suffix}`;
+  const parts: string[] = [concept || 'Untitled'];
+  if (adType === 'video') {
+    parts.push('Video');
+    if (assetLength) parts.push(`${assetLength}s`);
+  } else if (adType === 'carousel') {
+    parts.push('Carousel');
+  } else {
+    parts.push('Static');
+  }
+  if (launchDate) parts.push(launchDate);
+  return parts.join(' - ');
 }
 
 // Parse launch date from ad set start date → "Apr-26" format
@@ -127,10 +129,14 @@ export default function AdsMatrix({ ads, adSets, creatives, campaigns, buildMode
       const dims = creative.placementDimensions || [];
       const adName = buildAdName(adSet.name, creative.concept, creative.adType, creative.assetLength, dims, launchDate);
 
-      // Inherit URL and UTM from creative (use first placement override or row-level value)
+      // Inherit URL, UTM, copy, and CTA from creative (use first placement override or row-level value)
       const firstPlacement = creative.placementAssets?.[0];
       const inheritedUrl = firstPlacement?.websiteUrl || creative.websiteUrl || '';
       const inheritedUtm = creative.urlParams || '';
+      const inheritedPrimaryText = creative.primaryTexts?.[0] || '';
+      const inheritedHeadline = creative.headlines?.[0] || '';
+      const inheritedDescription = creative.descriptions?.[0] || '';
+      const inheritedCta = creative.cta || '';
 
       // Only use adSetId if it looks like a real Meta numeric ID (not our internal UUID)
       const metaAdSetId = /^\d{10,}$/.test(adSet.adSetId) ? adSet.adSetId : '';
@@ -150,6 +156,10 @@ export default function AdsMatrix({ ads, adSets, creatives, campaigns, buildMode
         needsUpdate: false,
         overrideWebsiteUrl: inheritedUrl,
         overrideUtmParams: inheritedUtm,
+        overridePrimaryText: inheritedPrimaryText,
+        overrideHeadline: inheritedHeadline,
+        overrideDescription: inheritedDescription,
+        overrideCta: inheritedCta,
       });
     });
 
