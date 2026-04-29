@@ -61,6 +61,8 @@ async function metaPost(
   return resp.data;
 }
 
+type RawAdAccount = { id: string; name: string; account_status: number; currency: string };
+
 function normalizeAdAccountId(raw: string): string {
   const stripped = raw.replace(/^act_/, "");
   return `act_${stripped}`;
@@ -1649,38 +1651,33 @@ export const metaRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Token not found" });
       }
       try {
-        // Fetch ad accounts accessible via this token through the BM
+        // Fetch BOTH owned and client ad accounts in parallel — a BM can have both
         const bmId = tokenRecord.businessManagerId;
-        const data = await metaGet(
-          `/${bmId}/owned_ad_accounts`,
-          { fields: "id,name,account_status,currency", limit: "200" },
-          tokenRecord.accessToken
-        );
-        const accounts = (data.data || []).map(
-          (a: { id: string; name: string; account_status: number; currency: string }) => ({
-            id: a.id,           // already in act_XXXXX format
-            name: a.name,
-            status: a.account_status,
-            currency: a.currency,
-          })
-        );
-        // If no owned accounts, try client ad accounts
-        if (accounts.length === 0) {
-          const clientData = await metaGet(
-            `/${bmId}/client_ad_accounts`,
-            { fields: "id,name,account_status,currency", limit: "200" },
-            tokenRecord.accessToken
-          );
-          const clientAccounts = (clientData.data || []).map(
-            (a: { id: string; name: string; account_status: number; currency: string }) => ({
-              id: a.id,
-              name: a.name,
-              status: a.account_status,
-              currency: a.currency,
-            })
-          );
-          return { accounts: clientAccounts };
-        }
+        const mapAccounts = (raw: unknown[]) =>
+          (raw || []).map((a) => {
+            const acc = a as RawAdAccount;
+            return { id: acc.id, name: acc.name, status: acc.account_status, currency: acc.currency };
+          });
+
+        const [ownedResult, clientResult] = await Promise.allSettled([
+          metaGet(`/${bmId}/owned_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
+          metaGet(`/${bmId}/client_ad_accounts`, { fields: "id,name,account_status,currency", limit: "200" }, tokenRecord.accessToken),
+        ]);
+
+        const ownedAccounts = ownedResult.status === "fulfilled" ? mapAccounts(ownedResult.value.data || []) : [];
+        const clientAccounts = clientResult.status === "fulfilled" ? mapAccounts(clientResult.value.data || []) : [];
+
+        // Merge and deduplicate by account id
+        const seen = new Set<string>();
+        const accounts = [...ownedAccounts, ...clientAccounts].filter((a) => {
+          if (seen.has(a.id)) return false;
+          seen.add(a.id);
+          return true;
+        });
+
+        // Sort alphabetically by name for easier scanning
+        accounts.sort((a, b) => a.name.localeCompare(b.name));
+
         return { accounts };
       } catch (err) {
         throw new TRPCError({
