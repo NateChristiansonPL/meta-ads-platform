@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { MessageSquarePlus, Star, ChevronRight, CheckCircle2 } from "lucide-react";
+import { MessageSquarePlus, ChevronRight, CheckCircle2 } from "lucide-react";
 
 const SKILLS = [
   { id: "weekly-optimization", name: "Weekly Optimization" },
@@ -17,9 +17,10 @@ const SKILLS = [
   { id: "creative-lifecycle", name: "Creative Lifecycle" },
   { id: "structural-audit", name: "Structural Audit" },
   { id: "audience-overlap", name: "Audience Overlap" },
+  { id: "campaign-builder", name: "Campaign Builder" },
 ];
 
-type Category = "skill" | "suggestion" | "general";
+type Category = "skill" | "skill-issue" | "suggestion" | "general";
 
 interface FeedbackModalProps {
   open: boolean;
@@ -33,16 +34,12 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   const [category, setCategory] = useState<Category | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string>("");
   const [message, setMessage] = useState("");
-  const [rating, setRating] = useState<number | null>(null);
-  const [hoverRating, setHoverRating] = useState<number | null>(null);
 
   const reset = () => {
     setStep("category");
     setCategory(null);
     setSelectedSkillId("");
     setMessage("");
-    setRating(null);
-    setHoverRating(null);
   };
 
   const handleClose = (val: boolean) => {
@@ -57,14 +54,16 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
   const handleSubmit = async () => {
     if (!category || !message.trim()) return;
+    // For skill and skill-issue categories, require a skill selection
+    if ((category === "skill" || category === "skill-issue") && !selectedSkillId) return;
     const skill = SKILLS.find((s) => s.id === selectedSkillId);
     try {
       await submit.mutateAsync({
-        category,
-        skillId: category === "skill" ? (skill?.id ?? undefined) : undefined,
-        skillName: category === "skill" ? (skill?.name ?? undefined) : undefined,
+        category: category,
+        skillId: (category === "skill" || category === "skill-issue") ? (skill?.id ?? undefined) : undefined,
+        skillName: (category === "skill" || category === "skill-issue") ? (skill?.name ?? undefined) : undefined,
         message: message.trim(),
-        rating: rating ?? undefined,
+        rating: undefined,
       });
       setStep("done");
     } catch {
@@ -73,10 +72,13 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   };
 
   const categoryOptions: { id: Category; label: string; description: string; icon: string }[] = [
-    { id: "skill", label: "Skill Feedback", description: "Rate or comment on a specific analysis skill", icon: "📊" },
+    { id: "skill", label: "Skill Feedback", description: "Comment on a specific analysis skill", icon: "📊" },
+    { id: "skill-issue", label: "Issues When Running Skill", description: "Report a problem encountered while running a skill", icon: "⚠️" },
     { id: "suggestion", label: "Skill Suggestions", description: "Suggest new skills or improvements to existing ones", icon: "💡" },
     { id: "general", label: "General Feedback", description: "Share thoughts on the platform overall", icon: "💬" },
   ];
+
+  const needsSkillSelector = category === "skill" || category === "skill-issue";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -141,8 +143,8 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               </span>
             </div>
 
-            {/* Skill selector (only for "skill" category) */}
-            {category === "skill" && (
+            {/* Skill selector (for "skill" and "skill-issue" categories) */}
+            {needsSkillSelector && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>Which skill?</label>
                 <select
@@ -159,44 +161,14 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
               </div>
             )}
 
-            {/* Star rating (optional, shown for skill and general) */}
-            {(category === "skill" || category === "general") && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>
-                  Rating <span style={{ color: "rgba(255,255,255,0.25)" }}>(optional)</span>
-                </label>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => {
-                    const filled = (hoverRating ?? rating ?? 0) >= n;
-                    return (
-                      <button
-                        key={n}
-                        onClick={() => setRating(rating === n ? null : n)}
-                        onMouseEnter={() => setHoverRating(n)}
-                        onMouseLeave={() => setHoverRating(null)}
-                        className="transition-transform hover:scale-110"
-                      >
-                        <Star
-                          size={22}
-                          fill={filled ? "#F59E0B" : "none"}
-                          style={{ color: filled ? "#F59E0B" : "rgba(255,255,255,0.2)" }}
-                        />
-                      </button>
-                    );
-                  })}
-                  {rating && (
-                    <span className="text-xs ml-2" style={{ color: "rgba(255,255,255,0.35)" }}>
-                      {["", "Poor", "Fair", "Good", "Great", "Excellent"][rating]}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Message */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.5)" }}>
-                {category === "suggestion" ? "Your suggestion" : "Your feedback"}
+                {category === "suggestion"
+                  ? "Your suggestion"
+                  : category === "skill-issue"
+                  ? "Describe the issue"
+                  : "Your feedback"}
               </label>
               <textarea
                 value={message}
@@ -204,6 +176,8 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
                 placeholder={
                   category === "skill"
                     ? "What worked well? What could be improved?"
+                    : category === "skill-issue"
+                    ? "Describe what happened when you ran the skill…"
                     : category === "suggestion"
                     ? "Describe the skill or improvement you'd like to see…"
                     : "Share your thoughts on the platform…"
@@ -224,7 +198,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
             {/* Submit */}
             <Button
               onClick={handleSubmit}
-              disabled={submit.isPending || !message.trim() || (category === "skill" && !selectedSkillId)}
+              disabled={submit.isPending || !message.trim() || (needsSkillSelector && !selectedSkillId)}
               className="w-full font-semibold text-sm"
               style={{ background: "#00BEEF", color: "#141349" }}
             >

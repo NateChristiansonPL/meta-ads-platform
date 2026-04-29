@@ -133,9 +133,9 @@ export type InsertAppSetting = typeof appSettings.$inferInsert;
 export const feedback = mysqlTable("feedback", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  /** Category: 'skill' | 'suggestion' | 'general' */
-  category: mysqlEnum("category", ["skill", "suggestion", "general"]).notNull(),
-  /** Only set when category = 'skill' */
+  /** Category: 'skill' | 'skill-issue' | 'suggestion' | 'general' */
+  category: mysqlEnum("category", ["skill", "skill-issue", "suggestion", "general"]).notNull(),
+  /** Only set when category = 'skill' or 'skill-issue' */
   skillId: varchar("skillId", { length: 64 }),
   skillName: varchar("skillName", { length: 128 }),
   /** The feedback message */

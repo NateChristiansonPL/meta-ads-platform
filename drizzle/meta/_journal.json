@@ -71,6 +71,13 @@
       "when": 1777404582422,
       "tag": "0009_wakeful_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1777495161240,
+      "tag": "0010_free_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

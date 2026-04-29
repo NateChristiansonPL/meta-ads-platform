@@ -193,3 +193,10 @@
 - [x] Remove Manus AI from Tools section in Knowledge Base
 - [x] Update sidebar nav: rename three Coming Soon items to Creative Decay, Audience Saturation, Allocation Drift
 - [x] Add Early Detection grouping label in sidebar nav
+
+## UI Fixes Batch 4
+
+- [x] Fix ad accounts not loading after BM selection (critical bug)
+- [x] Fix date note styling: larger font, bold, black text, yellow highlight
+- [x] Fix credits counter: show count + % (÷8000), remove date range
+- [x] Feedback modal: remove rating from all options, add "Issues when running skill" dimension with skill dropdown (including Campaign Builder)

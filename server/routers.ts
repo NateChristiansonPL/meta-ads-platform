@@ -1050,7 +1050,7 @@ export const appRouter = router({
     /** Submit feedback (any logged-in user) */
     submit: protectedProcedure
       .input(z.object({
-        category: z.enum(["skill", "suggestion", "general"]),
+        category: z.enum(["skill", "skill-issue", "suggestion", "general"]),
         skillId: z.string().optional(),
         skillName: z.string().optional(),
         message: z.string().min(1).max(4000),
@@ -1071,7 +1071,7 @@ export const appRouter = router({
     /** List all feedback (admin only) */
     list: adminProcedure
       .input(z.object({
-        category: z.enum(["skill", "suggestion", "general"]).optional(),
+        category: z.enum(["skill", "skill-issue", "suggestion", "general"]).optional(),
       }).optional())
       .query(async ({ input }) => listFeedback(input ?? {})),
 

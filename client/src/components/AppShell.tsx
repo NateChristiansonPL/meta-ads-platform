@@ -121,14 +121,9 @@ function CreditsWidget() {
   if (credits === null) return null;
 
   const color = "#00B37A";
-
-  // Build a human-readable period label from the billing period data
-  let periodLabel = "this billing period";
-  if (billingPeriod?.periodStart && billingPeriod?.periodEnd) {
-    const fmt = (s: string) => new Date(s + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    periodLabel = `${fmt(billingPeriod.periodStart)} – ${fmt(billingPeriod.periodEnd)}`;
-  }
-  const tooltip = `${credits.toLocaleString()} credits used by you ${periodLabel}`;
+  const SEAT_CREDITS = 8000;
+  const pctUsed = Math.round((credits / SEAT_CREDITS) * 100);
+  const tooltip = `${credits.toLocaleString()} credits used (${pctUsed}% of ${SEAT_CREDITS.toLocaleString()} seat credits)`;
 
   return (
     <div
@@ -138,7 +133,7 @@ function CreditsWidget() {
     >
       <Zap size={12} style={{ color }} />
       <span style={{ color }}>{credits.toLocaleString()}</span>
-      <span style={{ color: "rgba(255,255,255,0.35)" }}>credits used {periodLabel}</span>
+      <span style={{ color: "rgba(255,255,255,0.35)" }}>credits used; {pctUsed}% used</span>
     </div>
   );
 }
@@ -474,8 +469,8 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
               {/* Center: date note */}
               {dateNote && (
                 <span
-                  className="text-xs hidden md:block"
-                  style={{ color: "rgba(255,255,255,0.35)", lineHeight: 1.4, maxWidth: 340, textAlign: "center" }}
+                  className="hidden md:inline-block text-sm font-bold px-3 py-1 rounded"
+                  style={{ background: "#FBBF24", color: "#000000", lineHeight: 1.4, maxWidth: 400, textAlign: "center" }}
                 >
                   {dateNote}
                 </span>

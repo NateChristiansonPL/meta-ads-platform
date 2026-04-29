@@ -1,0 +1,1 @@
+ALTER TABLE `feedback` MODIFY COLUMN `category` enum('skill','skill-issue','suggestion','general') NOT NULL;

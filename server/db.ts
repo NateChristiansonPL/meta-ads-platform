@@ -458,7 +458,7 @@ export async function createFeedback(entry: Omit<InsertFeedback, "id" | "created
   return (result as { insertId: number }).insertId;
 }
 
-export async function listFeedback(opts?: { category?: "skill" | "suggestion" | "general" }) {
+export async function listFeedback(opts?: { category?: "skill" | "skill-issue" | "suggestion" | "general" }) {
   const db = await getDb();
   if (!db) return [];
   const q = db

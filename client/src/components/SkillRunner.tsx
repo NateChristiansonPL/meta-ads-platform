@@ -110,9 +110,12 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   );
 
   const selectedToken = activeTokens.find((t) => t.id === tokenId);
-  // Ad accounts come from the token vault — no separate Meta API call needed
-  const adAccounts: Array<{ id: string; name: string }> = [];
-  const loadingAccounts = false;
+  // Fetch ad accounts from Meta API using the selected BM token
+  const { data: adAccountsData, isLoading: loadingAccounts } = trpc.meta.getAdAccountsByTokenId.useQuery(
+    { tokenId: tokenId! },
+    { enabled: !!tokenId, staleTime: 5 * 60 * 1000 }
+  );
+  const adAccounts: Array<{ id: string; name: string }> = adAccountsData?.accounts ?? [];
 
   const { data: campaignsData, isLoading: loadingCampaigns } = trpc.meta.getCampaignsByTokenId.useQuery(
     { adAccountId, tokenId: tokenId! },
