@@ -3,7 +3,7 @@
 // Multiple dimensions = placement-customized (stacked asset inputs with per-placement URL/copy overrides)
 // Single dimension = can use post ID / dark post / social proof
 
-import { useRef, KeyboardEvent, useState, useCallback } from 'react';
+import { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
 import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import {
@@ -665,21 +665,23 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
   // Track which row is "focused" for paste anchor
   const [pasteAnchorRow, setPasteAnchorRow] = useState<number | null>(null);
 
-  const handleTablePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
-    // Only intercept if the paste target is NOT an input/textarea (let normal paste work in cells)
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+  // Use a stable ref for the paste handler so the effect can clean up properly
+  const pasteAnchorRowRef = useRef<number | null>(null);
+  const rowsRef = useRef(rows);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { pasteAnchorRowRef.current = pasteAnchorRow; }, [pasteAnchorRow]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-    const text = e.clipboardData.getData('text/plain');
-    if (!text.includes('\t') && !text.includes('\n')) return; // not a multi-cell paste
-    e.preventDefault();
-
+  const applyPaste = useCallback((text: string) => {
+    if (!text.includes('\t') && !text.includes('\n')) return false;
     const pasteRows = text.trim().split('\n').map(line => line.split('\t'));
-    const startRow = pasteAnchorRow ?? 0;
+    const startRow = pasteAnchorRowRef.current ?? 0;
+    const currentRows = rowsRef.current;
 
     // Ensure we have enough rows
     const needed = startRow + pasteRows.length;
-    let workingRows = [...rows];
+    let workingRows = [...currentRows];
     while (workingRows.length < needed) workingRows.push(newCreative());
 
     const updated = workingRows.map((r, ri) => {
@@ -692,12 +694,10 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
         const key = PASTE_COLS[ci] as PasteCol;
         const trimmed = val.trim();
         if (key === 'headlines' || key === 'primaryTexts' || key === 'descriptions') {
-          // Only set first variant; preserve existing variants
           const existing = (r[key] as string[]) || [''];
           patch[key] = [trimmed, ...existing.slice(1)];
         } else if (key === 'concept') {
           patch.concept = trimmed;
-          // Auto-regenerate creative ID
           patch.creativeId = generateCreativeId(trimmed, r.adType, r.assetLength);
         } else {
           (patch as Record<string, unknown>)[key] = trimmed;
@@ -706,9 +706,32 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
       return { ...r, ...patch };
     });
 
-    onChange(updated);
+    onChangeRef.current(updated);
     toast.success(`Pasted ${pasteRows.length} row${pasteRows.length === 1 ? '' : 's'} into Creative Library`);
-  }, [pasteAnchorRow, rows, onChange]);
+    return true;
+  }, []);
+
+  // Global paste listener: fires when the table container or any child has focus
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      const active = document.activeElement;
+      if (!tableRef.current?.contains(active)) return;
+      // Let normal paste work in text inputs / textareas
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (applyPaste(text)) e.preventDefault();
+    };
+    document.addEventListener('paste', handleGlobalPaste);
+    return () => document.removeEventListener('paste', handleGlobalPaste);
+  }, [applyPaste]);
+
+  // React onPaste fallback (catches paste when the container div itself is focused)
+  const handleTablePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+    const text = e.clipboardData.getData('text/plain');
+    if (applyPaste(text)) e.preventDefault();
+  }, [applyPaste]);
 
   return (
     <div>
@@ -732,7 +755,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
         </div>
       </div>
 
-      <div ref={tableRef} className="overflow-x-auto" onPaste={handleTablePaste}>
+      <div ref={tableRef} className="overflow-x-auto outline-none" tabIndex={-1} onPaste={handleTablePaste}>
         <table className="w-full border-collapse text-xs" style={{ minWidth: 1900 }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-surface-2 border-b-2 border-border">
@@ -762,7 +785,14 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               return (
                 <tr key={row.id}
                   className={`border-b border-border group hover:bg-surface-2/30 transition-colors ${pasteAnchorRow === i ? 'ring-1 ring-inset ring-primary/40' : ''}`}
-                  onClick={() => setPasteAnchorRow(i)}
+                  onClick={(e) => {
+                    // Don't steal focus from inputs/buttons
+                    const t = e.target as HTMLElement;
+                    if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA' && t.tagName !== 'SELECT' && t.tagName !== 'BUTTON') {
+                      tableRef.current?.focus({ preventScroll: true });
+                    }
+                    setPasteAnchorRow(i);
+                  }}
                 >
                   {/* # */}
                   <td className="px-2 py-0 text-center text-[10px] text-muted-foreground font-mono border-r border-border select-none">{i + 1}</td>
