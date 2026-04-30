@@ -13,6 +13,8 @@ import {
   createSkillRun,
   deactivateToken,
   deleteFeedback,
+  getFeedbackUnreadCount,
+  markFeedbackRead,
   deleteKnowledgeEntry,
   getAllAppSettings,
   getAllTokens,
@@ -1080,6 +1082,20 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ input }) => {
         await deleteFeedback(input.id);
+        return { success: true };
+      }),
+
+    /** Count unread feedback since admin last acknowledged (admin only) */
+    unreadCount: adminProcedure
+      .query(async ({ ctx }) => {
+        const count = await getFeedbackUnreadCount(ctx.user.id);
+        return { count };
+      }),
+
+    /** Mark all feedback as read for the current admin (admin only) */
+    markRead: adminProcedure
+      .mutation(async ({ ctx }) => {
+        await markFeedbackRead(ctx.user.id);
         return { success: true };
       }),
   }),

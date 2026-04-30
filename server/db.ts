@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  adminFeedbackReads,
   appSettings,
   campaignSessions,
   CampaignSession,
@@ -485,6 +486,38 @@ export async function deleteFeedback(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(feedback).where(eq(feedback.id, id));
+}
+
+/** Returns the count of feedback rows submitted after the admin's lastReadAt. */
+export async function getFeedbackUnreadCount(adminUserId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  // Get the admin's last read timestamp (null = never read)
+  const [readRow] = await db
+    .select({ lastReadAt: adminFeedbackReads.lastReadAt })
+    .from(adminFeedbackReads)
+    .where(eq(adminFeedbackReads.userId, adminUserId))
+    .limit(1);
+
+  const since = readRow?.lastReadAt ?? new Date(0);
+
+  const [countRow] = await db
+    .select({ count: count() })
+    .from(feedback)
+    .where(gt(feedback.createdAt, since));
+
+  return Number(countRow?.count ?? 0);
+}
+
+/** Marks all current feedback as read for the given admin user (upsert lastReadAt = now). */
+export async function markFeedbackRead(adminUserId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(adminFeedbackReads)
+    .values({ userId: adminUserId, lastReadAt: new Date() })
+    .onDuplicateKeyUpdate({ set: { lastReadAt: new Date() } });
 }
 
 // ── Last skill output per user per skill ──────────────────────────────────────

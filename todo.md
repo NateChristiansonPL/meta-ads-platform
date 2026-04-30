@@ -200,3 +200,9 @@
 - [x] Fix date note styling: larger font, bold, black text, yellow highlight
 - [x] Fix credits counter: show count + % (÷8000), remove date range
 - [x] Feedback modal: remove rating from all options, add "Issues when running skill" dimension with skill dropdown (including Campaign Builder)
+
+## UI Fixes Batch 5
+
+- [ ] Admin-only feedback notification badge: persists until admin clicks it, DB-backed unread count
+- [ ] Fix Primary Text column text alignment/size in CreativesTable to match Headline and Description
+- [ ] Paste-from-spreadsheet support for Creative Library columns (creative concept, length, website URL, headline, primary text, description, CTA, link to UTM)

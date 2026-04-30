@@ -657,11 +657,70 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
 
   const filledCount = rows.filter(r => r.concept.trim() || r.creativeId.trim()).length;
 
+  // ── Paste-from-spreadsheet ──────────────────────────────────────────────────
+  // Column order for paste: Creative Concept | Length | Website URL | Headline | Primary Text | Description | CTA | Link to UTM
+  const PASTE_COLS = ['concept', 'assetLength', 'websiteUrl', 'headlines', 'primaryTexts', 'descriptions', 'cta', 'urlParams'] as const;
+  type PasteCol = typeof PASTE_COLS[number];
+
+  // Track which row is "focused" for paste anchor
+  const [pasteAnchorRow, setPasteAnchorRow] = useState<number | null>(null);
+
+  const handleTablePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    // Only intercept if the paste target is NOT an input/textarea (let normal paste work in cells)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+
+    const text = e.clipboardData.getData('text/plain');
+    if (!text.includes('\t') && !text.includes('\n')) return; // not a multi-cell paste
+    e.preventDefault();
+
+    const pasteRows = text.trim().split('\n').map(line => line.split('\t'));
+    const startRow = pasteAnchorRow ?? 0;
+
+    // Ensure we have enough rows
+    const needed = startRow + pasteRows.length;
+    let workingRows = [...rows];
+    while (workingRows.length < needed) workingRows.push(newCreative());
+
+    const updated = workingRows.map((r, ri) => {
+      const pasteRowIdx = ri - startRow;
+      if (pasteRowIdx < 0 || pasteRowIdx >= pasteRows.length) return r;
+      const cells = pasteRows[pasteRowIdx];
+      const patch: Partial<CreativeRow> = {};
+      cells.forEach((val, ci) => {
+        if (ci >= PASTE_COLS.length) return;
+        const key = PASTE_COLS[ci] as PasteCol;
+        const trimmed = val.trim();
+        if (key === 'headlines' || key === 'primaryTexts' || key === 'descriptions') {
+          // Only set first variant; preserve existing variants
+          const existing = (r[key] as string[]) || [''];
+          patch[key] = [trimmed, ...existing.slice(1)];
+        } else if (key === 'concept') {
+          patch.concept = trimmed;
+          // Auto-regenerate creative ID
+          patch.creativeId = generateCreativeId(trimmed, r.adType, r.assetLength);
+        } else {
+          (patch as Record<string, unknown>)[key] = trimmed;
+        }
+      });
+      return { ...r, ...patch };
+    });
+
+    onChange(updated);
+    toast.success(`Pasted ${pasteRows.length} row${pasteRows.length === 1 ? '' : 's'} into Creative Library`);
+  }, [pasteAnchorRow, rows, onChange]);
+
   return (
     <div>
       {/* Sub-toolbar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-surface-1/50">
         <span className="text-[11px] font-700 text-foreground">Static &amp; Video Creatives</span>
+        {pasteAnchorRow !== null && (
+          <span className="text-[10px] text-primary/80 flex items-center gap-1">
+            <span className="font-mono bg-primary/10 px-1 py-0.5 rounded text-[9px]">Ctrl+V</span>
+            Paste from row {pasteAnchorRow + 1} · Cols: Concept | Length | URL | Headline | Primary Text | Description | CTA | UTM
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => addRows(1)} className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface-2 hover:bg-surface-3 text-[11px] font-600 text-foreground border border-border transition-all">
             <Plus className="w-3 h-3" /> Add Row
@@ -673,7 +732,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
         </div>
       </div>
 
-      <div ref={tableRef} className="overflow-x-auto">
+      <div ref={tableRef} className="overflow-x-auto" onPaste={handleTablePaste}>
         <table className="w-full border-collapse text-xs" style={{ minWidth: 1900 }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-surface-2 border-b-2 border-border">
@@ -701,7 +760,10 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               const isVideo = row.adType === 'video';
 
               return (
-                <tr key={row.id} className="border-b border-border group hover:bg-surface-2/30 transition-colors">
+                <tr key={row.id}
+                  className={`border-b border-border group hover:bg-surface-2/30 transition-colors ${pasteAnchorRow === i ? 'ring-1 ring-inset ring-primary/40' : ''}`}
+                  onClick={() => setPasteAnchorRow(i)}
+                >
                   {/* # */}
                   <td className="px-2 py-0 text-center text-[10px] text-muted-foreground font-mono border-r border-border select-none">{i + 1}</td>
 

@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   BarChart2,
+  Bell,
   BookOpen,
   Bot,
   ChevronRight,
@@ -88,6 +89,62 @@ function useRunningSkills() {
         r.status === "running" && new Date(r.startedAt).getTime() > fourHoursAgo
       )
       .map((r: { skillId: string }) => r.skillId)
+  );
+}
+
+/** Admin-only notification bell that shows unread feedback count. Persists until clicked. */
+function FeedbackNotificationBell() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [, navigate] = useLocation();
+
+  const { data, refetch } = trpc.feedback.unreadCount.useQuery(
+    undefined,
+    {
+      enabled: isAdmin,
+      refetchInterval: 30_000, // poll every 30s
+      staleTime: 20_000,
+    }
+  );
+
+  const markReadMut = trpc.feedback.markRead.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  if (!isAdmin) return null;
+
+  const count = data?.count ?? 0;
+
+  const handleClick = () => {
+    markReadMut.mutate();
+    // Navigate to admin usage page where feedback is shown
+    navigate("/admin/usage");
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="relative p-1.5 rounded-md transition-colors"
+      style={{ color: count > 0 ? "#F7901E" : "rgba(255,255,255,0.4)" }}
+      title={count > 0 ? `${count} new feedback submission${count === 1 ? "" : "s"}` : "No new feedback"}
+    >
+      <Bell size={16} />
+      {count > 0 && (
+        <span
+          className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white font-bold"
+          style={{
+            background: "#ED135F",
+            minWidth: 16,
+            height: 16,
+            fontSize: "0.6rem",
+            padding: "0 3px",
+            lineHeight: 1,
+          }}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -221,6 +278,7 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
               size={12}
             />
           </div>
+          <FeedbackNotificationBell />
           <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#ED135F", color: "#fff" }}>

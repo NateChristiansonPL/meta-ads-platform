@@ -148,6 +148,18 @@ export const feedback = mysqlTable("feedback", {
 export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = typeof feedback.$inferInsert;
 
+// ── Admin Feedback Reads ──────────────────────────────────────────────────────
+// Tracks when each admin last acknowledged (read) the feedback notification.
+// One row per admin user. lastReadAt is updated when admin clicks the badge.
+
+export const adminFeedbackReads = mysqlTable("admin_feedback_reads", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  lastReadAt: timestamp("lastReadAt").defaultNow().notNull(),
+});
+
+export type AdminFeedbackRead = typeof adminFeedbackReads.$inferSelect;
+
 // ── Campaign Builder Sessions ─────────────────────────────────────────────────
 // Named save-states for the Campaign Builder spreadsheet UI.
 // Each user can have multiple saved sessions (drafts / named builds).
