@@ -2,7 +2,7 @@ import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Trash2, MessageSquarePlus, Star, Users, ShieldCheck, ShieldOff, Clock, Zap, BarChart2 } from "lucide-react";
+import { Trash2, MessageSquarePlus, Star, Users, Clock, Zap, BarChart2 } from "lucide-react";
 
 const SKILL_META: Record<string, { color: string; label: string }> = {
   "weekly-optimization": { color: "#00BEEF", label: "Weekly Optimization" },
@@ -15,7 +15,6 @@ const SKILL_META: Record<string, { color: string; label: string }> = {
 type UserCount = { userId: number; userName: string | null; count: number };
 type SkillCount = { skillId: string; count: number };
 type UserRow = { id: number; name?: string | null; email?: string | null; role: string; lastSignedIn: Date };
-type TeamMemberRow = { id: number; name: string | null; email: string | null; role: string; lastSignedIn: Date; createdAt: Date; totalCredits: number; runCount: number };
 type CreditsByUserRow = {
   userId: number;
   userName: string | null;
@@ -47,11 +46,6 @@ export default function AdminUsage() {
   const { data: userCounts = [] } = trpc.runs.userSuccessCounts.useQuery();
   const { data: skillCounts = [] } = trpc.runs.skillSuccessCounts.useQuery();
   const { data: allUsers = [] } = trpc.users.list.useQuery();
-  const { data: teamMembers = [], refetch: refetchTeamMembers, isLoading: teamMembersLoading } = trpc.users.teamMembers.useQuery();
-  const setUserRole = trpc.users.setRole.useMutation({
-    onSuccess: () => { refetchTeamMembers(); toast.success("Role updated"); },
-    onError: (e) => toast.error(e.message ?? "Failed to update role"),
-  });
   const { data: creditsByUser = [], isLoading: creditsLoading } = trpc.runs.creditsByUser.useQuery();
   const { data: billingPeriodData } = trpc.settings.billingPeriod.useQuery();
   const setBillingPeriod = trpc.settings.setBillingPeriod.useMutation();
@@ -414,126 +408,25 @@ export default function AdminUsage() {
           </div>
         </div>
 
-        {/* ── Team Members ──────────────────────────────────────────────── */}
+        {/* ── Team Members link card ─────────────────────────────────────── */}
         <div className="rounded-xl overflow-hidden xl:col-span-2" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-          {/* Header */}
-          <div className="px-5 py-4 flex items-center justify-between" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-            <div className="flex items-center gap-2">
-              <Users size={15} style={{ color: "#00BEEF" }} />
-              <h3 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Team Members</h3>
-              <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: "rgba(0,190,239,0.12)", color: "#00BEEF" }}>
-                {(teamMembers as TeamMemberRow[]).length}
-              </span>
+          <div className="px-5 py-5 flex items-center justify-between" style={{ background: "rgba(255,255,255,0.03)" }}>
+            <div className="flex items-center gap-3">
+              <Users size={18} style={{ color: "#00BEEF" }} />
+              <div>
+                <div className="font-bold text-sm" style={{ color: "#FAFAFA" }}>Team Members</div>
+                <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Manage roles and view per-member usage</div>
+              </div>
             </div>
-            <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>All-time credits &amp; runs</span>
+            <a
+              href="/admin/team-members"
+              className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-all"
+              style={{ background: "rgba(0,190,239,0.1)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.25)", textDecoration: "none" }}
+            >
+              View Team Members →
+            </a>
           </div>
-
-          {/* Body */}
-          {teamMembersLoading ? (
-            <div className="flex items-center justify-center py-10" style={{ background: "rgba(255,255,255,0.01)" }}>
-              <div className="w-5 h-5 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,190,239,0.4)", borderTopColor: "transparent" }} />
-            </div>
-          ) : (teamMembers as TeamMemberRow[]).length === 0 ? (
-            <div className="text-center py-10" style={{ background: "rgba(255,255,255,0.01)" }}>
-              <Users size={28} style={{ color: "rgba(255,255,255,0.15)", margin: "0 auto 8px" }} />
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>No team members have logged in yet.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <th className="px-5 py-2.5 text-left font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>Member</th>
-                    <th className="px-5 py-2.5 text-left font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>Role</th>
-                    <th className="px-5 py-2.5 text-left font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>
-                      <span className="flex items-center gap-1"><Clock size={10} />Last Sign-in</span>
-                    </th>
-                    <th className="px-5 py-2.5 text-right font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>
-                      <span className="flex items-center gap-1 justify-end"><Zap size={10} />Credits</span>
-                    </th>
-                    <th className="px-5 py-2.5 text-right font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>
-                      <span className="flex items-center gap-1 justify-end"><BarChart2 size={10} />Runs</span>
-                    </th>
-                    <th className="px-5 py-2.5 text-right font-bold" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(teamMembers as TeamMemberRow[]).map((m, i) => {
-                    const isLast = i === (teamMembers as TeamMemberRow[]).length - 1;
-                    const displayName = m.name || m.email || `User #${m.id}`;
-                    const initials = displayName.slice(0, 2).toUpperCase();
-                    const isAdmin = m.role === "admin";
-                    return (
-                      <tr
-                        key={m.id}
-                        style={{
-                          borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.05)",
-                          background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
-                        }}
-                      >
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                              style={{
-                                background: isAdmin ? "rgba(237,19,95,0.2)" : "rgba(0,190,239,0.12)",
-                                color: isAdmin ? "#ED135F" : "#00BEEF",
-                              }}
-                            >
-                              {initials}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-semibold truncate max-w-[180px]" style={{ color: "#FAFAFA" }}>{m.name || `User #${m.id}`}</div>
-                              {m.email && <div className="truncate max-w-[180px] text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{m.email}</div>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold"
-                            style={{
-                              fontSize: "0.65rem",
-                              background: isAdmin ? "rgba(237,19,95,0.12)" : "rgba(255,255,255,0.06)",
-                              color: isAdmin ? "#ED135F" : "rgba(255,255,255,0.45)",
-                            }}
-                          >
-                            {isAdmin ? <ShieldCheck size={10} /> : <ShieldOff size={10} />}
-                            {isAdmin ? "Admin" : "Member"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3" style={{ color: "rgba(255,255,255,0.5)" }}>
-                          {new Date(m.lastSignedIn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                        </td>
-                        <td className="px-5 py-3 text-right font-bold" style={{ color: m.totalCredits > 0 ? "#F7901E" : "rgba(255,255,255,0.2)" }}>
-                          {m.totalCredits > 0 ? m.totalCredits.toLocaleString() : "—"}
-                        </td>
-                        <td className="px-5 py-3 text-right" style={{ color: m.runCount > 0 ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }}>
-                          {m.runCount > 0 ? m.runCount : "—"}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <button
-                            onClick={() => setUserRole.mutate({ userId: m.id, role: isAdmin ? "user" : "admin" })}
-                            disabled={setUserRole.isPending}
-                            className="text-xs px-2.5 py-1 rounded-lg font-semibold transition-all disabled:opacity-40"
-                            style={{
-                              background: isAdmin ? "rgba(237,19,95,0.1)" : "rgba(0,190,239,0.1)",
-                              color: isAdmin ? "#ED135F" : "#00BEEF",
-                              border: `1px solid ${isAdmin ? "rgba(237,19,95,0.25)" : "rgba(0,190,239,0.25)"}`,
-                            }}
-                            title={isAdmin ? "Remove admin privileges" : "Grant admin privileges"}
-                          >
-                            {isAdmin ? "Demote" : "Promote"}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-
       </div>
     </AppShell>
   );

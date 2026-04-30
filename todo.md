@@ -240,3 +240,9 @@
 - [x] DashboardLayout/AppShell: redirect unauthenticated users to /login instead of Manus OAuth portal directly
 - [x] Login page: branded screen with "Sign in using your Manus Team Account" button
 - [x] Login page: show error message when ?error=not_team_member is in the URL
+
+## Team Members Dedicated Admin Nav Item
+
+- [x] Add "Team Members" as its own nav item in ADMIN section of AppShell (between Run Logs and Usage & Tallies)
+- [x] Create dedicated AdminTeamMembers.tsx page (extract Team Members table from AdminUsage.tsx)
+- [x] Add /admin/team-members route in App.tsx wrapped in AdminRoute guard
