@@ -71,10 +71,21 @@ interface ManusTaskResult {
 }
 
 /**
- * Build a precise, skill-specific prompt that mirrors how the skill is invoked
- * natively on the Manus platform. Each skill has its own invocation pattern
- * derived from its SKILL.md Quick Start section.
+ * Preamble injected at the START of every skill prompt.
+ * Instructs the agent to read the Manus project files before executing,
+ * ensuring consistent behavior regardless of which team member triggers the run.
  */
+const PROJECT_READ_PREAMBLE = `## Pre-Execution: Read Project Files First
+
+Before executing any skill commands, you MUST:
+1. Read all files in the current Manus project (project files, instructions, and any context documents stored in this project)
+2. Follow any project-level instructions exactly as written
+3. Apply any account-specific context, naming conventions, or custom rules defined in the project files
+
+This step is mandatory — do not skip it. The project files contain critical account context and execution instructions.
+
+`;
+
 export function buildSkillPrompt(
   skillId: string,
   params: {
@@ -83,7 +94,6 @@ export function buildSkillPrompt(
     campaignIds?: string[];
     dateRange: string;
     additionalInstructions?: string;
-    knowledgeContext?: string;
     accessToken?: string;
     /** Raw JSON string from a prior Audience Overlap run (sidecarJson) to inject as enrichment */
     enrichOverlapJson?: string;
@@ -91,7 +101,7 @@ export function buildSkillPrompt(
     enrichLifecycleJson?: string;
   }
 ): string {
-  const { adAccountId, campaignIds, dateRange, additionalInstructions, knowledgeContext, accessToken, enrichOverlapJson, enrichLifecycleJson } = params;
+  const { adAccountId, campaignIds, dateRange, additionalInstructions, accessToken, enrichOverlapJson, enrichLifecycleJson } = params;
 
   // Normalize account ID — ensure it has the act_ prefix
   const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
@@ -102,10 +112,6 @@ export function buildSkillPrompt(
   // Campaign filter string
   const campaignFilter = campaignIds && campaignIds.length > 0
     ? campaignIds.join(",")
-    : "";
-
-  const knowledgeSection = knowledgeContext
-    ? `\n\n--- ACCOUNT CONTEXT (from knowledge base) ---\n${knowledgeContext}\n---`
     : "";
 
   const additionalSection = additionalInstructions
@@ -121,22 +127,22 @@ export function buildSkillPrompt(
 
   switch (skillId) {
     case "weekly-optimization":
-      return buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
 
     case "performance-insights":
-      return buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport, enrichOverlapJson, enrichLifecycleJson);
+      return PROJECT_READ_PREAMBLE + buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport, enrichOverlapJson, enrichLifecycleJson);
 
     case "creative-lifecycle":
-      return buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
 
     case "structural-audit":
-      return buildStructuralAuditPrompt(accountId, campaignFilter, knowledgeSection, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildStructuralAuditPrompt(accountId, campaignFilter, additionalSection, tokenExport);
 
     case "audience-overlap":
-      return buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, knowledgeSection, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
 
     default:
-      return `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}${knowledgeSection}${additionalSection}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
+      return PROJECT_READ_PREAMBLE + `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}${additionalSection}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
   }
 }
 
@@ -159,7 +165,6 @@ function buildWeeklyOptPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  knowledgeSection: string,
   additionalSection: string,
   tokenExport: string
 ): string {
@@ -169,7 +174,7 @@ function buildWeeklyOptPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${knowledgeSection}${additionalSection}
+${additionalSection}
 
 ## Instructions
 
@@ -195,7 +200,6 @@ function buildPerformanceInsightsPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  knowledgeSection: string,
   additionalSection: string,
   tokenExport: string,
   enrichOverlapJson?: string,
@@ -243,7 +247,7 @@ function buildPerformanceInsightsPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${knowledgeSection}${additionalSection}${enrichmentBlock}
+${additionalSection}${enrichmentBlock}
 ## Instructions
 
 Read the skill at \`/home/ubuntu/skills/pl-performance-analysis-insights-v3/SKILL.md\` first, then execute the full analysis:
@@ -294,7 +298,6 @@ function buildCreativeLifecyclePrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  knowledgeSection: string,
   additionalSection: string,
   tokenExport: string
 ): string {
@@ -304,7 +307,7 @@ function buildCreativeLifecyclePrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${knowledgeSection}${additionalSection}
+${additionalSection}
 
 ## Instructions
 
@@ -333,7 +336,6 @@ Do **not** re-output the file contents as a message — the report will be retri
 function buildStructuralAuditPrompt(
   accountId: string,
   campaignFilter: string,
-  knowledgeSection: string,
   additionalSection: string,
   tokenExport: string
 ): string {
@@ -348,7 +350,7 @@ function buildStructuralAuditPrompt(
 
 **Account ID:** ${accountId}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns (select the most significant ones)"}
-${knowledgeSection}${additionalSection}
+${additionalSection}
 
 ## Instructions
 
@@ -381,7 +383,6 @@ function buildAudienceOverlapPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  knowledgeSection: string,
   additionalSection: string,
   tokenExport: string
 ): string {
@@ -391,7 +392,7 @@ function buildAudienceOverlapPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${knowledgeSection}${additionalSection}
+${additionalSection}
 
 ## Instructions
 

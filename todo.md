@@ -246,3 +246,15 @@
 - [x] Add "Team Members" as its own nav item in ADMIN section of AppShell (between Run Logs and Usage & Tallies)
 - [x] Create dedicated AdminTeamMembers.tsx page (extract Team Members table from AdminUsage.tsx)
 - [x] Add /admin/team-members route in App.tsx wrapped in AdminRoute guard
+
+## Skill Run Prompt Fix (Critical)
+
+- [x] Audit task creation API call in routers.ts to confirm project_id is always passed correctly
+- [x] Update skill run prompt to explicitly instruct agent to read project files before executing
+- [x] Ensure prompt is identical for all users (admin and non-admin)
+
+## Remove Knowledge Base Injection from Skill Prompts (Critical)
+
+- [x] Remove knowledgeContext fetch and injection from runs.execute in routers.ts
+- [x] Remove knowledgeSection parameter and injection from buildSkillPrompt and all 5 skill prompt builders in manusTask.ts
+- [x] Ensure no app-level DB knowledge contaminates any user's skill run

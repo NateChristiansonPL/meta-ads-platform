@@ -237,13 +237,6 @@ export const appRouter = router({
           });
         }
 
-        // Fetch knowledge base context for this skill
-        const knowledge = await getKnowledgeEntries();
-        const relevantKnowledge = knowledge
-          .filter((k) => k.category === "general" || k.category === input.skillId)
-          .map((k) => `[${k.title}]\n${k.content}`)
-          .join("\n\n");
-
         // Look up the Manus project ID configured for this skill
         const skillProjectId = await getAppSetting(`skillProjectId:${input.skillId}`) ?? undefined;
 
@@ -306,7 +299,6 @@ export const appRouter = router({
               campaignIds: input.campaignIds,
               dateRange: input.datePreset,
               additionalInstructions: input.additionalInstructions,
-              knowledgeContext: relevantKnowledge || undefined,
               accessToken: metaAccessToken,
               enrichOverlapJson,
               enrichLifecycleJson,
