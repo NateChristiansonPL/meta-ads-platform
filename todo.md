@@ -210,3 +210,10 @@
 ## Team Plan Access (Open Login)
 
 - [x] Remove @pathlabs.com domain restriction from OAuth callback — any Manus account can now log in
+
+## Team Members Admin Panel
+
+- [x] Add DB helper: listAllUsers with total credits used (join users + skill_runs)
+- [x] Add tRPC procedure: admin.teamMembers (admin-only, returns users with credits)
+- [x] Add tRPC mutation: admin.setUserRole (admin-only, promote/demote user)
+- [x] Build Team Members panel in AdminUsage.tsx (table: name, email, role badge, last sign-in, credits used, role toggle)

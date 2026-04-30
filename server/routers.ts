@@ -19,6 +19,8 @@ import {
   getAllAppSettings,
   getAllTokens,
   getAllUsers,
+  getTeamMembers,
+  setUserRole,
   getActiveTokens,
   getAppSetting,
   getCreditsByUser,
@@ -1024,6 +1026,21 @@ export const appRouter = router({
 
   users: router({
     list: adminProcedure.query(async () => getAllUsers()),
+    /** All users with all-time credits and run count — admin only */
+    teamMembers: adminProcedure.query(async () => getTeamMembers()),
+    /** Promote or demote a user role — admin only, cannot change your own role */
+    setRole: adminProcedure
+      .input(z.object({
+        userId: z.number().int().positive(),
+        role: z.enum(["user", "admin"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.userId === ctx.user.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own role." });
+        }
+        await setUserRole(input.userId, input.role);
+        return { success: true };
+      }),
   }),
 
   knowledge: router({

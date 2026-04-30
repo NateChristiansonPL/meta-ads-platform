@@ -596,3 +596,33 @@ export async function deleteCampaignSession(id: number, userId: number): Promise
     .delete(campaignSessions)
     .where(and(eq(campaignSessions.id, id), eq(campaignSessions.userId, userId)));
 }
+
+// ── Team Members ───────────────────────────────────────────────────────────────
+/** Returns all users joined with their all-time credit usage and run count. */
+export async function getTeamMembers() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+      lastSignedIn: users.lastSignedIn,
+      totalCredits: sql<number>`COALESCE(SUM(${skillRuns.creditUsage}), 0)`,
+      runCount: sql<number>`COUNT(${skillRuns.id})`,
+    })
+    .from(users)
+    .leftJoin(skillRuns, eq(skillRuns.userId, users.id))
+    .groupBy(users.id, users.name, users.email, users.role, users.createdAt, users.lastSignedIn)
+    .orderBy(desc(users.lastSignedIn));
+  return rows;
+}
+
+/** Promote or demote a user's role. */
+export async function setUserRole(targetUserId: number, role: "user" | "admin"): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ role }).where(eq(users.id, targetUserId));
+}
