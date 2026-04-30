@@ -232,3 +232,11 @@
 - [x] OAuth callback calls Manus teamLog API to set isTeamMember on every login
 - [x] Disable skill run buttons for non-team users with greyed-out style and tooltip in SkillRunner.tsx
 - [x] Permanently grey out Launch Build button in ExportPanel.tsx for all users ("Coming soon")
+
+## Login Page & Team Account Block
+
+- [x] OAuth callback: deny session when isTeamMember=false, redirect to /login?error=not_team_member
+- [x] App.tsx: unauthenticated users land on /login first instead of being auto-redirected to Manus OAuth
+- [x] DashboardLayout/AppShell: redirect unauthenticated users to /login instead of Manus OAuth portal directly
+- [x] Login page: branded screen with "Sign in using your Manus Team Account" button
+- [x] Login page: show error message when ?error=not_team_member is in the URL

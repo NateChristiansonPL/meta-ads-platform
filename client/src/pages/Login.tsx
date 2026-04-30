@@ -1,8 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
-import { BarChart2, Cpu, RefreshCw, Shield, TrendingUp, Users, Zap } from "lucide-react";
+import { AlertTriangle, BarChart2, Cpu, RefreshCw, Shield, TrendingUp, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 const SKILLS = [
   { icon: TrendingUp, label: "Weekly Optimization", color: "#00BEEF" },
@@ -29,15 +28,21 @@ function getLoginUrlWithRemember(remember: boolean): string {
   return url.toString();
 }
 
-export default function Home() {
+export default function Login() {
   const { isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const [rememberDevice, setRememberDevice] = useState(false);
 
+  // Parse error from query string
+  const params = new URLSearchParams(search);
+  const errorCode = params.get("error");
+  const isNotTeamMember = errorCode === "not_team_member";
+
+  // If already authenticated, redirect to dashboard
   useEffect(() => {
-    if (!loading) {
-      // Always redirect from / — authenticated users go to dashboard, others to login
-      navigate(isAuthenticated ? "/dashboard" : "/login");
+    if (!loading && isAuthenticated) {
+      navigate("/dashboard");
     }
   }, [loading, isAuthenticated, navigate]);
 
@@ -125,8 +130,26 @@ export default function Home() {
               Welcome back
             </h2>
             <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Sign in with your Manus account to access the platform
+              Sign in using your Manus Team Account to access the platform
             </p>
+
+            {/* Error banner — shown when OAuth redirects back with ?error=not_team_member */}
+            {isNotTeamMember && (
+              <div
+                className="flex items-start gap-3 rounded-xl p-3.5 mb-5"
+                style={{ background: "rgba(237,19,95,0.12)", border: "1px solid rgba(237,19,95,0.3)" }}
+              >
+                <AlertTriangle size={15} style={{ color: "#ED135F", flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <p className="text-xs font-bold mb-0.5" style={{ color: "#ED135F" }}>
+                    Wrong Manus account
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>
+                    The account you authorized is not linked to the Pathlabs team plan. Please sign in again using your <strong style={{ color: "rgba(255,255,255,0.7)" }}>Manus Team Account</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Remember this device */}
             <label
@@ -170,12 +193,12 @@ export default function Home() {
               onMouseLeave={(e) => (e.currentTarget.style.background = "#00BEEF")}
             >
               <Cpu size={16} />
-              Continue with Manus
+              Sign in using your Manus Team Account
             </a>
 
             <div className="mt-4 text-center">
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
-                Access restricted to <strong style={{ color: "rgba(255,255,255,0.35)" }}>@pathlabs.com</strong> accounts.
+                Access restricted to Pathlabs team members.
                 <br />Contact your admin if you need access.
               </p>
             </div>

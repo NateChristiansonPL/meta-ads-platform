@@ -5,6 +5,7 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOptimization from "./pages/WeeklyOptimization";
 import PerformanceInsights from "./pages/PerformanceInsights";
@@ -93,6 +94,7 @@ function Router() {
       {!isSkillPage && (
         <Switch>
           <Route path="/" component={Home} />
+          <Route path="/login" component={Login} />
           <Route path="/dashboard" component={Dashboard} />
           {/* Admin-only routes — AdminRoute redirects non-admins to /dashboard */}
           <Route path="/admin/tokens">

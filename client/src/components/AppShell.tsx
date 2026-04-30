@@ -213,7 +213,7 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      window.location.href = "/";
+      window.location.href = "/login";
     }
   }, [loading, isAuthenticated]);
 
@@ -294,7 +294,7 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
             )}
           </div>
           <button
-            onClick={async () => { await logout(); window.location.href = "/"; }}
+            onClick={async () => { await logout(); window.location.href = "/login"; }}
             className="p-1.5 rounded-md transition-colors"
             style={{ color: "rgba(255,255,255,0.4)" }}
             title="Sign out"
