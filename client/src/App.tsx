@@ -18,6 +18,8 @@ import AdminKnowledge from "./pages/AdminKnowledge";
 import ManusAI from "./pages/ManusAI";
 import CampaignBuilder from "./pages/CampaignBuilder";
 import KnowledgeBase from "./pages/KnowledgeBase";
+import { useAuth } from "./_core/hooks/useAuth";
+import { useEffect } from "react";
 
 // Skill paths that should stay mounted (keep-alive) to preserve active run state
 const SKILL_PATHS = [
@@ -27,6 +29,26 @@ const SKILL_PATHS = [
   "/skills/structural-audit",
   "/skills/audience-overlap",
 ];
+
+/**
+ * AdminRoute — wraps a page component and redirects non-admins to /dashboard.
+ * Shows nothing while auth is still loading to avoid a flash.
+ */
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, loading } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!loading && user?.role !== "admin") {
+      navigate("/dashboard");
+    }
+  }, [loading, user, navigate]);
+
+  // While loading, or if not admin, render nothing (redirect is in-flight)
+  if (loading || user?.role !== "admin") return null;
+
+  return <Component />;
+}
 
 /**
  * KeepAliveSkillPages renders all five skill pages at once but hides the
@@ -72,10 +94,20 @@ function Router() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/dashboard" component={Dashboard} />
-          <Route path="/admin/tokens" component={AdminTokenVault} />
-          <Route path="/admin/run-logs" component={AdminRunLogs} />
-          <Route path="/admin/usage" component={AdminUsage} />
-          <Route path="/admin/knowledge" component={AdminKnowledge} />
+          {/* Admin-only routes — AdminRoute redirects non-admins to /dashboard */}
+          <Route path="/admin/tokens">
+            <AdminRoute component={AdminTokenVault} />
+          </Route>
+          <Route path="/admin/run-logs">
+            <AdminRoute component={AdminRunLogs} />
+          </Route>
+          <Route path="/admin/usage">
+            <AdminRoute component={AdminUsage} />
+          </Route>
+          <Route path="/admin/knowledge">
+            <AdminRoute component={AdminKnowledge} />
+          </Route>
+          {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
           <Route path="/campaign-builder" component={CampaignBuilder} />
           <Route path="/knowledge" component={KnowledgeBase} />

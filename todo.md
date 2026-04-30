@@ -217,3 +217,11 @@
 - [x] Add tRPC procedure: admin.teamMembers (admin-only, returns users with credits)
 - [x] Add tRPC mutation: admin.setUserRole (admin-only, promote/demote user)
 - [x] Build Team Members panel in AdminUsage.tsx (table: name, email, role badge, last sign-in, credits used, role toggle)
+
+## RBAC Security Fix (Critical)
+
+- [x] Add AdminRoute guard component that redirects non-admins to /dashboard
+- [x] Wrap all admin-only routes in App.tsx with AdminRoute guard
+- [x] Hide all admin nav items in DashboardLayout sidebar for non-admin users (already done via isAdmin check in AppShell)
+- [x] Fix post-login redirect: OAuth callback always lands on /dashboard
+- [x] Verify all admin tRPC procedures use adminProcedure (server-side check)
