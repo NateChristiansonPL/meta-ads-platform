@@ -206,3 +206,7 @@
 - [x] Admin-only feedback notification badge: persists until admin clicks it, DB-backed unread count
 - [x] Fix Primary Text column text alignment/size in CreativesTable to match Headline and Description
 - [x] Paste-from-spreadsheet support for Creative Library columns (creative concept, length, website URL, headline, primary text, description, CTA, link to UTM)
+
+## Team Plan Access (Open Login)
+
+- [x] Remove @pathlabs.com domain restriction from OAuth callback — any Manus account can now log in
