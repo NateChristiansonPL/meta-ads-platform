@@ -594,21 +594,17 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
               </span>
             )}
           </div>
-          <button
-            onClick={handleManusLaunch}
-            disabled={!allPass || manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 transition-all ${
-              allPass && manusLaunch.phase !== 'launching' && manusLaunch.phase !== 'running'
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-500 hover:to-violet-500 shadow-lg shadow-indigo-500/20'
-                : 'bg-surface-2 text-muted-foreground cursor-not-allowed border border-border'
-            }`}
-          >
-            {manusLaunch.phase === 'launching' || manusLaunch.phase === 'running' ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Running...</>
-            ) : (
-              <><Rocket className="w-4 h-4" /> Launch Build</>
-            )}
-          </button>
+          {/* Launch Build is disabled — direct campaign creation via Manus agent is not yet available */}
+          <div className="flex flex-col items-end gap-1">
+            <button
+              disabled
+              title="Launch Build is coming soon"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 bg-surface-2 text-muted-foreground cursor-not-allowed border border-border opacity-50"
+            >
+              <Rocket className="w-4 h-4" /> Launch Build
+            </button>
+            <span className="text-[11px] text-muted-foreground">Coming soon</span>
+          </div>
         </div>
       </div>
     </div>

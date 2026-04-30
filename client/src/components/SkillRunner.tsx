@@ -1,5 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import HelpTip from "@/components/HelpTip";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, OctagonX, Play, RefreshCcw, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
@@ -125,7 +126,9 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
     campaignsData?.campaigns ?? [];
 
   const executeRun = trpc.runs.execute.useMutation();
-  const canRun = !!tokenId && !!adAccountId && status !== "running";
+  const { user } = useAuth();
+  const isTeamMember = user?.isTeamMember === true;
+  const canRun = !!tokenId && !!adAccountId && status !== "running" && isTeamMember;
 
   async function handleAbort() {
     if (!runId || isAborting) return;
@@ -612,11 +615,15 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             {status === "running" ? "Running…" : `Run ${config.skillName}`}
           </button>
           <div className="flex items-center justify-between">
-            {!adAccountId && (
+            {!isTeamMember ? (
+              <span className="text-xs" style={{ color: "rgba(255,100,100,0.7)" }}>
+                Skill runs require a Pathlabs team account
+              </span>
+            ) : !adAccountId ? (
               <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
                 Select an ad account to enable
               </span>
-            )}
+            ) : null}
             {status !== "idle" && (
               <button onClick={handleReset} className="p-2 rounded-lg transition-colors ml-auto" style={{ color: "rgba(255,255,255,0.4)" }} title="Reset">
                 <RotateCcw size={14} />

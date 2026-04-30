@@ -225,3 +225,10 @@
 - [x] Hide all admin nav items in DashboardLayout sidebar for non-admin users (already done via isAdmin check in AppShell)
 - [x] Fix post-login redirect: OAuth callback always lands on /dashboard
 - [x] Verify all admin tRPC procedures use adminProcedure (server-side check)
+
+## Team Account Enforcement & Launch Build Disable
+
+- [x] Add isTeamMember boolean column to users table + pnpm db:push migration
+- [x] OAuth callback calls Manus teamLog API to set isTeamMember on every login
+- [x] Disable skill run buttons for non-team users with greyed-out style and tooltip in SkillRunner.tsx
+- [x] Permanently grey out Launch Build button in ExportPanel.tsx for all users ("Coming soon")

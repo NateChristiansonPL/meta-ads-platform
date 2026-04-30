@@ -229,6 +229,15 @@ export const appRouter = router({
         agentProfile: z.enum(["manus-1.6", "manus-1.6-lite", "manus-1.6-max"]).default("manus-1.6-lite"),
       }))
       .mutation(async ({ ctx, input }) => {
+        // ── Team membership gate ───────────────────────────────────────────────
+        // Only users verified as team members (isTeamMember = true) may execute
+        // skill runs. This is enforced server-side regardless of UI state.
+        if (!ctx.user.isTeamMember) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Skill runs require a Pathlabs team account. Please contact your admin.",
+          });
+        }
         const apiKey = process.env.MANUS_API_KEY;
         if (!apiKey) {
           throw new TRPCError({
@@ -814,6 +823,13 @@ export const appRouter = router({
         agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6-lite"),
       }))
       .mutation(async ({ ctx, input }) => {
+        // ── Team membership gate ───────────────────────────────────────────────
+        if (!ctx.user.isTeamMember) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Campaign builds require a Pathlabs team account. Please contact your admin.",
+          });
+        }
         const apiKey = process.env.MANUS_API_KEY;
         if (!apiKey) {
           throw new TRPCError({
