@@ -11,6 +11,7 @@ import {
   InsertSkillRun,
   InsertTokenVaultEntry,
   InsertUser,
+  invitedUsers,
   knowledgeBase,
   skillRuns,
   tokenVault,
@@ -77,6 +78,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.isTeamMember !== undefined) {
       values.isTeamMember = user.isTeamMember;
       updateSet.isTeamMember = user.isTeamMember;
+    }
+    if (user.authProvider !== undefined) {
+      values.authProvider = user.authProvider;
+      updateSet.authProvider = user.authProvider;
     }
 
     if (!values.lastSignedIn) {
@@ -629,4 +634,52 @@ export async function setUserRole(targetUserId: number, role: "user" | "admin"):
   const db = await getDb();
   if (!db) return;
   await db.update(users).set({ role }).where(eq(users.id, targetUserId));
+}
+
+// ── Invited Users ─────────────────────────────────────────────────────────────
+
+export async function createInvite(email: string, name: string | undefined, invitedByUserId: number): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const { randomBytes } = await import("crypto");
+  const token = randomBytes(32).toString("hex");
+  // Upsert: if email already invited, reset the token and invitedBy
+  await db.insert(invitedUsers)
+    .values({ email, name: name ?? null, inviteToken: token, invitedByUserId, acceptedAt: null, acceptedUserId: null })
+    .onDuplicateKeyUpdate({ set: { inviteToken: token, invitedByUserId, acceptedAt: null, acceptedUserId: null } });
+  return token;
+}
+
+export async function getInviteByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(invitedUsers).where(eq(invitedUsers.inviteToken, token)).limit(1);
+  return row;
+}
+
+export async function getInviteByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(invitedUsers).where(eq(invitedUsers.email, email)).limit(1);
+  return row;
+}
+
+export async function acceptInvite(token: string, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(invitedUsers)
+    .set({ acceptedAt: new Date(), acceptedUserId: userId })
+    .where(eq(invitedUsers.inviteToken, token));
+}
+
+export async function listInvites() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invitedUsers).orderBy(desc(invitedUsers.createdAt));
+}
+
+export async function revokeInvite(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(invitedUsers).where(eq(invitedUsers.id, id));
 }

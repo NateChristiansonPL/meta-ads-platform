@@ -9,6 +9,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
   createFeedback,
+  createInvite,
   createKnowledgeEntry,
   createSkillRun,
   deactivateToken,
@@ -38,7 +39,9 @@ import {
   getFirstActiveTokenWithValue,
   getUserSuccessCounts,
   insertToken,
+  listInvites,
   listFeedback,
+  revokeInvite,
   setAppSetting,
   updateSkillRun,
   updateToken,
@@ -1031,6 +1034,41 @@ export const appRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "You cannot change your own role." });
         }
         await setUserRole(input.userId, input.role);
+        return { success: true };
+      }),
+
+    /** List all invites (pending + accepted) — admin only */
+    listInvites: adminProcedure.query(async () => listInvites()),
+
+    /** Send an email invite to a non-Manus user — admin only */
+    sendInvite: adminProcedure
+      .input(z.object({
+        email: z.string().email(),
+        name: z.string().max(255).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const token = await createInvite(input.email, input.name, ctx.user.id);
+        // Build invite link — origin must be passed from frontend
+        // We use a relative path; the frontend will construct the full URL
+        const inviteLink = `/api/invite/accept?token=${token}`;
+        // Notify owner about the invite being sent
+        try {
+          const { notifyOwner } = await import("./_core/notification");
+          await notifyOwner({
+            title: "Invite Sent",
+            content: `Admin ${ctx.user.name || ctx.user.email} invited ${input.email} to the platform. Invite link: ${inviteLink}`,
+          });
+        } catch {
+          // Non-fatal — invite was created, notification is best-effort
+        }
+        return { success: true, inviteLink };
+      }),
+
+    /** Revoke (delete) an invite — admin only */
+    revokeInvite: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        await revokeInvite(input.id);
         return { success: true };
       }),
   }),

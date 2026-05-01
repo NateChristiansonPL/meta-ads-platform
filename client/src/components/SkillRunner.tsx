@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import HelpTip from "@/components/HelpTip";
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, OctagonX, Play, RefreshCcw, RotateCcw, Search, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, ExternalLink, FileDown, Loader2, Lock, OctagonX, Play, RefreshCcw, RotateCcw, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 
@@ -125,7 +126,10 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
     campaignsData?.campaigns ?? [];
 
   const executeRun = trpc.runs.execute.useMutation();
-  const canRun = !!tokenId && !!adAccountId && status !== "running";
+  const { user } = useAuth();
+  // Google-auth invited users can view the app but cannot run skill analyses
+  const canRunSkills = user?.authProvider !== "google";
+  const canRun = !!tokenId && !!adAccountId && status !== "running" && canRunSkills;
 
   async function handleAbort() {
     if (!runId || isAborting) return;
@@ -598,21 +602,37 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
         {/* Run Button */}
         <div className="flex flex-col gap-1.5 mt-2">
-          <button
-            onClick={handleRun}
-            disabled={!canRun}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all"
-            style={{
-              background: canRun ? config.color : "rgba(255,255,255,0.08)",
-              color: canRun ? "#141349" : "rgba(255,255,255,0.25)",
-              cursor: canRun ? "pointer" : "not-allowed",
-            }}
-          >
-            {status === "running" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
-            {status === "running" ? "Running…" : `Run ${config.skillName}`}
-          </button>
+          {!canRunSkills ? (
+            <div
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.25)", cursor: "not-allowed" }}
+              title="Skill analyses are not available for invited users. Contact your admin to upgrade your access."
+            >
+              <Lock size={14} />
+              Run {config.skillName}
+            </div>
+          ) : (
+            <button
+              onClick={handleRun}
+              disabled={!canRun}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all"
+              style={{
+                background: canRun ? config.color : "rgba(255,255,255,0.08)",
+                color: canRun ? "#141349" : "rgba(255,255,255,0.25)",
+                cursor: canRun ? "pointer" : "not-allowed",
+              }}
+            >
+              {status === "running" ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="currentColor" />}
+              {status === "running" ? "Running…" : `Run ${config.skillName}`}
+            </button>
+          )}
+          {!canRunSkills && (
+            <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
+              Skill analyses are not available for invited users.
+            </p>
+          )}
           <div className="flex items-center justify-between">
-            {!adAccountId ? (
+            {!adAccountId && canRunSkills ? (
               <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
                 Select an ad account to enable
               </span>

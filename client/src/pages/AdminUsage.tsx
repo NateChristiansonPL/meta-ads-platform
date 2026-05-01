@@ -80,7 +80,8 @@ export default function AdminUsage() {
   const maxSkill = Math.max(1, ...(skillCounts as SkillCount[]).map((s) => s.count));
   const maxUser = Math.max(1, ...(userCounts as UserCount[]).map((u) => u.count));
 
-  const grandTotal = (creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + (r.totalCredits ?? 0), 0);
+  // Coerce to Number before summing — MySQL returns aggregate values as strings
+  const grandTotal = (creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + Number(r.totalCredits ?? 0), 0);
   const CREDITS_PER_SEAT = 8000;
 
   const filteredFeedback = (allFeedback as FeedbackRow[]).filter((f) => f.category === activeFeedbackTab);
@@ -197,7 +198,7 @@ export default function AdminUsage() {
                         </div>
                       </td>
                       <td className="px-5 py-3">
-                        <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>{(row.totalCredits ?? 0).toLocaleString()}</span>
+                        <span className="font-bold text-sm" style={{ color: "#00BEEF" }}>{Number(row.totalCredits ?? 0).toLocaleString()}</span>
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
@@ -226,7 +227,7 @@ export default function AdminUsage() {
                       {(creditsByUser as CreditsByUserRow[]).length} seats × 8,000 = {((creditsByUser as CreditsByUserRow[]).length * CREDITS_PER_SEAT).toLocaleString()} total
                     </td>
                     <td className="px-5 py-3 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                      {(creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + r.runCount, 0)} runs
+                      {(creditsByUser as CreditsByUserRow[]).reduce((s, r) => s + Number(r.runCount), 0)} runs
                     </td>
                     <td />
                   </tr>

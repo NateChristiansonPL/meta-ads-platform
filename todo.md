@@ -264,3 +264,23 @@
 - [x] Remove admin Knowledge Base nav item from ADMIN_ITEMS in AppShell.tsx
 - [x] Remove /admin/knowledge route from App.tsx
 - [x] Verify platform documentation Knowledge Base (sidebar, above Provide Feedback) is untouched
+
+## Google OAuth Invite System & Team Members Overhaul
+
+- [x] DB schema: add auth_provider column to users table (enum: 'manus' | 'google'), add invited_users table (id, email, token, invitedBy, acceptedAt, createdAt)
+- [x] Push DB migration
+- [x] Backend: Google OAuth callback route (/api/oauth/google/callback), exchange code for token, create/find user with auth_provider='google'
+- [x] Backend: tRPC invites.send procedure (admin only) — create invite record, send email via built-in notification or SMTP
+- [x] Backend: tRPC invites.list procedure (admin only) — list all pending/accepted invites
+- [x] Backend: tRPC invites.revoke procedure (admin only)
+- [x] Backend: public invite acceptance endpoint (/api/invite/accept?token=...) — validate token, redirect to Google OAuth with state
+- [x] Frontend: Update Login page — split into "Manus Tester" (existing OAuth) vs "Invited User" (Google OAuth) options
+- [x] Frontend: Grey out Run Analysis button for users with auth_provider='google' with tooltip explaining access level
+- [x] Frontend: Rename Team Members nav item and page header to "Team Members & Users"
+- [x] Frontend: Add Invite User button and modal (email input) in Team Members & Users page
+- [x] Frontend: Add Invited Users table section showing pending/accepted invites with revoke action
+
+## Credits Summation Bug Fixes
+
+- [x] Fix Total Credits Used stat card in Team Members panel (correctly coerce MySQL string to Number before summing)
+- [x] Fix Team Total row in Credits Used by User table in Usage & Tallies (same Number coercion fix)

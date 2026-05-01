@@ -29,6 +29,11 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   /** True if the user's Manus openId appears in the team's membership list (verified via Manus API at login). */
   isTeamMember: boolean("isTeamMember").default(false).notNull(),
+  /**
+   * Auth provider: 'manus' for Manus OAuth users, 'google' for invited Google OAuth users.
+   * Google users can view the app but cannot run skill analyses.
+   */
+  authProvider: mysqlEnum("authProvider", ["manus", "google"]).default("manus").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -193,3 +198,24 @@ export const campaignSessions = mysqlTable("campaign_sessions", {
 
 export type CampaignSession = typeof campaignSessions.$inferSelect;
 export type InsertCampaignSession = typeof campaignSessions.$inferInsert;
+
+// ── Invited Users ─────────────────────────────────────────────────────────────
+// Admin can invite non-Manus users by email. They sign in via Google OAuth.
+// Google-auth users can view the app but cannot run skill analyses.
+
+export const invitedUsers = mysqlTable("invited_users", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
+  /** Secure random token used in the invite acceptance link. */
+  inviteToken: varchar("inviteToken", { length: 128 }).notNull().unique(),
+  invitedByUserId: int("invitedByUserId").notNull(),
+  /** Null until the invitee accepts and completes Google OAuth. */
+  acceptedAt: timestamp("acceptedAt"),
+  /** The users.id of the accepted user (set after Google OAuth completes). */
+  acceptedUserId: int("acceptedUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type InvitedUser = typeof invitedUsers.$inferSelect;
+export type InsertInvitedUser = typeof invitedUsers.$inferInsert;
