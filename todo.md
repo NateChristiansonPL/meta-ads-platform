@@ -284,3 +284,12 @@
 
 - [x] Fix Total Credits Used stat card in Team Members panel (correctly coerce MySQL string to Number before summing)
 - [x] Fix Team Total row in Credits Used by User table in Usage & Tallies (same Number coercion fix)
+
+## SendGrid Email Integration
+
+- [ ] Add SENDGRID_API_KEY secret
+- [ ] Add SENDGRID_FROM_EMAIL secret (verified sender address)
+- [ ] Install @sendgrid/mail npm package
+- [ ] Build sendInviteEmail helper in server/email.ts
+- [ ] Wire sendInviteEmail into users.sendInvite tRPC mutation
+- [ ] TypeScript check and tests pass

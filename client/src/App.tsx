@@ -4,7 +4,6 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import WeeklyOptimization from "./pages/WeeklyOptimization";
@@ -21,6 +20,18 @@ import CampaignBuilder from "./pages/CampaignBuilder";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import { useAuth } from "./_core/hooks/useAuth";
 import { useEffect } from "react";
+
+/** Redirects unauthenticated users to /login, authenticated users to /dashboard */
+function RedirectToLogin() {
+  const { isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!loading) {
+      navigate(isAuthenticated ? "/dashboard" : "/login", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
+  return null;
+}
 
 // Skill paths that should stay mounted (keep-alive) to preserve active run state
 const SKILL_PATHS = [
@@ -93,7 +104,10 @@ function Router() {
       {/* Normal routed pages — only render the active one */}
       {!isSkillPage && (
         <Switch>
-          <Route path="/" component={Home} />
+          <Route path="/">
+            {/* Redirect root to /login — Login.tsx handles the auth split */}
+            <RedirectToLogin />
+          </Route>
           <Route path="/login" component={Login} />
           <Route path="/dashboard" component={Dashboard} />
           {/* Admin-only routes — AdminRoute redirects non-admins to /dashboard */}
