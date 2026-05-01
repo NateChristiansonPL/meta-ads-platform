@@ -294,3 +294,7 @@
 
 - [x] Remove "I was invited" Google OAuth button from login page
 - [x] Fix greyed-out Run Analysis button for invited users (authProvider='invited')
+
+## Magic Link Reuse
+
+- [x] Allow invite link to be reused after first acceptance (re-creates session for existing user instead of blocking with "already used")

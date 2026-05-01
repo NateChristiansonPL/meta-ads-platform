@@ -41,16 +41,11 @@ export function registerMagicLinkRoutes(app: Express) {
         return;
       }
 
-      if (invite.acceptedAt) {
-        res.status(410).send(renderErrorPage("Invite already used", "This invite link has already been used. If you need access, please ask your admin to send a new invite."));
-        return;
-      }
-
       // Use email as the stable identifier for invited users
       const openId = `invited:${invite.email.toLowerCase()}`;
       const name = invite.name || invite.email.split("@")[0];
 
-      // Create or update the user record
+      // Create or update the user record (works for both first-time and returning users)
       await db.upsertUser({
         openId,
         name,
@@ -67,8 +62,10 @@ export function registerMagicLinkRoutes(app: Express) {
         return;
       }
 
-      // Mark invite as accepted
-      await db.acceptInvite(token, user.id);
+      // Mark invite as accepted on first use (idempotent — safe to call again)
+      if (!invite.acceptedAt) {
+        await db.acceptInvite(token, user.id);
+      }
 
       // Create a long-lived session token
       const sessionToken = await sdk.createSessionToken(openId, {
