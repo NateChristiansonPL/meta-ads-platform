@@ -77,9 +77,10 @@ const ADMIN_ITEMS = [
 
 /** Returns the set of skillIds that have a currently running task for the logged-in user. */
 function useRunningSkills() {
+  const { isAuthenticated } = useAuth();
   const { data: runs } = trpc.runs.myRuns.useQuery(
     { limit: 20 },
-    { refetchInterval: 10000, staleTime: 8000 }
+    { refetchInterval: 10000, staleTime: 8000, enabled: isAuthenticated }
   );
   if (!runs) return new Set<string>();
   const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
