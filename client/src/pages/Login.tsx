@@ -149,9 +149,16 @@ export default function Login() {
 
             {/* Remember this device */}
             <label
+              htmlFor="remember-device"
               className="flex items-center gap-3 cursor-pointer mb-6 px-1"
-              onClick={() => setRememberDevice((r) => !r)}
             >
+              <input
+                id="remember-device"
+                type="checkbox"
+                checked={rememberDevice}
+                onChange={(e) => setRememberDevice(e.target.checked)}
+                className="sr-only"
+              />
               <div
                 className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all"
                 style={{
