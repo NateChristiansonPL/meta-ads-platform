@@ -127,8 +127,8 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
 
   const executeRun = trpc.runs.execute.useMutation();
   const { user } = useAuth();
-  // Google-auth invited users can view the app but cannot run skill analyses
-  const canRunSkills = user?.authProvider !== "google";
+  // Invited users (magic link) and legacy Google-auth users can view but cannot run skill analyses
+  const canRunSkills = user?.authProvider !== "google" && user?.authProvider !== "invited";
   const canRun = !!tokenId && !!adAccountId && status !== "running" && canRunSkills;
 
   async function handleAbort() {

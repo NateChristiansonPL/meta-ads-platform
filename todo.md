@@ -289,3 +289,8 @@
 
 - [x] Decided to use copy-link approach instead of SendGrid (user preference, low invite volume)
 - [x] Invite link copy button implemented in Team Members & Users admin panel
+
+## Login & Invited User Fixes (Round 2)
+
+- [x] Remove "I was invited" Google OAuth button from login page
+- [x] Fix greyed-out Run Analysis button for invited users (authProvider='invited')

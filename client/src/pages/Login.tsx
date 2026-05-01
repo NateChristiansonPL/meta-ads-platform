@@ -144,10 +144,10 @@ export default function Login() {
                   Welcome
                 </h2>
                 <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  How would you like to sign in?
+                  Sign in with your Manus Team Account to access the platform.
                 </p>
 
-                {/* Manus tester option — goes directly to OAuth */}
+                {/* Manus OAuth — direct sign-in */}
                 <a
                   href={getLoginUrlWithRemember(false)}
                   className="flex items-center gap-3 w-full py-4 px-4 rounded-xl font-bold text-sm mb-3 transition-all text-left"
@@ -159,27 +159,10 @@ export default function Login() {
                     <Cpu size={15} color="#141349" />
                   </div>
                   <div>
-                    <div className="text-xs font-black" style={{ color: "#FAFAFA" }}>I'm a Manus Tester</div>
-                    <div className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Sign in with your Manus Team Account</div>
+                    <div className="text-xs font-black" style={{ color: "#FAFAFA" }}>Sign in with Manus</div>
+                    <div className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Manus Team Account required</div>
                   </div>
                 </a>
-
-                {/* Invited user option */}
-                <button
-                  onClick={() => setAuthPath("google")}
-                  className="flex items-center gap-3 w-full py-4 px-4 rounded-xl font-bold text-sm transition-all text-left"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#FAFAFA" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.1)" }}>
-                    <GoogleLogo />
-                  </div>
-                  <div>
-                    <div className="text-xs font-black" style={{ color: "#FAFAFA" }}>I was invited</div>
-                    <div className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Sign in with Google using your invite</div>
-                  </div>
-                </button>
 
                 <div className="mt-5 text-center">
                   <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
