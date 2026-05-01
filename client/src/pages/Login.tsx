@@ -274,7 +274,7 @@ export default function Login() {
                   Invited User Sign-In
                 </h2>
                 <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  You should have received an invite link via email. Click that link to sign in with Google — it will bring you back here automatically.
+                  You were sent a personal invite link. Use that link to access the platform — no password needed.
                 </p>
 
                 <div
@@ -282,7 +282,7 @@ export default function Login() {
                   style={{ background: "rgba(0,190,239,0.06)", border: "1px solid rgba(0,190,239,0.15)" }}
                 >
                   <p className="text-xs leading-relaxed text-center" style={{ color: "rgba(255,255,255,0.5)" }}>
-                    Check your email for an invite from a Pathlabs admin. The invite link will redirect you through Google sign-in and grant you access to the platform.
+                    Check your email or Slack for an invite link from a Pathlabs admin. Clicking the link will sign you in automatically — no Google account or password required.
                   </p>
                 </div>
 

@@ -1,0 +1,1 @@
+ALTER TABLE `users` MODIFY COLUMN `authProvider` enum('manus','google','invited') NOT NULL DEFAULT 'manus';

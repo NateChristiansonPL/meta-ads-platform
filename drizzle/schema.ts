@@ -30,10 +30,10 @@ export const users = mysqlTable("users", {
   /** True if the user's Manus openId appears in the team's membership list (verified via Manus API at login). */
   isTeamMember: boolean("isTeamMember").default(false).notNull(),
   /**
-   * Auth provider: 'manus' for Manus OAuth users, 'google' for invited Google OAuth users.
-   * Google users can view the app but cannot run skill analyses.
+   * Auth provider: 'manus' for Manus OAuth users, 'invited' for magic-link invited users.
+   * Invited users can view the app but cannot run skill analyses.
    */
-  authProvider: mysqlEnum("authProvider", ["manus", "google"]).default("manus").notNull(),
+  authProvider: mysqlEnum("authProvider", ["manus", "google", "invited"]).default("manus").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
