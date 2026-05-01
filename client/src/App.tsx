@@ -92,14 +92,17 @@ function KeepAliveSkillPages() {
 
 function Router() {
   const [location] = useLocation();
+  const { isAuthenticated } = useAuth();
   const isSkillPage = SKILL_PATHS.some((p) => location === p);
 
   return (
     <>
-      {/* Keep-alive skill pages — always mounted, hidden when not active */}
-      <div style={{ display: isSkillPage ? undefined : "none" }}>
-        <KeepAliveSkillPages />
-      </div>
+      {/* Keep-alive skill pages — only mount when authenticated to prevent unauthenticated tRPC calls on /login */}
+      {isAuthenticated && (
+        <div style={{ display: isSkillPage ? undefined : "none" }}>
+          <KeepAliveSkillPages />
+        </div>
+      )}
 
       {/* Normal routed pages — only render the active one */}
       {!isSkillPage && (
