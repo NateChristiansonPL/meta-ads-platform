@@ -287,9 +287,5 @@
 
 ## SendGrid Email Integration
 
-- [ ] Add SENDGRID_API_KEY secret
-- [ ] Add SENDGRID_FROM_EMAIL secret (verified sender address)
-- [ ] Install @sendgrid/mail npm package
-- [ ] Build sendInviteEmail helper in server/email.ts
-- [ ] Wire sendInviteEmail into users.sendInvite tRPC mutation
-- [ ] TypeScript check and tests pass
+- [x] Decided to use copy-link approach instead of SendGrid (user preference, low invite volume)
+- [x] Invite link copy button implemented in Team Members & Users admin panel

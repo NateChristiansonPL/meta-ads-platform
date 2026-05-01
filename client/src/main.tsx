@@ -14,10 +14,11 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
   if (!isUnauthorized) return;
 
-  // Redirect to the branded login page first, not directly to Manus OAuth
+  // Don't redirect if already on the login page — avoids resetting login UI state
+  if (window.location.pathname === "/login") return;
+
   window.location.href = "/login";
 };
 
