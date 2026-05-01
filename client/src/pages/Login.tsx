@@ -26,26 +26,11 @@ function getLoginUrlWithRemember(remember: boolean): string {
   return url.toString();
 }
 
-/** Google sign-in button SVG logo */
-function GoogleLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M17.64 9.2045c0-.638-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9086c1.7018-1.5668 2.6836-3.874 2.6836-6.615z" fill="#4285F4"/>
-      <path d="M9 18c2.43 0 4.4673-.8059 5.9564-2.1805l-2.9086-2.2581c-.8059.54-1.8368.8591-3.0477.8591-2.3441 0-4.3282-1.5832-5.036-3.7105H.9574v2.3318C2.4382 15.9832 5.4818 18 9 18z" fill="#34A853"/>
-      <path d="M3.964 10.71c-.18-.54-.2827-1.1168-.2827-1.71s.1027-1.17.2827-1.71V4.9582H.9574C.3477 6.1732 0 7.5477 0 9s.3477 2.8268.9574 4.0418L3.964 10.71z" fill="#FBBC05"/>
-      <path d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4627.8918 11.4255 0 9 0 5.4818 0 2.4382 2.0168.9574 4.9582L3.964 7.29C4.6718 5.1627 6.6559 3.5795 9 3.5795z" fill="#EA4335"/>
-    </svg>
-  );
-}
-
-type AuthPath = "choose" | "manus" | "google";
-
 export default function Login() {
   const { isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
   const search = useSearch();
   const [rememberDevice, setRememberDevice] = useState(false);
-  const [authPath, setAuthPath] = useState<AuthPath>("choose");
 
   // Parse error from query string
   const params = new URLSearchParams(search);
@@ -137,159 +122,76 @@ export default function Login() {
               <Zap size={26} style={{ color: "#00BEEF" }} />
             </div>
 
-            {/* ── CHOOSE PATH ── */}
-            {authPath === "choose" && (
-              <>
-                <h2 className="text-xl font-black text-center mb-1.5" style={{ color: "#FAFAFA" }}>
-                  Welcome
-                </h2>
-                <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  Sign in with your Manus Team Account to access the platform.
-                </p>
+            <h2 className="text-xl font-black text-center mb-1.5" style={{ color: "#FAFAFA" }}>
+              Welcome Back
+            </h2>
+            <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Sign in with your Manus Team Account to access the platform
+            </p>
 
-                {/* Manus OAuth — direct sign-in */}
-                <a
-                  href={getLoginUrlWithRemember(false)}
-                  className="flex items-center gap-3 w-full py-4 px-4 rounded-xl font-bold text-sm mb-3 transition-all text-left"
-                  style={{ background: "rgba(0,190,239,0.08)", border: "1px solid rgba(0,190,239,0.25)", color: "#FAFAFA", textDecoration: "none" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,190,239,0.15)"; e.currentTarget.style.borderColor = "rgba(0,190,239,0.5)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,190,239,0.08)"; e.currentTarget.style.borderColor = "rgba(0,190,239,0.25)"; }}
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#00BEEF" }}>
-                    <Cpu size={15} color="#141349" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-black" style={{ color: "#FAFAFA" }}>Sign in with Manus</div>
-                    <div className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>Manus Team Account required</div>
-                  </div>
-                </a>
-
-                <div className="mt-5 text-center">
-                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
-                    Don't have access? Contact your admin.
+            {/* Wrong account error */}
+            {isNotTeamMember && (
+              <div
+                className="flex items-start gap-3 rounded-xl p-3.5 mb-5"
+                style={{ background: "rgba(237,19,95,0.12)", border: "1px solid rgba(237,19,95,0.3)" }}
+              >
+                <AlertTriangle size={15} style={{ color: "#ED135F", flexShrink: 0, marginTop: 1 }} />
+                <div>
+                  <p className="text-xs font-bold mb-0.5" style={{ color: "#ED135F" }}>
+                    Wrong Manus account
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>
+                    The account you authorized is not linked to the Pathlabs team plan. Please sign in again using your <strong style={{ color: "rgba(255,255,255,0.7)" }}>Manus Team Account</strong>.
                   </p>
                 </div>
-              </>
+              </div>
             )}
 
-            {/* ── MANUS PATH ── */}
-            {authPath === "manus" && (
-              <>
-                <h2 className="text-xl font-black text-center mb-1.5" style={{ color: "#FAFAFA" }}>
-                  Manus Team Sign-In
-                </h2>
-                <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  Sign in using your Manus Team Account to access the platform
-                </p>
-
-                {isNotTeamMember && (
-                  <div
-                    className="flex items-start gap-3 rounded-xl p-3.5 mb-5"
-                    style={{ background: "rgba(237,19,95,0.12)", border: "1px solid rgba(237,19,95,0.3)" }}
-                  >
-                    <AlertTriangle size={15} style={{ color: "#ED135F", flexShrink: 0, marginTop: 1 }} />
-                    <div>
-                      <p className="text-xs font-bold mb-0.5" style={{ color: "#ED135F" }}>
-                        Wrong Manus account
-                      </p>
-                      <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>
-                        The account you authorized is not linked to the Pathlabs team plan. Please sign in again using your <strong style={{ color: "rgba(255,255,255,0.7)" }}>Manus Team Account</strong>.
-                      </p>
-                    </div>
-                  </div>
+            {/* Remember this device */}
+            <label
+              className="flex items-center gap-3 cursor-pointer mb-6 px-1"
+              onClick={() => setRememberDevice((r) => !r)}
+            >
+              <div
+                className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all"
+                style={{
+                  background: rememberDevice ? "#00BEEF" : "transparent",
+                  border: `1.5px solid ${rememberDevice ? "#00BEEF" : "rgba(255,255,255,0.25)"}`,
+                }}
+              >
+                {rememberDevice && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="#141349" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 )}
+              </div>
+              <div>
+                <span className="text-xs font-semibold block" style={{ color: "rgba(255,255,255,0.7)" }}>
+                  Remember this device
+                </span>
+                <span className="text-xs block" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  {rememberDevice ? "Stay signed in for 1 year" : "Session expires after 8 hours"}
+                </span>
+              </div>
+            </label>
 
-                {/* Remember this device */}
-                <label
-                  className="flex items-center gap-3 cursor-pointer mb-6 px-1"
-                  onClick={() => setRememberDevice((r) => !r)}
-                >
-                  <div
-                    className="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-all"
-                    style={{
-                      background: rememberDevice ? "#00BEEF" : "transparent",
-                      border: `1.5px solid ${rememberDevice ? "#00BEEF" : "rgba(255,255,255,0.25)"}`,
-                    }}
-                  >
-                    {rememberDevice && (
-                      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                        <path d="M1 3.5L3.5 6L8 1" stroke="#141349" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold block" style={{ color: "rgba(255,255,255,0.7)" }}>
-                      Remember this device
-                    </span>
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
-                      {rememberDevice ? "Stay signed in for 1 year" : "Session expires after 8 hours"}
-                    </span>
-                  </div>
-                </label>
+            {/* Sign in button */}
+            <a
+              href={getLoginUrlWithRemember(rememberDevice)}
+              className="flex items-center justify-center gap-3 w-full py-3.5 rounded-xl font-bold text-sm transition-all"
+              style={{ background: "#00BEEF", color: "#141349", textDecoration: "none" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#00d4f5")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#00BEEF")}
+            >
+              <Cpu size={16} />
+              Sign in with Manus Team Account
+            </a>
 
-                <a
-                  href={getLoginUrlWithRemember(rememberDevice)}
-                  className="flex items-center justify-center gap-3 w-full py-3.5 rounded-xl font-bold text-sm transition-all"
-                  style={{ background: "#00BEEF", color: "#141349", textDecoration: "none" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#00d4f5")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#00BEEF")}
-                >
-                  <Cpu size={16} />
-                  Sign in with Manus Team Account
-                </a>
-
-                <button
-                  onClick={() => setAuthPath("choose")}
-                  className="mt-4 w-full text-xs text-center transition-all"
-                  style={{ color: "rgba(255,255,255,0.3)", background: "transparent", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.6)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
-                >
-                  ← Back
-                </button>
-              </>
-            )}
-
-            {/* ── GOOGLE / INVITED PATH ── */}
-            {authPath === "google" && (
-              <>
-                <h2 className="text-xl font-black text-center mb-1.5" style={{ color: "#FAFAFA" }}>
-                  Invited User Sign-In
-                </h2>
-                <p className="text-xs text-center mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  You were sent a personal invite link. Use that link to access the platform — no password needed.
-                </p>
-
-                <div
-                  className="rounded-xl p-4 mb-5"
-                  style={{ background: "rgba(0,190,239,0.06)", border: "1px solid rgba(0,190,239,0.15)" }}
-                >
-                  <p className="text-xs leading-relaxed text-center" style={{ color: "rgba(255,255,255,0.5)" }}>
-                    Check your email or Slack for an invite link from a Pathlabs admin. Clicking the link will sign you in automatically — no Google account or password required.
-                  </p>
-                </div>
-
-                <div
-                  className="flex items-center gap-2 rounded-xl p-3.5 mb-5"
-                  style={{ background: "rgba(247,144,30,0.08)", border: "1px solid rgba(247,144,30,0.2)" }}
-                >
-                  <AlertTriangle size={13} style={{ color: "#F7901E", flexShrink: 0 }} />
-                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
-                    Invited users have view-only access. Skill analyses are not available.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => setAuthPath("choose")}
-                  className="w-full text-xs text-center transition-all"
-                  style={{ color: "rgba(255,255,255,0.3)", background: "transparent", border: "none", cursor: "pointer" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.6)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
-                >
-                  ← Back
-                </button>
-              </>
-            )}
+            <div className="mt-5 text-center">
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)" }}>
+                Don't have access? Contact your admin.
+              </p>
+            </div>
           </div>
 
           {/* Security note */}

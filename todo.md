@@ -298,3 +298,7 @@
 ## Magic Link Reuse
 
 - [x] Allow invite link to be reused after first acceptance (re-creates session for existing user instead of blocking with "already used")
+
+## Login Fix
+
+- [x] Restore Manus OAuth button with remember-for-8-hours checkbox (revert to pre-Google-OAuth login flow)
