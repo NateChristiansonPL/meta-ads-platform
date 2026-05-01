@@ -15,7 +15,6 @@ import AudienceOverlap from "./pages/AudienceOverlap";
 import AdminTokenVault from "./pages/AdminTokenVault";
 import AdminRunLogs from "./pages/AdminRunLogs";
 import AdminUsage from "./pages/AdminUsage";
-import AdminKnowledge from "./pages/AdminKnowledge";
 import AdminTeamMembers from "./pages/AdminTeamMembers";
 import ManusAI from "./pages/ManusAI";
 import CampaignBuilder from "./pages/CampaignBuilder";
@@ -106,9 +105,6 @@ function Router() {
           </Route>
           <Route path="/admin/usage">
             <AdminRoute component={AdminUsage} />
-          </Route>
-          <Route path="/admin/knowledge">
-            <AdminRoute component={AdminKnowledge} />
           </Route>
           <Route path="/admin/team-members">
             <AdminRoute component={AdminTeamMembers} />

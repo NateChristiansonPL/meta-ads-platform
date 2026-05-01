@@ -73,7 +73,6 @@ const ADMIN_ITEMS = [
   { label: "Run Logs", icon: Clock, path: "/admin/run-logs" },
   { label: "Team Members", icon: Users, path: "/admin/team-members" },
   { label: "Usage & Tallies", icon: BarChart2, path: "/admin/usage" },
-  { label: "Knowledge Base", icon: BookOpen, path: "/admin/knowledge" },
 ];
 
 /** Returns the set of skillIds that have a currently running task for the logged-in user. */

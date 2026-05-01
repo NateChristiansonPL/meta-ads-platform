@@ -258,3 +258,9 @@
 - [x] Remove knowledgeContext fetch and injection from runs.execute in routers.ts
 - [x] Remove knowledgeSection parameter and injection from buildSkillPrompt and all 5 skill prompt builders in manusTask.ts
 - [x] Ensure no app-level DB knowledge contaminates any user's skill run
+
+## Remove Admin Knowledge Base Page
+
+- [x] Remove admin Knowledge Base nav item from ADMIN_ITEMS in AppShell.tsx
+- [x] Remove /admin/knowledge route from App.tsx
+- [x] Verify platform documentation Knowledge Base (sidebar, above Provide Feedback) is untouched
