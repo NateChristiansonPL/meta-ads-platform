@@ -293,12 +293,14 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
       const result = await launchCampaignBuild.mutateAsync({
         adAccountId: settings.adAccountId,
         adAccountName: settings.adAccountName,
+        tokenId: settings.tokenId ?? undefined,
         facebookPageId: settings.facebookPageId,
         instagramUserId: settings.instagramUserId,
         pixelId: settings.pixelId,
         buildMode,
         stateJson: JSON.stringify(state),
         agentProfile,
+        projectId: 'Zb7DRexqB45QqDTQU2VV5Y', // pl-meta-builder project
       });
       setManusLaunch(prev => ({ ...prev, phase: 'running', runId: result.runId, statusMessages: ['Build submitted. Manus agent is running...'] }));
     } catch (err) {
@@ -379,8 +381,9 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     {
       id: 'accessToken',
       label: 'Access Token configured',
-      pass: !!settings.accessToken.trim(),
-      detail: settings.accessToken ? '••••••••' : 'Set in Settings (gear icon, bottom-left).',
+      // Pass if either the raw token is set OR a tokenId is selected (resolved server-side)
+      pass: !!settings.accessToken.trim() || !!settings.tokenId,
+      detail: settings.accessToken ? '••••••••' : settings.tokenId ? `Token ID #${settings.tokenId} selected` : 'Set in Settings (gear icon, bottom-left).',
     },
   ], [filledCampaigns, filledAdSets, filledCreatives, ads, settings, buildMode]);
 
@@ -506,7 +509,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
               <h3 className="text-[12px] font-700 text-foreground flex items-center gap-1.5">
                 <Rocket className="w-3.5 h-3.5 text-primary" /> Launch via Manus
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Runs the pl-campaign-creation skill to push your build to Meta. Progress is tracked in real time.</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Runs the pl-meta-builder skill to push your build to Meta. Progress is tracked in real time.</p>
             </div>
             {manusLaunch.phase !== 'idle' && (
               <button
@@ -520,7 +523,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
           <div className="p-4 space-y-3">
             {manusLaunch.phase === 'idle' && (
               <p className="text-[11px] text-muted-foreground">
-                Click <strong>Launch Build</strong> below to submit this build to a Manus agent running the pl-campaign-creation skill.
+                Click <strong>Launch Build</strong> below to submit this build to a Manus agent running the pl-meta-builder skill.
                 The agent will create your campaigns, ad sets, and ads in Meta Ads Manager.
               </p>
             )}
@@ -596,30 +599,29 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
           </div>
           <div className="flex flex-col items-end gap-1">
             <button
-              onClick={onLaunch}
-              disabled={!allPass || (launchProgress?.phase !== 'idle' && launchProgress?.phase !== 'done' && launchProgress?.phase !== 'error' && launchProgress?.phase !== undefined)}
-              title={!allPass ? 'Fix failing checks before launching' : 'Launch Build'}
+              onClick={handleManusLaunch}
+              disabled={!allPass || manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'}
+              title={!allPass ? 'Fix failing checks before launching' : 'Launch Build via pl-meta-builder'}
               className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 border transition-all ${
-                allPass && (launchProgress?.phase === 'idle' || launchProgress?.phase === 'done' || launchProgress?.phase === 'error' || launchProgress?.phase === undefined)
+                allPass && manusLaunch.phase !== 'launching' && manusLaunch.phase !== 'running'
                   ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 cursor-pointer shadow-lg shadow-primary/20'
                   : 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
               }`}
             >
-              {launchProgress?.phase === 'campaigns' || launchProgress?.phase === 'adsets' || launchProgress?.phase === 'ads'
+              {manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : <Rocket className="w-4 h-4" />
               }
-              {launchProgress?.phase === 'campaigns' ? 'Creating Campaigns…'
-                : launchProgress?.phase === 'adsets' ? 'Creating Ad Sets…'
-                : launchProgress?.phase === 'ads' ? 'Creating Ads…'
+              {manusLaunch.phase === 'launching' ? 'Submitting…'
+                : manusLaunch.phase === 'running' ? 'Agent Running…'
                 : 'Launch Build'
               }
             </button>
-            {launchProgress?.phase === 'done' && (
+            {manusLaunch.phase === 'done' && (
               <span className="text-[11px] text-emerald-400">Build complete!</span>
             )}
-            {launchProgress?.phase === 'error' && (
-              <span className="text-[11px] text-red-400">Launch failed — check errors above</span>
+            {manusLaunch.phase === 'error' && (
+              <span className="text-[11px] text-red-400">Launch failed — see details above</span>
             )}
           </div>
         </div>

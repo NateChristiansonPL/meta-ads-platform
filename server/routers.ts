@@ -811,6 +811,7 @@ export const appRouter = router({
         buildMode: z.enum(["full", "ads-only", "update"]),
         stateJson: z.string().min(1), // full CampaignBuilderState as JSON
         agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6-lite"),
+        projectId: z.string().optional(), // override the Manus project ID (e.g. admin builder uses pl-meta-builder project)
       }))
       .mutation(async ({ ctx, input }) => {
         const apiKey = process.env.MANUS_API_KEY;
@@ -838,8 +839,8 @@ export const appRouter = router({
           });
         }
 
-        // Look up the Manus project ID configured for campaign-creation
-        const skillProjectId = await getAppSetting("skillProjectId:campaign-creation") ?? undefined;
+        // Use the caller-supplied projectId if provided, otherwise fall back to the app setting
+        const skillProjectId = input.projectId ?? await getAppSetting("skillProjectId:campaign-creation") ?? undefined;
 
         // Create the run record immediately
         const runId = await createSkillRun({
