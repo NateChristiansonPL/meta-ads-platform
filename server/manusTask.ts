@@ -24,6 +24,8 @@ export const SKILL_IDS: Record<string, string> = {
   "structural-audit": "meta-ads-audit",
   "audience-overlap": "pl-audience-overlap-spend",
   "campaign-creation": "pl-campaign-creation",
+  /** Admin Campaign Builder uses pl-meta-builder in project Zb7DRexqB45QqDTQU2VV5Y */
+  "campaign-creation-admin": "pl-meta-builder",
 };
 
 interface ManusTaskOptions {
@@ -776,6 +778,66 @@ export async function listManusSkills(apiKey: string) {
     timeout: 15000,
   });
   return resp.data?.skills ?? [];
+}
+
+/**
+ * Build a prompt for the pl-meta-builder skill from a Campaign Builder state snapshot.
+ * Used by the ADMIN Campaign Builder only — runs in project Zb7DRexqB45QqDTQU2VV5Y.
+ * Instructs the agent to use ONLY the project files and instructions — no external knowledge recall.
+ */
+export function buildAdminCampaignCreationPrompt(params: {
+  accessToken: string;
+  adAccountId: string;
+  facebookPageId: string;
+  instagramUserId?: string;
+  pixelId?: string;
+  buildMode: "full" | "ads-only" | "update";
+  stateJson: string;
+}): string {
+  const { accessToken, adAccountId, facebookPageId, instagramUserId, pixelId, buildMode, stateJson } = params;
+  const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const tokenExport = `export META_ACCESS_TOKEN="${accessToken}"\n`;
+
+  return `## Pre-Execution: Read Project Files First
+Before executing any commands, you MUST read all files in the current Manus project (project files and instructions stored in this project). Follow those project-level instructions exactly as written. Do NOT recall or apply any knowledge from outside this project — use ONLY the project files and instructions.
+
+Please run the **pl-meta-builder** skill to create Meta Ads campaigns from the following builder configuration.
+
+${tokenExport}
+**Ad Account ID:** ${accountId}
+**Facebook Page ID:** ${facebookPageId}
+${instagramUserId ? `**Instagram User ID:** ${instagramUserId}` : ""}
+${pixelId ? `**Pixel ID:** ${pixelId}` : ""}
+**Build Mode:** ${buildMode}
+
+## Instructions
+
+Read the skill at \`/home/ubuntu/skills/pl-meta-builder/SKILL.md\` first, then use the following campaign builder state to create the campaigns, ad sets, and ads. Use ONLY the instructions in the project files — do not apply any external knowledge or defaults.
+
+The campaign builder state below contains all the data needed to create the campaigns.
+
+## Campaign Builder State (JSON)
+
+\`\`\`json
+${stateJson}
+\`\`\`
+
+## Build Instructions
+
+- **Build Mode: ${buildMode}**
+  - \`full\`: Create campaigns, ad sets, and ads from scratch
+  - \`ads-only\`: Only create ads (ad sets and campaigns already exist — use the adSetId values in the ad set rows)
+  - \`update-ads\`: Update existing ads where \`needsUpdate: true\` in the ads array (use the adId values)
+
+- For each ad set, the \`geoLocationObjects\` array contains structured geo targets with \`key\` and \`type\` fields for the Meta API
+- For each ad set, the \`detailedInterestObjects\` array contains interest targets with \`id\` and \`type\` fields
+- For each creative, the \`placementAssets\` array contains placement-specific media and copy overrides
+- For each ad, the \`leadGenFormId\` field (if set) should be used as the lead gen form ID
+
+After completing the build:
+1. Report the IDs of all created/updated campaigns, ad sets, and ads
+2. Note any errors or skipped items
+3. Provide a summary of what was created vs. what failed`;
 }
 
 /**

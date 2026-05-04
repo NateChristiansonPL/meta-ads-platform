@@ -1,6 +1,6 @@
 import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, BarChart2, ChevronDown, ChevronRight, Clock, RefreshCw, Shield, TrendingUp, Users } from "lucide-react";
+import { AlertCircle, BarChart2, ChevronDown, ChevronRight, Clock, Megaphone, RefreshCw, Shield, TrendingUp, Users } from "lucide-react";
 import { useState } from "react";
 
 const SKILL_META: Record<string, { color: string; Icon: React.ElementType }> = {
@@ -9,6 +9,8 @@ const SKILL_META: Record<string, { color: string; Icon: React.ElementType }> = {
   "creative-lifecycle": { color: "#00B37A", Icon: RefreshCw },
   "structural-audit": { color: "#ED135F", Icon: Shield },
   "audience-overlap": { color: "#a78bfa", Icon: Users },
+  "campaign-creation": { color: "#F7C948", Icon: Megaphone },
+  "campaign-creation-admin": { color: "#F7C948", Icon: Megaphone },
 };
 
 /** Map agentProfile slug → human-readable model label */

@@ -49,7 +49,7 @@ import {
   updateToken,
 } from "./db";
 import axios from "axios";
-import { buildSkillPrompt, buildCampaignCreationPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
+import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
@@ -842,11 +842,17 @@ export const appRouter = router({
         // Use the caller-supplied projectId if provided, otherwise fall back to the app setting
         const skillProjectId = input.projectId ?? await getAppSetting("skillProjectId:campaign-creation") ?? undefined;
 
+        // Determine if this is an admin launch (uses pl-meta-builder) or a user launch (uses pl-campaign-creation)
+        const ADMIN_CAMPAIGN_PROJECT_ID = "Zb7DRexqB45QqDTQU2VV5Y";
+        const isAdminLaunch = skillProjectId === ADMIN_CAMPAIGN_PROJECT_ID;
+        const effectiveSkillId = isAdminLaunch ? "campaign-creation-admin" : "campaign-creation";
+        const effectiveSkillName = isAdminLaunch ? "Campaign Builder Launch (Admin)" : "Campaign Builder Launch";
+
         // Create the run record immediately
         const runId = await createSkillRun({
           userId: ctx.user.id,
-          skillId: "campaign-creation",
-          skillName: "Campaign Builder Launch",
+          skillId: effectiveSkillId,
+          skillName: effectiveSkillName,
           status: "running",
           adAccountId: input.adAccountId,
           adAccountName: input.adAccountName ?? null,
@@ -861,15 +867,26 @@ export const appRouter = router({
         // Fire-and-forget background execution
         (async () => {
           try {
-            const prompt = buildCampaignCreationPrompt({
-              accessToken: metaAccessToken!,
-              adAccountId: input.adAccountId,
-              facebookPageId: input.facebookPageId,
-              instagramUserId: input.instagramUserId,
-              pixelId: input.pixelId,
-              buildMode: input.buildMode,
-              stateJson: input.stateJson,
-            });
+            // Admin launches use pl-meta-builder with project-only instructions; user launches use pl-campaign-creation
+            const prompt = isAdminLaunch
+              ? buildAdminCampaignCreationPrompt({
+                  accessToken: metaAccessToken!,
+                  adAccountId: input.adAccountId,
+                  facebookPageId: input.facebookPageId,
+                  instagramUserId: input.instagramUserId,
+                  pixelId: input.pixelId,
+                  buildMode: input.buildMode,
+                  stateJson: input.stateJson,
+                })
+              : buildCampaignCreationPrompt({
+                  accessToken: metaAccessToken!,
+                  adAccountId: input.adAccountId,
+                  facebookPageId: input.facebookPageId,
+                  instagramUserId: input.instagramUserId,
+                  pixelId: input.pixelId,
+                  buildMode: input.buildMode,
+                  stateJson: input.stateJson,
+                });
 
             const statusLog: Array<{ ts: number; msg: string }> = [];
             let flushCounter = 0;
@@ -879,7 +896,7 @@ export const appRouter = router({
 
             const result = await runManusSkillTask({
               apiKey,
-              skillId: "campaign-creation",
+              skillId: effectiveSkillId,
               prompt,
               agentProfile: input.agentProfile,
               projectId: skillProjectId,
