@@ -5,6 +5,8 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { metaRouter } from "./routers/meta";
 import { sessionsRouter } from "./routers/sessions";
+import { metaAdminRouter } from "./routers/admin/metaAdmin";
+import { sessionsAdminRouter } from "./routers/admin/sessionsAdmin";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
@@ -118,6 +120,8 @@ export const appRouter = router({
 
   meta: metaRouter,
   sessions: sessionsRouter,
+  adminMeta: metaAdminRouter,
+  adminSessions: sessionsAdminRouter,
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),

@@ -17,6 +17,7 @@ import AdminUsage from "./pages/AdminUsage";
 import AdminTeamMembers from "./pages/AdminTeamMembers";
 import ManusAI from "./pages/ManusAI";
 import CampaignBuilder from "./pages/CampaignBuilder";
+import CampaignBuilderAdmin from "./pages/admin/CampaignBuilderAdmin/CampaignBuilderAdmin";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import { useAuth } from "./_core/hooks/useAuth";
 import { useEffect } from "react";
@@ -125,6 +126,9 @@ function Router() {
           </Route>
           <Route path="/admin/team-members">
             <AdminRoute component={AdminTeamMembers} />
+          </Route>
+          <Route path="/admin/campaign-builder">
+            <AdminRoute component={CampaignBuilderAdmin} />
           </Route>
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />

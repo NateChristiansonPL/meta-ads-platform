@@ -302,3 +302,11 @@
 ## Login Fix
 
 - [x] Restore Manus OAuth button with remember-for-8-hours checkbox (revert to pre-Google-OAuth login flow)
+
+## Admin Campaign Builder (Isolated Copy)
+
+- [x] Audit all Campaign Builder files (frontend components, store, hooks, server router)
+- [x] Copy all frontend files into client/src/pages/admin/CampaignBuilderAdmin/ with Admin prefix
+- [x] Copy server tRPC procedures into server/routers/admin/ (metaAdmin.ts, sessionsAdmin.ts, googleSheetsAdmin.ts)
+- [x] Register admin route in App.tsx (/admin/campaign-builder) and nav item in AppShell.tsx (Campaign Builder (Admin))
+- [x] TypeScript check (0 errors), tests (23 passing), checkpoint, package zip
