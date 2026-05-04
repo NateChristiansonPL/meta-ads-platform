@@ -15,19 +15,24 @@ import ExportPanel from "./ExportPanelAdmin";
 import SettingsDrawer from "./SettingsDrawerAdmin";
 import SessionManager from "./SessionManagerAdmin";
 import LeadGenFormModal from "./LeadGenFormModalAdmin";
+import ImportMetaStructureModal from "./ImportMetaStructureModalAdmin";
+import CreativeLibrarySessionModal from "./CreativeLibrarySessionModalAdmin";
 import { useLaunchBuild } from "./useLaunchBuildAdmin";
 import {
   CampaignBuilderState,
   BuildSettings,
   BuildMode,
+  Objective,
   newCampaign,
   newAdSet,
   newCreative,
   newLeadGenForm,
-  AdRow,
   LeadGenForm,
+  ImportedMetaCampaign,
+  ImportedMetaAdSet,
+  CreativeRow,
 } from "./campaignStoreAdmin";
-import { Settings } from "lucide-react";
+import { DownloadCloud, Layers, Settings } from "lucide-react";
 import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,7 +51,6 @@ function makeInitialSettings(): BuildSettings {
     instagramUserId: "",
     instagramUsername: "",
     pixelId: "",
-    sheetUrl: "",
   };
 }
 
@@ -60,22 +64,26 @@ function makeInitialState(): CampaignBuilderState {
     ads: [],
     settings: makeInitialSettings(),
     leadGenForms: [],
+    importedCampaigns: [],
+    importedAdSets: [],
     reachHistory: [],
     overlapHistory: [],
   };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function CampaignBuilder() {
+export default function CampaignBuilderAdmin() {
   const [state, setState] = useState<CampaignBuilderState>(makeInitialState);
   const [activeTab, setActiveTab] = useState<TabId>("campaigns");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [creativeImportOpen, setCreativeImportOpen] = useState(false);
   const [leadGenOpen, setLeadGenOpen] = useState(false);
   const [activeLeadGenFormId, setActiveLeadGenFormId] = useState<string | null>(null);
 
   // ── Launch hook ──────────────────────────────────────────────────────────────
-  const { launch, progress, reset } = useLaunchBuild(state, (updatedAds: AdRow[]) => {
-    setState(s => ({ ...s, ads: updatedAds }));
+  const { launch, progress, reset } = useLaunchBuild(state, ({ ads, campaigns, adSets }) => {
+    setState(s => ({ ...s, ads, campaigns, adSets }));
   });
 
   // ── State helpers ────────────────────────────────────────────────────────────
@@ -84,7 +92,11 @@ export default function CampaignBuilder() {
   };
 
   const handleLoad = (loaded: CampaignBuilderState) => {
-    setState(loaded);
+    setState({
+      ...loaded,
+      importedCampaigns: loaded.importedCampaigns ?? [],
+      importedAdSets: loaded.importedAdSets ?? [],
+    });
     setActiveTab("campaigns");
     reset();
     toast.success("Session loaded.");
@@ -103,6 +115,114 @@ export default function CampaignBuilder() {
   };
 
   const activeLeadGenForm = state.leadGenForms.find(f => f.id === activeLeadGenFormId);
+
+  const normalizeImportedObjective = (objective: string): Objective => {
+    const valid: Objective[] = [
+      'OUTCOME_AWARENESS',
+      'OUTCOME_TRAFFIC',
+      'OUTCOME_ENGAGEMENT',
+      'OUTCOME_LEADS',
+      'OUTCOME_APP_PROMOTION',
+      'OUTCOME_SALES',
+    ];
+    return valid.includes(objective as Objective) ? (objective as Objective) : 'OUTCOME_TRAFFIC';
+  };
+
+  const handleMetaImport = ({
+    campaigns,
+    adSets,
+    populateRows,
+  }: {
+    campaigns: ImportedMetaCampaign[];
+    adSets: ImportedMetaAdSet[];
+    populateRows: boolean;
+  }) => {
+    setState(s => {
+      const campaignById = new Map(campaigns.map(c => [c.id, c]));
+      const existingCampaignIds = new Set(s.campaigns.map(c => c.campaignId).filter(Boolean));
+      const existingAdSetIds = new Set(s.adSets.map(a => a.adSetId).filter(Boolean));
+
+      const importedCampaignRows = populateRows
+        ? campaigns
+          .filter(campaign => !existingCampaignIds.has(campaign.id))
+          .map(campaign => newCampaign({
+            name: campaign.name,
+            objective: normalizeImportedObjective(campaign.objective),
+            status: campaign.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+            campaignId: campaign.id,
+          }))
+        : [];
+
+      const importedAdSetRows = populateRows
+        ? adSets
+          .filter(adSet => !existingAdSetIds.has(adSet.id))
+          .map(adSet => {
+            const campaign = campaignById.get(adSet.campaignId);
+            return newAdSet({
+              name: adSet.name,
+              campaignName: campaign?.name ?? '',
+              status: adSet.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
+              budgetType: adSet.dailyBudget ? 'DAILY' : 'LIFETIME',
+              budget: adSet.dailyBudget || adSet.lifetimeBudget || '',
+              adSetId: adSet.id,
+              campaignId: adSet.campaignId,
+            });
+          })
+        : [];
+
+      return {
+        ...s,
+        importedCampaigns: campaigns,
+        importedAdSets: adSets,
+        campaigns: populateRows ? [...s.campaigns, ...importedCampaignRows] : s.campaigns,
+        adSets: populateRows ? [...s.adSets, ...importedAdSetRows] : s.adSets,
+      };
+    });
+  };
+
+  const creativeMergeKey = (creative: CreativeRow): string => {
+    const durableId = creative.creativeId?.trim();
+    if (durableId) return `creative-id:${durableId.toLowerCase()}`;
+    return [
+      creative.concept?.trim().toLowerCase() || '',
+      creative.adType || '',
+      creative.assetLength?.trim() || '',
+      creative.websiteUrl?.trim().toLowerCase() || '',
+    ].join('|');
+  };
+
+  const mergeCreativeRows = (existing: CreativeRow[], incoming: CreativeRow[]) => {
+    const existingKeys = new Set(existing.map(creativeMergeKey));
+    const merged = [...existing];
+    incoming.forEach(creative => {
+      const key = creativeMergeKey(creative);
+      if (key.replace(/\|/g, '').trim() && !existingKeys.has(key)) {
+        merged.push(creative);
+        existingKeys.add(key);
+      }
+    });
+    return merged;
+  };
+
+  const handleCreativeLibraryImport = ({
+    creatives,
+    carouselCreatives,
+    mode,
+    sourceName,
+  }: {
+    creatives: CreativeRow[];
+    carouselCreatives: CreativeRow[];
+    mode: 'merge' | 'replace';
+    sourceName: string;
+  }) => {
+    setState(s => ({
+      ...s,
+      creatives: mode === 'replace' ? (creatives.length ? creatives : [newCreative()]) : mergeCreativeRows(s.creatives, creatives),
+      carouselCreatives: mode === 'replace' ? carouselCreatives : mergeCreativeRows(s.carouselCreatives, carouselCreatives),
+    }));
+    setActiveTab('creative-library');
+    toast.success(`Creative Library ${mode === 'replace' ? 'loaded' : 'merged'} from “${sourceName}”.`);
+  };
 
   const handleLeadGenFormChange = (form: LeadGenForm) => {
     setState(s => ({
@@ -134,6 +254,34 @@ export default function CampaignBuilder() {
   const headerActions = (
     <div className="flex items-center gap-2">
       <SessionManager state={state} onLoad={handleLoad} />
+
+      <button
+        onClick={() => setImportOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
+        style={{
+          background: state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.12)" : "rgba(255,255,255,0.08)",
+          color: state.importedCampaigns.length || state.importedAdSets.length ? "#00BEEF" : "rgba(255,255,255,0.7)",
+          border: `1px solid ${state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.3)" : "rgba(255,255,255,0.16)"}`,
+        }}
+        title="Import specific existing Meta campaigns and ad sets"
+      >
+        <DownloadCloud size={12} />
+        <span>Import Existing</span>
+      </button>
+
+      <button
+        onClick={() => setCreativeImportOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
+        style={{
+          background: state.creatives.filter(c => c.concept || c.creativeId).length || state.carouselCreatives.length ? "rgba(0,190,239,0.12)" : "rgba(255,255,255,0.08)",
+          color: state.creatives.filter(c => c.concept || c.creativeId).length || state.carouselCreatives.length ? "#00BEEF" : "rgba(255,255,255,0.7)",
+          border: `1px solid ${state.creatives.filter(c => c.concept || c.creativeId).length || state.carouselCreatives.length ? "rgba(0,190,239,0.3)" : "rgba(255,255,255,0.16)"}`,
+        }}
+        title="Load only Creative Library rows from a saved builder session"
+      >
+        <Layers size={12} />
+        <span>Load Creatives</span>
+      </button>
 
       <button
         onClick={() => setSettingsOpen(true)}
@@ -286,6 +434,25 @@ export default function CampaignBuilder() {
           )}
         </div>
       </div>
+
+      {/* ── Import Existing Meta Structure Modal ── */}
+      {importOpen && (
+        <ImportMetaStructureModal
+          settings={state.settings}
+          existingCampaigns={state.importedCampaigns ?? []}
+          existingAdSets={state.importedAdSets ?? []}
+          onImport={handleMetaImport}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
+
+      {/* ── Creative Library Session Import Modal ── */}
+      {creativeImportOpen && (
+        <CreativeLibrarySessionModal
+          onClose={() => setCreativeImportOpen(false)}
+          onImport={handleCreativeLibraryImport}
+        />
+      )}
 
       {/* ── Settings Drawer ── */}
       {settingsOpen && (

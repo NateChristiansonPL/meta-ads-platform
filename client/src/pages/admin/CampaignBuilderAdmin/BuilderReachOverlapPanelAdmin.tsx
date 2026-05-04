@@ -5,8 +5,9 @@
 import React, { useState, useCallback } from 'react';
 import { BarChart2, Users, RefreshCw, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
-import { AdSetRow, BuildSettings, GeoLocationObject, InterestObject, ReachEstimateRun, OverlapRun } from './campaignStoreAdmin';
+import { AdSetRow, BuildSettings, ReachEstimateRun, OverlapRun } from './campaignStoreAdmin';
 import { cn } from '@/lib/utils';
+import { buildBuilderTargetingSpec } from './builderMetaMappingAdmin';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // ReachEstimateRun and OverlapRun are defined in campaignStore.ts and re-exported here
@@ -50,91 +51,7 @@ function confidenceBadge(conf: string) {
 }
 
 function buildTargetingSpec(row: AdSetRow): Record<string, unknown> {
-  const spec: Record<string, unknown> = {};
-
-  // Age
-  const ageMin = parseInt(row.ageMin || '18', 10);
-  const ageMax = parseInt(row.ageMax || '65', 10);
-  spec.age_min = isNaN(ageMin) ? 18 : ageMin;
-  spec.age_max = isNaN(ageMax) ? 65 : ageMax;
-
-  // Gender
-  if (row.genders === 'male') spec.genders = [1];
-  else if (row.genders === 'female') spec.genders = [2];
-
-  // Geo locations — prefer structured objects
-  const geoObjs: GeoLocationObject[] = row.geoLocationObjects || [];
-  if (geoObjs.length > 0) {
-    const cities: { key: string; radius?: number; distance_unit?: string }[] = [];
-    const regions: { key: string }[] = [];
-    const countries: string[] = [];
-    const zips: { key: string }[] = [];
-
-    for (const g of geoObjs) {
-      const t = g.type?.toLowerCase() || '';
-      if (t === 'city') cities.push({ key: g.key });
-      else if (t === 'region') regions.push({ key: g.key });
-      else if (t === 'country') countries.push(g.key);
-      else if (t === 'zip') zips.push({ key: g.key });
-      else countries.push(g.key); // fallback
-    }
-    const geo: Record<string, unknown> = {};
-    if (cities.length) geo.cities = cities;
-    if (regions.length) geo.regions = regions;
-    if (countries.length) geo.countries = countries;
-    if (zips.length) geo.zips = zips;
-    spec.geo_locations = Object.keys(geo).length ? geo : { countries: ['US'] };
-  } else if (row.geoLocations) {
-    // Fallback: treat as country codes if they look like 2-letter codes
-    const lines = row.geoLocations.split('\n').filter(Boolean);
-    const countryLike = lines.filter(l => /^[A-Z]{2}$/.test(l.trim()));
-    spec.geo_locations = countryLike.length ? { countries: countryLike } : { countries: ['US'] };
-  } else {
-    spec.geo_locations = { countries: ['US'] };
-  }
-
-  // Detailed interests — id must be a string for Meta API, skip empty arrays
-  const interestObjs: InterestObject[] = row.detailedInterestObjects || [];
-  const narrowObjs: InterestObject[] = row.narrowInterestObjects || [];
-
-  if (interestObjs.length > 0 || narrowObjs.length > 0) {
-    const flexSpec: Record<string, unknown>[] = [];
-    if (interestObjs.length > 0) {
-      flexSpec.push({
-        interests: interestObjs.map(i => ({ id: String(i.id), name: i.name })),
-      });
-    }
-    if (narrowObjs.length > 0) {
-      flexSpec.push({
-        interests: narrowObjs.map(i => ({ id: String(i.id), name: i.name })),
-      });
-    }
-    if (flexSpec.length > 0) spec.flexible_spec = flexSpec;
-  }
-
-  // Placements — 'threads' is NOT a valid publisher_platform for targeting
-  const VALID_PUBLISHER_PLATFORMS = new Set(['facebook', 'instagram', 'audience_network', 'messenger']);
-  if (row.placementType === 'advantage_plus') {
-    spec.publisher_platforms = ['facebook', 'instagram'];
-  } else if (row.placements.length > 0) {
-    const platforms = new Set<string>();
-    const fbPositions: string[] = [];
-    const igPositions: string[] = [];
-    for (const p of row.placements) {
-      if (p.startsWith('facebook_')) { platforms.add('facebook'); fbPositions.push(p.replace('facebook_', '')); }
-      else if (p.startsWith('instagram_')) { platforms.add('instagram'); igPositions.push(p.replace('instagram_', '')); }
-      else if (p.startsWith('audience_network_')) platforms.add('audience_network');
-      else if (p.startsWith('messenger_')) platforms.add('messenger');
-      // 'threads' and other non-standard platforms are intentionally skipped
-    }
-    // Only include valid platforms
-    const validPlatforms = Array.from(platforms).filter(p => VALID_PUBLISHER_PLATFORMS.has(p));
-    if (validPlatforms.length > 0) spec.publisher_platforms = validPlatforms;
-    if (fbPositions.length) spec.facebook_positions = fbPositions;
-    if (igPositions.length) spec.instagram_positions = igPositions;
-  }
-
-  return spec;
+  return buildBuilderTargetingSpec(row);
 }
 
 // ─── Reach Estimate Panel ─────────────────────────────────────────────────────

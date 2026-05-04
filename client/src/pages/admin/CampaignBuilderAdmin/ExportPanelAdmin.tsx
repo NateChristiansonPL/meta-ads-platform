@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CampaignBuilderState, AdRow } from './campaignStoreAdmin';
-import { LaunchProgress } from '@/hooks/useLaunchBuild';
+import { LaunchProgress } from './useLaunchBuildAdmin';
 import { trpc } from '@/lib/trpc';
 
 interface Props {

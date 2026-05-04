@@ -416,7 +416,14 @@ function AdListView({ ads, adSets, creatives, campaigns, settings, onChange }: A
   const duplicateAd = (id: string) => {
     const ad = ads.find(a => a.id === id);
     if (!ad) return;
-    const dup = { ...ad, id: crypto.randomUUID(), adId: '' };
+    const dup = {
+      ...ad,
+      id: crypto.randomUUID(),
+      adId: '',
+      metaCreativeId: '',
+      previewLink: '',
+      needsUpdate: false,
+    };
     const idx = ads.findIndex(a => a.id === id);
     const next = [...ads];
     next.splice(idx + 1, 0, dup);

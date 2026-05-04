@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
 
 import { trpc } from '@/lib/trpc';
 import { BuildSettings } from './campaignStoreAdmin';
-import { ReachEstimatePanel, AudienceOverlapPanel } from '@/components/BuilderReachOverlapPanel';
+import { ReachEstimatePanel, AudienceOverlapPanel } from './BuilderReachOverlapPanelAdmin';
 
 interface Props {
   rows: AdSetRow[];

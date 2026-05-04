@@ -163,6 +163,7 @@ export interface AdSetRow {
   leadGenFormId?: string;
   // write-back
   adSetId: string;
+  campaignId?: string;
 }
 
 // ── Creative row ──────────────────────────────────────────────────────────────
@@ -198,6 +199,7 @@ export interface AdRow {
   adId: string;
   adSetId: string;
   campaignId: string;
+  metaCreativeId: string;
   sourcePostId: string;
   // Creative reference
   creativeId: string;
@@ -219,6 +221,23 @@ export interface AdRow {
   needsUpdate: boolean;
 }
 
+// ── Imported Meta structure ───────────────────────────────────────────────────
+export interface ImportedMetaCampaign {
+  id: string;
+  name: string;
+  status: string;
+  objective: string;
+}
+
+export interface ImportedMetaAdSet {
+  id: string;
+  name: string;
+  status: string;
+  campaignId: string;
+  dailyBudget?: string;
+  lifetimeBudget?: string;
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 export interface BuildSettings {
   /** Vault token ID — used to resolve accessToken server-side */
@@ -233,7 +252,6 @@ export interface BuildSettings {
   instagramUserId: string;
   instagramUsername: string;
   pixelId: string;
-  sheetUrl: string;
 }
 
 // ── Reach / Overlap history types ───────────────────────────────────────────
@@ -284,6 +302,8 @@ export interface CampaignBuilderState {
   ads: AdRow[];
   settings: BuildSettings;
   leadGenForms: LeadGenForm[];
+  importedCampaigns: ImportedMetaCampaign[];
+  importedAdSets: ImportedMetaAdSet[];
   reachHistory: ReachEstimateRun[];
   overlapHistory: OverlapRun[];
 }
@@ -546,6 +566,7 @@ export function newAdSet(overrides: Partial<AdSetRow> = {}): AdSetRow {
     excludedAudiences: '',
     attributionWindow: '7d_click_1d_engaged_1d_view',
     adSetId: '',
+    campaignId: '',
     ...overrides,
   };
 }
@@ -595,6 +616,7 @@ export function newAdRow(overrides: Partial<AdRow> = {}): AdRow {
     adId: '',
     adSetId: '',
     campaignId: '',
+    metaCreativeId: '',
     sourcePostId: '',
     creativeId: '',
     creativeConcept: '',

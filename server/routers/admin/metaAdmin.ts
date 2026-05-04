@@ -15,8 +15,8 @@ import axios from "axios";
 import FormData from "form-data";
 import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
-import { sheetsValuesBatchUpdate, extractSpreadsheetId, type ValueRange } from "./googleSheetsAdmin";
 import { getTokenById } from "../../db";
+import { sheetsValuesBatchUpdate, extractSpreadsheetId, type ValueRange } from "./googleSheetsAdmin";
 
 const META_API_VERSION = "v21.0";
 const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -112,6 +112,110 @@ async function metaGetAllPages(
 function normalizeAdAccountId(raw: string): string {
   const stripped = raw.replace(/^act_/, "");
   return `act_${stripped}`;
+}
+
+
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .map(v => stripUndefinedDeep(v))
+      .filter(v => v !== undefined && v !== null && !(typeof v === "object" && !Array.isArray(v) && Object.keys(v as Record<string, unknown>).length === 0)) as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined || v === null || v === "") continue;
+      const cleaned = stripUndefinedDeep(v);
+      if (cleaned === undefined || cleaned === null) continue;
+      if (Array.isArray(cleaned) && cleaned.length === 0) continue;
+      if (typeof cleaned === "object" && !Array.isArray(cleaned) && Object.keys(cleaned as Record<string, unknown>).length === 0) continue;
+      out[k] = cleaned;
+    }
+    return out as T;
+  }
+  return value;
+}
+
+function buildDegreesOfFreedomSpec(): Record<string, unknown> {
+  const off = { enroll_status: "OPT_OUT" };
+  return {
+    creative_features_spec: {
+      standard_enhancements: off,
+      image_templates: off,
+      text_optimizations: off,
+      inline_comment: off,
+      text_generation: off,
+      image_brightness_and_contrast: off,
+      image_animation: off,
+      image_uncrop: off,
+      image_touchups: off,
+      image_background_gen: off,
+      image_expand: off,
+      profile_card: off,
+      relevant_comments: off,
+      add_catalog_items: off,
+      enhance_cta: off,
+      media_type_automation: off,
+      automatic_translation: off,
+      music: off,
+      overlay: off,
+    },
+  };
+}
+
+function buildPlacementCustomizationRules(): Record<string, unknown>[] {
+  return [
+    {
+      customization_spec: {
+        publisher_platforms: ["facebook", "instagram"],
+        facebook_positions: ["feed", "profile_feed", "marketplace", "search"],
+        instagram_positions: ["stream", "explore", "explore_home", "profile_feed"],
+      },
+      image_label: { name: "feed" },
+      video_label: { name: "feed" },
+      link_url_label: { name: "feed" },
+      body_label: { name: "feed" },
+    },
+    {
+      customization_spec: {
+        publisher_platforms: ["facebook", "instagram", "messenger"],
+        facebook_positions: ["story", "facebook_reels"],
+        instagram_positions: ["story", "reels"],
+        messenger_positions: ["messenger_stories"],
+      },
+      image_label: { name: "stories_reels" },
+      video_label: { name: "stories_reels" },
+      link_url_label: { name: "stories_reels" },
+      body_label: { name: "stories_reels" },
+    },
+  ];
+}
+
+async function getAdPreviewLink(adId: string, accessToken: string): Promise<string> {
+  const formats = ["DESKTOP_FEED_STANDARD", "MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY"];
+  for (const ad_format of formats) {
+    try {
+      const preview = await metaGet(`/${adId}/previews`, { ad_format }, accessToken);
+      const body = (preview.data as Array<{ body?: string }>)?.[0]?.body;
+      const match = body?.match(/href=\"([^\"]+)\"/);
+      if (match?.[1]) return match[1].replace(/&amp;/g, "&");
+      if (body) return body;
+    } catch {
+      // Try the next format.
+    }
+  }
+  return "";
+}
+
+function readReachBounds(data: Record<string, unknown>): { lower: number; upper: number } {
+  const directLower = Number(data.users_lower_bound || 0);
+  const directUpper = Number(data.users_upper_bound || 0);
+  if (directLower || directUpper) return { lower: directLower, upper: directUpper };
+  const first = (data.data as Array<Record<string, unknown>> | undefined)?.[0] || {};
+  return {
+    lower: Number(first.estimate_mau_lower_bound || first.users_lower_bound || 0),
+    upper: Number(first.estimate_mau_upper_bound || first.users_upper_bound || 0),
+  };
 }
 
 // ─── Input Schemas ─────────────────────────────────────────────────────────────
@@ -573,18 +677,21 @@ export const metaAdminRouter = router({
       const accountId = normalizeAdAccountId(adAccountId);
       try {
         const data = await metaGet(
-          `/${accountId}/reachestimate`,
+          `/${accountId}/delivery_estimate`,
           {
             targeting_spec: JSON.stringify(targetingSpec),
-            optimization_goal: optimizationGoal,
+            optimization_goal: optimizationGoal || "REACH",
           },
           accessToken
         );
+        const { lower, upper } = readReachBounds(data);
         return {
-          users: data.users,
-          estimateMau: data.estimate_mau,
-          estimateDau: data.estimate_dau,
-          estimateReady: data.estimate_ready,
+          users: upper,
+          usersLowerBound: lower,
+          usersUpperBound: upper,
+          estimateMau: upper,
+          estimateDau: undefined,
+          estimateReady: lower > 0 || upper > 0,
         };
       } catch (err) {
         throw new TRPCError({
@@ -869,17 +976,22 @@ export const metaAdminRouter = router({
         endTime: z.string().optional(),
         targeting: z.record(z.string(), z.unknown()),
         attributionSpec: z.array(z.record(z.string(), z.unknown())).optional(),
+        frequencyControl: z.record(z.string(), z.unknown()).optional(),
+        adScheduling: z.array(z.record(z.string(), z.unknown())).optional(),
         conversionLocation: z.string().optional(),
         pixelId: z.string().optional(),
         customEventType: z.string().optional(),
+        leadGenFormId: z.string().optional(),
+        facebookPageId: z.string().optional(),
+        instagramProfileId: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
       const {
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
-        startTime, endTime, targeting, attributionSpec,
-        conversionLocation, pixelId, customEventType,
+        startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
+        conversionLocation, pixelId, customEventType, leadGenFormId, facebookPageId, instagramProfileId,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -921,17 +1033,26 @@ export const metaAdminRouter = router({
 
       if (startTime) payload.start_time = startTime;
       if (attributionSpec) payload.attribution_spec = attributionSpec;
-
-      // Promoted object for conversion-based objectives
-      if (pixelId && conversionLocation) {
-        const promotedObject: Record<string, unknown> = { pixel_id: pixelId };
-        if (customEventType) {
-          promotedObject.custom_event_type = customEventType;
+      if (adScheduling?.length) payload.adset_schedule = adScheduling;
+      if (frequencyControl?.enabled) {
+        const times = Number(frequencyControl.times || 1);
+        const days = Number(frequencyControl.days || 7);
+        if (Number.isFinite(times) && Number.isFinite(days)) {
+          payload.frequency_control_specs = [{ event: "IMPRESSIONS", interval_days: days, max_frequency: times }];
         }
-        payload.promoted_object = promotedObject;
       }
 
-      const data = await metaPost(`/${accountId}/adsets`, payload, accessToken);
+      const promotedObject: Record<string, unknown> = {};
+      if (pixelId && conversionLocation) {
+        promotedObject.pixel_id = pixelId;
+        if (customEventType) promotedObject.custom_event_type = customEventType;
+      }
+      if (leadGenFormId) promotedObject.lead_gen_form_id = leadGenFormId;
+      if (facebookPageId) promotedObject.page_id = facebookPageId;
+      if (instagramProfileId) promotedObject.instagram_profile_id = instagramProfileId;
+      if (Object.keys(promotedObject).length) payload.promoted_object = promotedObject;
+
+      const data = await metaPost(`/${accountId}/adsets`, stripUndefinedDeep(payload), accessToken);
       return { adSetId: data.id };
     }),
 
@@ -976,6 +1097,9 @@ export const metaAdminRouter = router({
         websiteUrl: z.string().min(1),
         feedWebsiteUrl: z.string().optional(),
         storiesWebsiteUrl: z.string().optional(),
+        feedPrimaryText: z.string().optional(),
+        storiesPrimaryText: z.string().optional(),
+        leadGenFormId: z.string().optional(),
         urlParameters: z.string().optional(),
         displayUrl: z.string().optional(),
         // Post ID (dark post / social proof)
@@ -990,7 +1114,7 @@ export const metaAdminRouter = router({
         name, status, adType,
         feedAssetId, storiesAssetId, singleVideoId, thumbnailUrl, cards,
         headlines, primaryTexts, descriptions, callToAction,
-        websiteUrl, feedWebsiteUrl, storiesWebsiteUrl, urlParameters, displayUrl,
+        websiteUrl, feedWebsiteUrl, storiesWebsiteUrl, feedPrimaryText, storiesPrimaryText, leadGenFormId, urlParameters, displayUrl,
         sourcePostId, placements,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
@@ -1018,11 +1142,7 @@ export const metaAdminRouter = router({
         : baseUrl;
 
       // ── Degrees of freedom spec (all enhancements OFF) ─────────────────────
-      const degreesOfFreedomSpec = {
-        creative_features_spec: {
-          standard_enhancements: { enroll_status: "OPT_OUT" },
-        },
-      };
+      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec();
 
       // ── Pixel tracking ─────────────────────────────────────────────────────
       const trackingSpec = pixelId
@@ -1063,7 +1183,7 @@ export const metaAdminRouter = router({
               link: baseUrl,
               message: normalize(primaryTexts[0]),
               child_attachments: childAttachments,
-              call_to_action: { type: callToAction, value: { link: baseUrl } },
+              call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
             },
           },
           degrees_of_freedom_spec: degreesOfFreedomSpec,
@@ -1085,10 +1205,10 @@ export const metaAdminRouter = router({
         if (urlParameters) videoData.url_tags = urlParameters;
 
         creativeSpec = {
-          object_story_spec: {
+          object_story_spec: stripUndefinedDeep({
             page_id: pageId,
             video_data: videoData,
-          },
+          }),
           degrees_of_freedom_spec: degreesOfFreedomSpec,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
@@ -1122,7 +1242,16 @@ export const metaAdminRouter = router({
             return [{ website_url: feedUrl, display_url: displayUrl }];
           })(),
           titles: headlines.map((h) => ({ text: normalize(h) })),
-          bodies: primaryTexts.map((p) => ({ text: normalize(p) })),
+          bodies: (() => {
+            if (isPlacementCustomized && (feedPrimaryText || storiesPrimaryText)) {
+              return [
+                { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "feed" }] },
+                { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: [{ name: "stories_reels" }] },
+              ];
+            }
+            return primaryTexts.map((p) => ({ text: normalize(p) }));
+          })(),
+          url_tags: urlParameters,
         };
 
         if (descriptions && descriptions.length > 0) {
@@ -1169,6 +1298,7 @@ export const metaAdminRouter = router({
               { name: "feed" },
               { name: "stories_reels" },
             ];
+            assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules();
           } else {
             // Single asset
             if (adType === "static" && feedAssetId) {
@@ -1184,11 +1314,11 @@ export const metaAdminRouter = router({
           }
         }
 
-        creativeSpec = {
+        creativeSpec = stripUndefinedDeep({
           asset_feed_spec: assetFeedSpec,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
           multi_advertiser_eligibility: "INELIGIBLE",
-        };
+        });
 
         if (instagramActorId) {
           creativeSpec.instagram_actor_id = instagramActorId;
@@ -1203,7 +1333,7 @@ export const metaAdminRouter = router({
 
       const creativeData = await metaPost(
         `/${accountId}/adcreatives`,
-        creativePayload,
+        stripUndefinedDeep(creativePayload),
         accessToken
       );
       const creativeId = creativeData.id;
@@ -1233,17 +1363,7 @@ export const metaAdminRouter = router({
       }
 
       // ── Fetch preview link ─────────────────────────────────────────────────
-      let previewLink = "";
-      try {
-        const preview = await metaGet(
-          `/${adId}/previews`,
-          { ad_format: "DESKTOP_FEED_STANDARD" },
-          accessToken
-        );
-        previewLink = (preview.data as Array<{body: string}>)?.[0]?.body || "";
-      } catch {
-        // Preview fetch is non-critical
-      }
+      const previewLink = await getAdPreviewLink(adId, accessToken);
 
       return { adId, creativeId, previewLink };
     }),
@@ -1282,8 +1402,12 @@ export const metaAdminRouter = router({
         websiteUrl: z.string().min(1),
         feedWebsiteUrl: z.string().optional(),
         storiesWebsiteUrl: z.string().optional(),
+        feedPrimaryText: z.string().optional(),
+        storiesPrimaryText: z.string().optional(),
+        leadGenFormId: z.string().optional(),
         urlParameters: z.string().optional(),
         displayUrl: z.string().optional(),
+        sourcePostId: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1322,22 +1446,24 @@ export const metaAdminRouter = router({
         adAccountId, pageId, instagramActorId, pixelId, adType,
         feedAssetId, storiesAssetId, singleVideoId, thumbnailUrl, cards,
         headlines, primaryTexts, descriptions, callToAction,
-        websiteUrl, feedWebsiteUrl, storiesWebsiteUrl, urlParameters, displayUrl,
+        websiteUrl, feedWebsiteUrl, storiesWebsiteUrl, feedPrimaryText, storiesPrimaryText, leadGenFormId, urlParameters, displayUrl, sourcePostId,
       } = input;
 
       const baseUrl = appendParams(websiteUrl, urlParameters);
       const feedUrl = feedWebsiteUrl ? appendParams(feedWebsiteUrl, urlParameters) : baseUrl;
       const storiesUrl = storiesWebsiteUrl ? appendParams(storiesWebsiteUrl, urlParameters) : baseUrl;
 
-      const degreesOfFreedomSpec = {
-        creative_features_spec: {
-          standard_enhancements: { enroll_status: "OPT_OUT" },
-        },
-      };
+      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec();
 
       let updatedSpec: Record<string, unknown> = {};
 
-      if (adType === "carousel" && cards && cards.length > 0) {
+      if (sourcePostId) {
+        updatedSpec = {
+          object_story_id: sourcePostId,
+          degrees_of_freedom_spec: degreesOfFreedomSpec,
+          multi_advertiser_eligibility: "INELIGIBLE",
+        };
+      } else if (adType === "carousel" && cards && cards.length > 0) {
         updatedSpec = {
           object_story_spec: {
             page_id: pageId,
@@ -1366,7 +1492,7 @@ export const metaAdminRouter = router({
             video_data: {
               video_id: singleVideoId,
               message: normalize(primaryTexts[0]),
-              call_to_action: { type: callToAction, value: { link: baseUrl } },
+              call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
               link: baseUrl,
               image_url: thumbnailUrl,
               title: headlines[0] ? normalize(headlines[0]) : undefined,
@@ -1388,7 +1514,16 @@ export const metaAdminRouter = router({
               ]
             : [{ website_url: feedUrl, display_url: displayUrl }],
           titles: headlines.map((h) => ({ text: normalize(h) })),
-          bodies: primaryTexts.map((p) => ({ text: normalize(p) })),
+          bodies: (() => {
+            if (isPlacementCustomized && (feedPrimaryText || storiesPrimaryText)) {
+              return [
+                { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "feed" }] },
+                { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: [{ name: "stories_reels" }] },
+              ];
+            }
+            return primaryTexts.map((p) => ({ text: normalize(p) }));
+          })(),
+          url_tags: urlParameters,
         };
         if (descriptions && descriptions.length > 0) {
           assetFeedSpec.descriptions = descriptions.map((d) => ({ text: normalize(d) }));
@@ -1410,6 +1545,7 @@ export const metaAdminRouter = router({
         }
         if (isPlacementCustomized) {
           assetFeedSpec.ad_labels = [{ name: "feed" }, { name: "stories_reels" }];
+          assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules();
         }
         updatedSpec = {
           asset_feed_spec: assetFeedSpec,
@@ -1420,8 +1556,9 @@ export const metaAdminRouter = router({
       }
 
        // 3. POST update to existing creative ID (in-place, no new ID)
-      await metaPost(`/${existingCreativeId}`, updatedSpec, accessToken);
-      return { creativeId: existingCreativeId, updated: true };
+      await metaPost(`/${existingCreativeId}`, stripUndefinedDeep(updatedSpec), accessToken);
+      const previewLink = await getAdPreviewLink(adId, accessToken);
+      return { creativeId: existingCreativeId, previewLink, updated: true };
     }),
 
   /**
@@ -1823,6 +1960,7 @@ export const metaAdminRouter = router({
       }
     }),
 
+
   writeBackToSheet: publicProcedure
     .input(
       z.object({
@@ -1844,7 +1982,6 @@ export const metaAdminRouter = router({
     .mutation(async ({ input }) => {
       const spreadsheetId = extractSpreadsheetId(input.sheetUrl);
       const valueRanges: ValueRange[] = [];
-
       for (const row of input.rows) {
         if (row.exportRowNumber) {
           const r = row.exportRowNumber;
@@ -1862,11 +1999,9 @@ export const metaAdminRouter = router({
           if (row.previewLink) valueRanges.push({ range: `${tab}!L${r}`, values: [[row.previewLink]] });
         }
       }
-
       if (valueRanges.length === 0) {
         return { written: 0, message: "No data to write back." };
       }
-
       try {
         await sheetsValuesBatchUpdate(spreadsheetId, valueRanges);
         return { written: valueRanges.length, message: null };
@@ -1915,12 +2050,14 @@ export const metaAdminRouter = router({
       const results = await Promise.all(adSets.map(async (adSet) => {
         try {
           const reachData = await metaGet(
-            `/${accountId}/reachestimate`,
-            { targeting_spec: JSON.stringify(adSet.targetingSpec) },
+            `/${accountId}/delivery_estimate`,
+            {
+              targeting_spec: JSON.stringify(adSet.targetingSpec),
+              optimization_goal: OPT_GOAL_MAP[adSet.optimizationGoal || ''] || 'LINK_CLICKS',
+            },
             accessToken
           );
-          const lower = (reachData.users_lower_bound as number) || 0;
-          const upper = (reachData.users_upper_bound as number) || 0;
+          const { lower, upper } = readReachBounds(reachData);
           let cpm: number | null = null;
           const optGoal = OPT_GOAL_MAP[adSet.optimizationGoal || ''] || 'LINK_CLICKS';
           try {
@@ -2024,11 +2161,12 @@ export const metaAdminRouter = router({
         return Promise.all(specs.map(async (spec) => {
           try {
             const data = await metaGet(
-              `/${accountId}/reachestimate`,
-              { targeting_spec: JSON.stringify(spec) },
+              `/${accountId}/delivery_estimate`,
+              { targeting_spec: JSON.stringify(spec), optimization_goal: "REACH" },
               accessToken
             );
-            return (((data.users_lower_bound as number) || 0) + ((data.users_upper_bound as number) || 0)) / 2;
+            const { lower, upper } = readReachBounds(data);
+            return (lower + upper) / 2;
           } catch { return 0; }
         }));
       }
