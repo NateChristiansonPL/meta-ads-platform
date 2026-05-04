@@ -594,16 +594,33 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
               </span>
             )}
           </div>
-          {/* Launch Build is disabled — direct campaign creation via Manus agent is not yet available */}
           <div className="flex flex-col items-end gap-1">
             <button
-              disabled
-              title="Launch Build is coming soon"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 bg-surface-2 text-muted-foreground cursor-not-allowed border border-border opacity-50"
+              onClick={onLaunch}
+              disabled={!allPass || (launchProgress?.phase !== 'idle' && launchProgress?.phase !== 'done' && launchProgress?.phase !== 'error' && launchProgress?.phase !== undefined)}
+              title={!allPass ? 'Fix failing checks before launching' : 'Launch Build'}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 border transition-all ${
+                allPass && (launchProgress?.phase === 'idle' || launchProgress?.phase === 'done' || launchProgress?.phase === 'error' || launchProgress?.phase === undefined)
+                  ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 cursor-pointer shadow-lg shadow-primary/20'
+                  : 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
+              }`}
             >
-              <Rocket className="w-4 h-4" /> Launch Build
+              {launchProgress?.phase === 'campaigns' || launchProgress?.phase === 'adsets' || launchProgress?.phase === 'ads'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Rocket className="w-4 h-4" />
+              }
+              {launchProgress?.phase === 'campaigns' ? 'Creating Campaigns…'
+                : launchProgress?.phase === 'adsets' ? 'Creating Ad Sets…'
+                : launchProgress?.phase === 'ads' ? 'Creating Ads…'
+                : 'Launch Build'
+              }
             </button>
-            <span className="text-[11px] text-muted-foreground">Coming soon</span>
+            {launchProgress?.phase === 'done' && (
+              <span className="text-[11px] text-emerald-400">Build complete!</span>
+            )}
+            {launchProgress?.phase === 'error' && (
+              <span className="text-[11px] text-red-400">Launch failed — check errors above</span>
+            )}
           </div>
         </div>
       </div>
