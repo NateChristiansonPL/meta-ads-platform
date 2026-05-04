@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { lt } from "drizzle-orm/sql/expressions/conditions";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminFeedbackReads,
@@ -230,9 +231,11 @@ export async function updateSkillRun(
   }).where(eq(skillRuns.id, id));
 }
 
-export async function getRecentRuns(limit = 50) {
+export async function getRecentRuns(opts: { limit?: number; cursor?: number } = {}) {
+  const { limit = 50, cursor } = opts;
   const db = await getDb();
   if (!db) return [];
+  const conditions = cursor != null ? [lt(skillRuns.id, cursor)] : [];
   return db.select({
     id: skillRuns.id,
     userId: skillRuns.userId,
@@ -254,8 +257,9 @@ export async function getRecentRuns(limit = 50) {
   })
     .from(skillRuns)
     .leftJoin(users, eq(skillRuns.userId, users.id))
-    .orderBy(desc(skillRuns.startedAt))
-    .limit(limit);
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(skillRuns.id))
+    .limit(limit + 1); // fetch one extra to determine if there's a next page
 }
 
 export async function getRunsByUser(userId: number, limit = 20) {

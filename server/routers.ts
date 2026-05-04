@@ -615,8 +615,17 @@ export const appRouter = router({
       }),
 
      allRuns: adminProcedure
-      .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
-      .query(async ({ input }) => getRecentRuns(input.limit)),
+      .input(z.object({
+        limit: z.number().int().min(1).max(100).default(50),
+        cursor: z.number().int().optional(),
+      }))
+      .query(async ({ input }) => {
+        const rows = await getRecentRuns({ limit: input.limit, cursor: input.cursor });
+        const hasMore = rows.length > input.limit;
+        const items = hasMore ? rows.slice(0, input.limit) : rows;
+        const nextCursor = hasMore ? items[items.length - 1].id : undefined;
+        return { items, nextCursor };
+      }),
     // Returns the most recent successful run output for the calling user + skillId.
     // Used to restore the output panel when the user navigates back to a skill page.
     lastOutput: protectedProcedure
