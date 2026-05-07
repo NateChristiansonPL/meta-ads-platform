@@ -107,17 +107,18 @@ export default function SessionManager({ state, onLoad }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-80 bg-surface-1 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-1.5 w-80 rounded-xl shadow-2xl z-50 overflow-hidden" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
           {/* Save new */}
-          <div className="p-3 border-b border-border">
-            <p className="text-[10px] font-700 text-muted-foreground uppercase tracking-wider mb-2">Save Current Build</p>
+          <div className="p-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="text-[10px] font-700 uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Save Current Build</p>
             <div className="flex gap-2">
               <input
                 value={saveName}
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSave()}
                 placeholder="Session name…"
-                className="flex-1 px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
+                className="flex-1 px-2.5 py-1.5 text-[12px] rounded-lg outline-none"
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#FAFAFA' }}
               />
               <button
                 onClick={handleSave}
@@ -132,20 +133,22 @@ export default function SessionManager({ state, onLoad }: Props) {
           {/* Saved sessions list */}
           <div className="max-h-64 overflow-y-auto">
             {loadingSessions && (
-              <div className="flex items-center justify-center py-6 text-[12px] text-muted-foreground">
+              <div className="flex items-center justify-center py-6 text-[12px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                 <Loader2 size={14} className="animate-spin mr-2" /> Loading…
               </div>
             )}
             {!loadingSessions && sessions.length === 0 && (
-              <div className="py-6 text-center text-[12px] text-muted-foreground">
+              <div className="py-6 text-center text-[12px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                 No saved sessions yet.
               </div>
             )}
             {!loadingSessions && sessions.map(s => (
-              <div key={s.id} className="flex items-center gap-2 px-3 py-2 hover:bg-surface-2/50 transition-colors group border-b border-border/50 last:border-0">
+              <div key={s.id} className="flex items-center gap-2 px-3 py-2 transition-colors group" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-600 text-foreground truncate">{s.name}</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[12px] font-600 truncate" style={{ color: '#FAFAFA' }}>{s.name}</p>
+                  <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                     {new Date(s.updatedAt).toLocaleString()}
                   </p>
                 </div>
@@ -179,10 +182,10 @@ export default function SessionManager({ state, onLoad }: Props) {
           </div>
 
           {overwriteId !== null && (
-            <div className="px-3 py-2 border-t border-border bg-amber-500/10 text-[11px] text-amber-300 flex items-center gap-2">
+            <div className="px-3 py-2 text-[11px] text-amber-300 flex items-center gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(245,158,11,0.08)' }}>
               <Plus size={12} className="rotate-45" />
               Overwrite mode — saving will replace session #{overwriteId}
-              <button onClick={() => { setOverwriteId(null); setSaveName(''); }} className="ml-auto text-amber-300/60 hover:text-amber-300">Cancel</button>
+              <button onClick={() => { setOverwriteId(null); setSaveName(''); }} className="ml-auto" style={{ color: 'rgba(253,230,138,0.6)' }}>Cancel</button>
             </div>
           )}
         </div>

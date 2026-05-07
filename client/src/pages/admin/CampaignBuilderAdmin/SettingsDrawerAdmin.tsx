@@ -108,19 +108,22 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }} onClick={onClose} />
 
       {/* Drawer */}
-      <aside className="fixed right-0 top-0 bottom-0 w-[440px] bg-surface-1 border-l border-border z-50 flex flex-col shadow-2xl">
+      <aside className="fixed right-0 top-0 bottom-0 w-[440px] z-50 flex flex-col shadow-2xl" style={{ background: '#0e0d3a', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div>
-            <h2 className="text-sm font-700 text-foreground">Account Setup</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Select your Business Manager and ad account</p>
+            <h2 className="text-sm font-700" style={{ color: '#FAFAFA' }}>Account Setup</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Select your Business Manager and ad account</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md transition-colors"
+            style={{ color: 'rgba(255,255,255,0.4)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#FAFAFA')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -255,11 +258,10 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
 
           {/* ── Status summary ── */}
           {settings.tokenId && (
-            <div className={`rounded-lg border p-3 space-y-1.5 ${
-              isReady
-                ? 'bg-emerald-500/10 border-emerald-500/20'
-                : 'bg-surface-2 border-border'
-            }`}>
+            <div className="rounded-lg border p-3 space-y-1.5" style={{
+              background: isReady ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.04)',
+              borderColor: isReady ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.1)',
+            }}>
               <StatusRow
                 ok={!!settings.tokenId}
                 label="Business Manager"
@@ -290,15 +292,15 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
             </div>
           )}
 
-          <div className="rounded-lg bg-surface-2 border border-border p-3">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>
               Credentials are resolved server-side. Your access token is never stored in the browser.
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-5 py-4 border-t border-border">
+        <div className="shrink-0 px-5 py-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <button
             onClick={() => {
               if (!isReady) {
@@ -308,11 +310,11 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
               toast.success('Account settings saved.');
               onClose();
             }}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-700 transition-all ${
-              isReady
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                : 'bg-surface-2 text-muted-foreground cursor-not-allowed border border-border'
-            }`}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-700 transition-all"
+            style={isReady
+              ? { background: '#00BEEF', color: '#0e0d3a' }
+              : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)', cursor: 'not-allowed', border: '1px solid rgba(255,255,255,0.1)' }
+            }
           >
             {isReady ? (
               <><CheckCircle2 className="w-3.5 h-3.5" /> Save & Close</>
@@ -344,10 +346,10 @@ function Section({
           style={{ background: 'rgba(0,190,239,0.15)', color: '#00BEEF' }}>
           {step}
         </div>
-        <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-[11px] font-700 text-foreground">{label}</span>
+        <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
+        <span className="text-[11px] font-700" style={{ color: '#FAFAFA' }}>{label}</span>
         {optional && (
-          <span className="text-[10px] text-muted-foreground/60 font-400">(optional)</span>
+          <span className="text-[10px] font-400" style={{ color: 'rgba(255,255,255,0.35)' }}>(optional)</span>
         )}
       </div>
       <div className="pl-7">{children}</div>

@@ -681,7 +681,9 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   const warningCount = qaIssues.filter(i => i.type === 'warning').length;
 
   return (
-    <div ref={tableRef} className="flex flex-col h-full">
+    <div ref={tableRef} className="flex flex-row h-full overflow-hidden">
+      {/* Main content area (table + toolbar) */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface-1/80">
         <div className="flex items-center gap-2">
@@ -891,27 +893,29 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Start date */}
-                    <td className="border-r border-border/30 p-0 min-w-[130px]">
-                      <div className="flex flex-col">
-                        <input type="date" value={row.startDate}
-                          onChange={e => update(row.id, { startDate: e.target.value })}
-                          className="cell-input px-2 py-1 text-[11px] bg-transparent border-0 outline-none w-full" />
-                        <input type="time" value={row.startTime}
-                          onChange={e => update(row.id, { startTime: e.target.value })}
-                          className="cell-input px-2 py-0.5 text-[10px] bg-transparent border-0 outline-none w-full text-muted-foreground" />
-                      </div>
+                    <td className="border-r border-border/30 p-0 min-w-[170px]">
+                      <input
+                        type="datetime-local"
+                        value={row.startDate && row.startTime ? `${row.startDate}T${row.startTime}` : row.startDate ? `${row.startDate}T08:00` : ''}
+                        onChange={e => {
+                          const [d, t] = e.target.value.split('T');
+                          update(row.id, { startDate: d ?? '', startTime: t ?? '08:00' });
+                        }}
+                        className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
+                      />
                     </td>
 
                     {/* End date */}
-                    <td className="border-r border-border/30 p-0 min-w-[130px]">
-                      <div className="flex flex-col">
-                        <input type="date" value={row.endDate}
-                          onChange={e => update(row.id, { endDate: e.target.value })}
-                          className="cell-input px-2 py-1 text-[11px] bg-transparent border-0 outline-none w-full" />
-                        <input type="time" value={row.endTime}
-                          onChange={e => update(row.id, { endTime: e.target.value })}
-                          className="cell-input px-2 py-0.5 text-[10px] bg-transparent border-0 outline-none w-full text-muted-foreground" />
-                      </div>
+                    <td className="border-r border-border/30 p-0 min-w-[170px]">
+                      <input
+                        type="datetime-local"
+                        value={row.endDate && row.endTime ? `${row.endDate}T${row.endTime}` : row.endDate ? `${row.endDate}T20:00` : ''}
+                        onChange={e => {
+                          const [d, t] = e.target.value.split('T');
+                          update(row.id, { endDate: d ?? '', endTime: t ?? '20:00' });
+                        }}
+                        className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
+                      />
                     </td>
 
                     {/* Optimization Goal */}
@@ -1683,13 +1687,104 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
           </div>
         )}
       </div>
+      </div>{/* end main content */}
+
+      {/* ── Pre-Launch QA Rail (flex push, not overlay) ────────────────────── */}
+      {qaOpen ? (
+        <div
+          className="flex flex-col shrink-0 border-l"
+          style={{
+            width: 280,
+            background: '#0e0d3a',
+            borderColor: 'rgba(255,255,255,0.1)',
+          }}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center gap-2">
+              <Info size={13} className="text-amber-400" />
+              <span className="text-[13px] font-700 text-white">Pre-Launch QA</span>
+            </div>
+            <button onClick={() => setQaOpen(false)} className="text-white/40 hover:text-white/80 transition-colors"><X size={14} /></button>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            {errorCount > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-600 text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
+                <AlertTriangle size={9} /> {errorCount} error{errorCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {warningCount > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-600 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                {warningCount} warning{warningCount !== 1 ? 's' : ''}
+              </span>
+            )}
+            {qaIssues.length === 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-600 text-emerald-400">
+                <Check size={10} /> All checks passed
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+            {qaIssues.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
+                <Check size={24} className="text-emerald-400" />
+                <p className="text-[12px] text-white/50">No issues found. Ready to launch.</p>
+              </div>
+            ) : (
+              qaIssues.map((issue, i) => (
+                <div key={i} className={cn(
+                  'rounded-lg border p-3 space-y-1.5',
+                  issue.type === 'error' ? 'bg-red-500/5 border-red-500/20' :
+                  issue.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20' :
+                  'bg-blue-500/5 border-blue-500/20'
+                )}>
+                  <div className="flex items-start gap-2">
+                    <span className={cn(
+                      'text-[9px] font-700 px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 mt-0.5',
+                      issue.type === 'error' ? 'bg-red-500/15 text-red-400' :
+                      issue.type === 'warning' ? 'bg-amber-500/15 text-amber-400' :
+                      'bg-blue-500/15 text-blue-400'
+                    )}>{issue.type}</span>
+                    <span className="text-[11px] text-white/80">{issue.message}</span>
+                  </div>
+                  {issue.rowName && (
+                    <p className="text-[10px] text-white/40 pl-7">{issue.rowName}</p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Collapsed QA tab */
+        <button
+          onClick={() => setQaOpen(true)}
+          className="flex flex-col items-center justify-center shrink-0 border-l transition-colors hover:bg-white/5"
+          style={{
+            width: 28,
+            background: '#0e0d3a',
+            borderColor: 'rgba(255,255,255,0.1)',
+          }}
+          title="Open Pre-Launch QA"
+        >
+          <span
+            className="text-[10px] font-700 tracking-widest uppercase whitespace-nowrap"
+            style={{
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              color: errorCount > 0 ? '#f87171' : warningCount > 0 ? '#fbbf24' : 'rgba(255,255,255,0.35)',
+            }}
+          >
+            QA{(errorCount > 0 || warningCount > 0) ? ` · ${errorCount > 0 ? errorCount : warningCount}` : ''}
+          </span>
+        </button>
+      )}
 
       {/* ── Targeting Modal ──────────────────────────────────────────────────── */}
       {targetingModal && (() => {
         const tmRow = rows.find(r => r.id === targetingModal.rowId);
         if (!tmRow) return null;
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeTargetingModal}>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-[2px]" onClick={closeTargetingModal}>
             <div
               className="bg-[#0e0d3a] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[88vh] flex flex-col"
               onClick={e => e.stopPropagation()}
@@ -1807,7 +1902,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
                 {/* INTERESTS TAB */}
                 {audienceFocus === 'interests' && (
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-6">
                     {/* Detailed Targeting */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -1878,8 +1973,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                           className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
                       )}
                     </div>
-                    {/* Narrow Targeting */}
-                    <div className="space-y-3">
+                    {/* Narrow Targeting — stacked below Detailed */}
+                    <div className="space-y-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase">Narrow Targeting (AND)</label>
                         <div className="flex gap-0.5">
@@ -1947,7 +2042,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
                 {/* CUSTOM / LAL TAB */}
                 {audienceFocus === 'custom' && (
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="flex flex-col gap-6">
                     <div className="space-y-3">
                       <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Targeted Custom / LAL Audiences</label>
                       {hasCredentials ? (
@@ -1995,12 +2090,22 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                           className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
                       )}
                     </div>
-                    <div className="space-y-3">
+                    {/* Excluded — stacked below Targeted, with its own search */}
+                    <div className="space-y-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
                       <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Excluded Custom / LAL Audiences</label>
                       {hasCredentials ? (
                         <>
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={audienceSearch}
+                              onChange={e => setAudienceSearch(e.target.value)}
+                              placeholder="Search audiences to exclude…"
+                              className="flex-1 px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
+                            />
+                            {loadingAudiences && <span className="text-[10px] text-white/30">Loading…</span>}
+                          </div>
                           {audienceSearch.trim().length === 0 && (
-                            <p className="text-[10px] text-white/25 italic px-1">Use the search above to find audiences to exclude…</p>
+                            <p className="text-[10px] text-white/25 italic px-1">Type to search audiences to exclude…</p>
                           )}
                           {customAudiences.length > 0 && (
                             <div className="max-h-40 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
@@ -2114,65 +2219,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
         </div>
       )}
 
-      {/* ── Pre-Launch QA Rail ────────────────────────────────────────────────── */}
-      {qaOpen && (
-        <div className="fixed right-0 top-0 h-full w-[300px] z-50 bg-surface-1 border-l border-border shadow-2xl flex flex-col" style={{ top: 0 }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Info size={13} className="text-amber-400" />
-              <span className="text-[13px] font-700 text-foreground">Pre-Launch QA</span>
-            </div>
-            <button onClick={() => setQaOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={14} /></button>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50">
-            {errorCount > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-600 text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded">
-                <AlertTriangle size={9} /> {errorCount} error{errorCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {warningCount > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-600 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
-                {warningCount} warning{warningCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {qaIssues.length === 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-600 text-emerald-400">
-                <Check size={10} /> All checks passed
-              </span>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
-            {qaIssues.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-                <Check size={24} className="text-emerald-400" />
-                <p className="text-[12px] text-muted-foreground">No issues found. Ready to launch.</p>
-              </div>
-            ) : (
-              qaIssues.map((issue, i) => (
-                <div key={i} className={cn(
-                  'rounded-lg border p-3 space-y-1.5',
-                  issue.type === 'error' ? 'bg-red-500/5 border-red-500/20' :
-                  issue.type === 'warning' ? 'bg-amber-500/5 border-amber-500/20' :
-                  'bg-blue-500/5 border-blue-500/20'
-                )}>
-                  <div className="flex items-start gap-2">
-                    <span className={cn(
-                      'text-[9px] font-700 px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 mt-0.5',
-                      issue.type === 'error' ? 'bg-red-500/15 text-red-400' :
-                      issue.type === 'warning' ? 'bg-amber-500/15 text-amber-400' :
-                      'bg-blue-500/15 text-blue-400'
-                    )}>{issue.type}</span>
-                    <span className="text-[11px] text-foreground">{issue.message}</span>
-                  </div>
-                  {issue.rowName && (
-                    <p className="text-[10px] text-muted-foreground pl-7">{issue.rowName}</p>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+
 
       {/* Bulk Location Paste Modal */}
       {bulkLocModal && (

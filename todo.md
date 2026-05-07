@@ -369,3 +369,18 @@
 - [x] Audience Overlap tab: populated when user runs overlap, Close button bottom-left
 - [x] Persist reach estimate and overlap data between modal opens (survives close/reopen)
 - [x] If past data exists, enable Reach Estimate button on ad sets tab even with no checkbox selected
+
+## Admin Campaign Builder — Bug Fixes (Round 2)
+
+- [ ] QA rail: convert from absolute overlay to flex push layout (table shrinks when QA expands)
+- [ ] QA rail: solid dark navy background (#141349), no transparency
+- [ ] QA rail: collapsed state = thin vertical tab on right edge with rotated "Pre-Launch QA · N issues" text + expand arrow
+- [ ] QA rail: expanded state = ~280px wide panel, content visible, table content shifts left
+- [ ] Sessions dropdown: solid dark navy background, no transparency
+- [ ] Account Setup modal: solid dark navy background, no transparency
+- [ ] Targeting modal: semi-transparent backdrop (not full black), builder visible behind modal
+- [ ] Targeting modal Interests tab: stack Narrow Targeting (AND) below Detailed Targeting (not side-by-side)
+- [ ] Targeting modal Custom tab: stack Excluded below Targeted (not side-by-side)
+- [ ] Targeting modal Custom tab: add searchable Excluded box with same audience search functionality as Targeted
+- [ ] Date/time picker: merge separate date + time pickers into single combined datetime picker per column
+- [ ] Date/time picker: make calendar/clock icon WHITE (currently black/invisible)
