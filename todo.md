@@ -406,3 +406,9 @@
 - [x] Targeting: convert from full-screen modal to inline dropdown popup anchored to the row cell (like Placements popup)
 - [x] Optional Fields: convert from accordion panel to inline dropdown popup (like Placements popup)
 - [x] Audience Overlap Venn: show two Venn diagrams per pair — one from each ad set's perspective (A's overlap of B, B's overlap of A)
+
+## Admin Campaign Builder — Bug Fixes (Round 5)
+
+- [x] Targeting popup: change from left-0 to right-0 so right edge aligns with right edge of Targeting column
+- [x] Placements popup: change from left-0 to right-0 so right edge aligns with right edge of Placements column
+- [x] Placements popup: expand horizontally (wider 560px, 3-column grid layout) so all options are visible without scrolling

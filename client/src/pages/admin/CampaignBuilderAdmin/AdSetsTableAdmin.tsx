@@ -221,7 +221,7 @@ function TargetingPopup({
 
   return (
     <div ref={ref}
-      className="absolute z-[70] top-full left-0 mt-1 rounded-xl shadow-2xl flex flex-col"
+      className="absolute z-[70] top-full right-0 mt-1 rounded-xl shadow-2xl flex flex-col"
       style={{ width: 560, maxHeight: 520, background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}
     >
       {/* Header */}
@@ -752,7 +752,7 @@ function PlacementPicker({ row, onChange, onClose }: {
 
   return (
     <div ref={ref}
-      className="absolute z-50 top-full left-0 mt-1 w-72 rounded-lg shadow-2xl p-3 space-y-3" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
+      className="absolute z-50 top-full right-0 mt-1 rounded-lg shadow-2xl p-3 space-y-3" style={{ width: 560, background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
       {/* Advantage+ toggle */}
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-600 text-muted-foreground">Placement Type</span>
@@ -797,7 +797,7 @@ function PlacementPicker({ row, onChange, onClose }: {
               <p className="text-[10px] font-700 text-muted-foreground mb-1.5 tracking-wider uppercase">
                 {platform === 'audience_network' ? 'Audience Network' : platform.charAt(0).toUpperCase() + platform.slice(1)}
               </p>
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-3 gap-1">
                 {(PLATFORM_PLACEMENTS[platform] || []).map(pl => (
                   <button key={pl.key} onClick={() => togglePlacement(pl.key)}
                     className={cn(
