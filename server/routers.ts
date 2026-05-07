@@ -1087,7 +1087,7 @@ export const appRouter = router({
           const { notifyOwner } = await import("./_core/notification");
           await notifyOwner({
             title: "Invite Sent",
-            content: `Admin ${ctx.user.name || ctx.user.email} invited ${input.email} to the platform. Invite link: ${inviteLink}`,
+            content: `Admin ${ctx.user.name || ctx.user.email} invited ${input.email} to the platform. Copy the invite link from the admin panel to share it with the invitee.`,
           });
         } catch {
           // Non-fatal — invite was created, notification is best-effort

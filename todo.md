@@ -310,3 +310,8 @@
 - [x] Copy server tRPC procedures into server/routers/admin/ (metaAdmin.ts, sessionsAdmin.ts, googleSheetsAdmin.ts)
 - [x] Register admin route in App.tsx (/admin/campaign-builder) and nav item in AppShell.tsx (Campaign Builder (Admin))
 - [x] TypeScript check (0 errors), tests (23 passing), checkpoint, package zip
+
+## Invite System Fixes
+- [ ] Remove invite link from notifyOwner content so Manus does not forward it to invitees
+- [ ] Fix acceptedAt being set immediately on invite creation — should only be set when magic link is clicked
+- [ ] Fix Team Members page to only show isTeamMember=true users (keep invited users out of Team Members section)

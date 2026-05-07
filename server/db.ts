@@ -628,6 +628,7 @@ export async function getTeamMembers() {
     })
     .from(users)
     .leftJoin(skillRuns, eq(skillRuns.userId, users.id))
+    .where(eq(users.isTeamMember, true))
     .groupBy(users.id, users.name, users.email, users.role, users.createdAt, users.lastSignedIn)
     .orderBy(desc(users.lastSignedIn));
   return rows;
