@@ -571,22 +571,47 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
               {latest.pairList.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground text-center py-4">No pairs to display.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {latest.pairList.map((p, i) => {
-                    const maxPct = Math.max(p.overlapPctA, p.overlapPctB);
-                    return (
-                      <VennDiagram
-                        key={i}
-                        pair={{
-                          nameA: p.adSetA.name,
-                          nameB: p.adSetB.name,
-                          pct: maxPct,
-                          confidence: p.confidence,
-                          intersectionReach: p.intersectionReach,
-                        }}
-                      />
-                    );
-                  })}
+                <div className="space-y-4">
+                  {latest.pairList.map((p, i) => (
+                    <div key={i} className="space-y-1">
+                      {/* Pair label */}
+                      <p className="text-[10px] text-muted-foreground font-600 px-1">
+                        {p.adSetA.name} &lt;→&gt; {p.adSetB.name}
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Left: A's perspective — what % of A's audience overlaps with B */}
+                        <div>
+                          <p className="text-[9px] text-muted-foreground text-center mb-1">
+                            <span className="text-[rgba(0,190,239,0.9)] font-600">{p.adSetA.name.length > 16 ? p.adSetA.name.slice(0, 15) + '…' : p.adSetA.name}</span>'s audience
+                          </p>
+                          <VennDiagram
+                            pair={{
+                              nameA: p.adSetA.name,
+                              nameB: p.adSetB.name,
+                              pct: p.overlapPctA,
+                              confidence: p.confidence,
+                              intersectionReach: p.intersectionReach,
+                            }}
+                          />
+                        </div>
+                        {/* Right: B's perspective — what % of B's audience overlaps with A */}
+                        <div>
+                          <p className="text-[9px] text-muted-foreground text-center mb-1">
+                            <span className="text-[rgba(237,19,95,0.9)] font-600">{p.adSetB.name.length > 16 ? p.adSetB.name.slice(0, 15) + '…' : p.adSetB.name}</span>'s audience
+                          </p>
+                          <VennDiagram
+                            pair={{
+                              nameA: p.adSetB.name,
+                              nameB: p.adSetA.name,
+                              pct: p.overlapPctB,
+                              confidence: p.confidence,
+                              intersectionReach: p.intersectionReach,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

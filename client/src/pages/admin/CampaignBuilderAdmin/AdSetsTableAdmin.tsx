@@ -161,6 +161,562 @@ function PlacementSummary({ row, onClick }: { row: AdSetRow; onClick: () => void
   );
 }
 
+// ── Targeting Popup (inline, anchored to cell) ───────────────────────────────
+type TargetingPopupProps = {
+  tmRow: AdSetRow;
+  audienceFocus: AudienceFocus;
+  setAudienceFocus: (f: AudienceFocus) => void;
+  hasCredentials: boolean;
+  locationQuery: string;
+  locationRowId: string | null;
+  setLocationQuery: (q: string) => void;
+  setLocationRowId: (id: string | null) => void;
+  locationResults: unknown;
+  searchingLocations: boolean;
+  detailedQuery: string;
+  detailedRowId: string | null;
+  setDetailedQuery: (q: string) => void;
+  setDetailedRowId: (id: string | null) => void;
+  detailedType: 'adinterest' | 'behaviors' | 'demographics';
+  setDetailedType: (t: 'adinterest' | 'behaviors' | 'demographics') => void;
+  detailedResults: { results?: { id: string; name: string; type?: string; audienceSizeLower?: number }[] } | null | undefined;
+  searchingDetailed: boolean;
+  narrowQuery: string;
+  narrowRowId: string | null;
+  setNarrowQuery: (q: string) => void;
+  setNarrowRowId: (id: string | null) => void;
+  narrowType: 'adinterest' | 'behaviors' | 'demographics';
+  setNarrowType: (t: 'adinterest' | 'behaviors' | 'demographics') => void;
+  narrowResults: { results?: { id: string; name: string; type?: string; audienceSizeLower?: number }[] } | null | undefined;
+  searchingNarrow: boolean;
+  audienceSearch: string;
+  setAudienceSearch: (s: string) => void;
+  customAudiences: { id: string; name: string; approximateCount?: number; subtype?: string }[];
+  loadingAudiences: boolean;
+  update: (id: string, updates: Partial<AdSetRow>) => void;
+  onClose: () => void;
+  setBulkLocModal: (v: { rowId: string } | null) => void;
+  setBulkLocText: (v: string) => void;
+};
+
+function TargetingPopup({
+  tmRow, audienceFocus, setAudienceFocus, hasCredentials,
+  locationQuery, locationRowId, setLocationQuery, setLocationRowId,
+  locationResults, searchingLocations,
+  detailedQuery, detailedRowId, setDetailedQuery, setDetailedRowId,
+  detailedType, setDetailedType, detailedResults, searchingDetailed,
+  narrowQuery, narrowRowId, setNarrowQuery, setNarrowRowId,
+  narrowType, setNarrowType, narrowResults, searchingNarrow,
+  audienceSearch, setAudienceSearch, customAudiences, loadingAudiences,
+  update, onClose, setBulkLocModal, setBulkLocText,
+}: TargetingPopupProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref}
+      className="absolute z-[70] top-full left-0 mt-1 rounded-xl shadow-2xl flex flex-col"
+      style={{ width: 560, maxHeight: 520, background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="flex items-center gap-2">
+          <MapPin size={12} className="text-[#00BEEF]" />
+          <span className="text-[12px] font-700 text-white">Targeting · {tmRow.name}</span>
+        </div>
+        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors"><X size={14} /></button>
+      </div>
+      {/* Tab bar */}
+      <div className="flex items-center gap-0.5 px-4 pt-2 pb-0">
+        {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => (
+          <button key={f} onClick={() => setAudienceFocus(f)}
+            className={cn(
+              'px-3 py-1.5 rounded-t text-[10px] font-600 border-b-2 transition-all',
+              audienceFocus === f
+                ? 'border-[#00BEEF] text-[#00BEEF] bg-[rgba(0,190,239,0.06)]'
+                : 'border-transparent text-white/40 hover:text-white/70'
+            )}>
+            {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : '👥 Custom'}
+          </button>
+        ))}
+        {audienceFocus === 'location' && (
+          <button onClick={() => { setBulkLocModal({ rowId: tmRow.id }); setBulkLocText(''); }}
+            className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded border border-[rgba(255,255,255,0.12)] text-[10px] font-600 text-white/50 hover:text-white/80 hover:border-[rgba(255,255,255,0.25)] transition-colors">
+            <Plus size={9} /> Bulk Paste
+          </button>
+        )}
+      </div>
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        {/* LOCATION TAB */}
+        {audienceFocus === 'location' && (
+          <div className="space-y-3">
+            {hasCredentials ? (
+              <div className="relative">
+                <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Search Locations</label>
+                <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2">
+                  <MapPin size={11} className="text-white/30 shrink-0" />
+                  <input
+                    value={locationRowId === tmRow.id ? locationQuery : ''}
+                    onChange={e => { setLocationQuery(e.target.value); setLocationRowId(tmRow.id); }}
+                    onFocus={() => setLocationRowId(tmRow.id)}
+                    placeholder="Type city, state, country, or zip…"
+                    className="flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-white/25"
+                  />
+                  {searchingLocations && <span className="text-[10px] text-white/30">…</span>}
+                </div>
+                {locationRowId === tmRow.id && locationQuery.length >= 2 && locationResults != null && ((locationResults as { results?: unknown[] }).results?.length ?? 0) > 0 && (
+                  <div className="absolute z-50 mt-1 w-full rounded-lg shadow-2xl max-h-48 overflow-y-auto" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
+                    {((locationResults as { results?: { key: string; name: string; type?: string; countryCode?: string; countryName?: string; region?: string }[] }).results ?? []).map((loc) => (
+                      <button key={loc.key} onClick={() => {
+                        const label = [loc.name, loc.region, loc.countryName].filter(Boolean).join(', ');
+                        const current = tmRow.geoLocations ? tmRow.geoLocations.split('\n').filter(Boolean) : [];
+                        const currentObjs = tmRow.geoLocationObjects || [];
+                        if (!current.includes(label)) {
+                          update(tmRow.id, {
+                            geoLocations: [...current, label].join('\n'),
+                            geoLocationObjects: [...currentObjs, { key: loc.key, type: loc.type || 'country', name: label }],
+                          });
+                        }
+                        setLocationQuery('');
+                        setLocationRowId(null);
+                      }} className="w-full text-left px-3 py-2 text-[11px] hover:bg-[rgba(255,255,255,0.05)] transition-colors flex items-center justify-between gap-2">
+                        <span className="text-white">{loc.name}{loc.region ? `, ${loc.region}` : ''}{loc.countryName ? ` (${loc.countryName})` : ''}</span>
+                        <span className="text-[10px] text-white/30 capitalize">{loc.type}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-amber-400">Add credentials in Settings to enable location search.</p>
+            )}
+            {tmRow.geoLocations && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Selected ({tmRow.geoLocations.split('\n').filter(Boolean).length})</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {tmRow.geoLocations.split('\n').filter(Boolean).map((loc, i) => (
+                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.25)] rounded-full text-[10px] text-[#00BEEF]">
+                      {loc}
+                      <button onClick={() => {
+                        const updated = tmRow.geoLocations!.split('\n').filter((_, li) => li !== i).join('\n');
+                        const updatedObjs = (tmRow.geoLocationObjects || []).filter((_, oi) => oi !== i);
+                        update(tmRow.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
+                      }} className="hover:text-red-400 transition-colors"><X size={9} /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <details className="group">
+              <summary className="text-[10px] text-[#00BEEF] cursor-pointer list-none flex items-center gap-1">
+                <ChevronDown size={10} className="group-open:rotate-180 transition-transform" />
+                Or paste a list (one per line)
+              </summary>
+              <textarea
+                value={tmRow.geoLocations}
+                onChange={e => update(tmRow.id, { geoLocations: e.target.value })}
+                placeholder="New York, NY&#10;Los Angeles, CA"
+                rows={3}
+                className="w-full mt-1 px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white"
+              />
+            </details>
+          </div>
+        )}
+
+        {/* INTERESTS TAB */}
+        {audienceFocus === 'interests' && (
+          <div className="flex flex-col gap-4">
+            {/* Detailed Targeting */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase">Detailed Targeting</label>
+                <div className="flex gap-0.5">
+                  {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
+                    <button key={t} onClick={() => setDetailedType(t)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
+                        detailedType === t ? 'bg-primary text-primary-foreground' : 'bg-[rgba(255,255,255,0.06)] text-white/40 hover:text-white/70'
+                      }`}>
+                      {t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="relative">
+                <input
+                  value={detailedRowId === tmRow.id ? detailedQuery : ''}
+                  onChange={e => { setDetailedRowId(tmRow.id); setDetailedQuery(e.target.value); }}
+                  onFocus={() => setDetailedRowId(tmRow.id)}
+                  placeholder={hasCredentials ? `Search ${detailedType === 'adinterest' ? 'interests' : detailedType}…` : 'Enter credentials in Settings first'}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
+                />
+                {searchingDetailed && detailedRowId === tmRow.id && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/30">…</span>}
+              </div>
+              {detailedRowId === tmRow.id && detailedQuery.length >= 2 && (detailedResults?.results?.length ?? 0) > 0 && (
+                <div className="border border-[rgba(255,255,255,0.1)] rounded-lg shadow-2xl max-h-36 overflow-y-auto divide-y divide-[rgba(255,255,255,0.05)]" style={{ background: '#0e0d3a' }}>
+                  {(detailedResults?.results ?? []).slice(0, 10).map((r) => (
+                    <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
+                      const current = tmRow.detailedInterests ? tmRow.detailedInterests.split('\n').filter(Boolean) : [];
+                      const currentObjs = tmRow.detailedInterestObjects || [];
+                      if (!current.includes(r.name)) {
+                        update(tmRow.id, {
+                          detailedInterests: [...current, r.name].join('\n'),
+                          detailedInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                        });
+                      }
+                      setDetailedQuery('');
+                      setDetailedRowId(null);
+                    }} className="w-full text-left px-3 py-2 text-[11px] flex items-center justify-between gap-2 hover:bg-[rgba(255,255,255,0.05)] transition-colors">
+                      <span className="text-white">{r.name}</span>
+                      {r.audienceSizeLower && <span className="text-[10px] text-white/30">{(r.audienceSizeLower / 1_000_000).toFixed(1)}M</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tmRow.detailedInterests && (
+                <div className="flex flex-wrap gap-1">
+                  {tmRow.detailedInterests.split('\n').filter(Boolean).map((interest, i) => (
+                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.2)] rounded-full text-[10px] text-[#00BEEF]">
+                      {interest}
+                      <button onClick={() => {
+                        const updatedObjs = (tmRow.detailedInterestObjects || []).filter((_, oi) => oi !== i);
+                        update(tmRow.id, {
+                          detailedInterests: tmRow.detailedInterests!.split('\n').filter((_, li) => li !== i).join('\n'),
+                          detailedInterestObjects: updatedObjs,
+                        });
+                      }} className="hover:text-red-400"><X size={9} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!hasCredentials && (
+                <textarea value={tmRow.detailedInterests} onChange={e => update(tmRow.id, { detailedInterests: e.target.value })}
+                  placeholder="Running, Fitness, Nike…" rows={2}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
+              )}
+            </div>
+            {/* Narrow Targeting — stacked below */}
+            <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase">Narrow Targeting (AND)</label>
+                <div className="flex gap-0.5">
+                  {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
+                    <button key={t} onClick={() => setNarrowType(t)}
+                      className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
+                        narrowType === t ? 'bg-amber-500 text-black font-700' : 'bg-[rgba(255,255,255,0.06)] text-white/40 hover:text-white/70'
+                      }`}>
+                      {t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="relative">
+                <input
+                  value={narrowRowId === tmRow.id ? narrowQuery : ''}
+                  onChange={e => { setNarrowRowId(tmRow.id); setNarrowQuery(e.target.value); }}
+                  onFocus={() => setNarrowRowId(tmRow.id)}
+                  placeholder={hasCredentials ? `Search ${narrowType === 'adinterest' ? 'interests' : narrowType} to narrow by…` : 'Enter credentials in Settings first'}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
+                />
+                {searchingNarrow && narrowRowId === tmRow.id && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/30">…</span>}
+              </div>
+              {narrowRowId === tmRow.id && narrowQuery.length >= 2 && (narrowResults?.results?.length ?? 0) > 0 && (
+                <div className="border border-[rgba(255,255,255,0.1)] rounded-lg shadow-2xl max-h-36 overflow-y-auto divide-y divide-[rgba(255,255,255,0.05)]" style={{ background: '#0e0d3a' }}>
+                  {(narrowResults?.results ?? []).slice(0, 10).map((r) => (
+                    <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
+                      const current = tmRow.narrowInterests ? tmRow.narrowInterests.split('\n').filter(Boolean) : [];
+                      const currentObjs = tmRow.narrowInterestObjects || [];
+                      if (!current.includes(r.name)) {
+                        update(tmRow.id, {
+                          narrowInterests: [...current, r.name].join('\n'),
+                          narrowInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                        });
+                      }
+                      setNarrowQuery('');
+                      setNarrowRowId(null);
+                    }} className="w-full text-left px-3 py-2 text-[11px] flex items-center justify-between gap-2 hover:bg-[rgba(255,255,255,0.05)] transition-colors">
+                      <span className="text-white">{r.name}</span>
+                      {r.audienceSizeLower && <span className="text-[10px] text-white/30">{(r.audienceSizeLower / 1_000_000).toFixed(1)}M</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tmRow.narrowInterests && (
+                <div className="flex flex-wrap gap-1">
+                  {tmRow.narrowInterests.split('\n').filter(Boolean).map((interest, i) => (
+                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] text-amber-400">
+                      {interest}
+                      <button onClick={() => update(tmRow.id, { narrowInterests: tmRow.narrowInterests!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-amber-600"><X size={9} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!hasCredentials && (
+                <textarea value={tmRow.narrowInterests} onChange={e => update(tmRow.id, { narrowInterests: e.target.value })}
+                  placeholder="Must also match…" rows={2}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CUSTOM TAB */}
+        {audienceFocus === 'custom' && (
+          <div className="flex flex-col gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Targeted Custom / LAL Audiences</label>
+              {hasCredentials ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input value={audienceSearch} onChange={e => setAudienceSearch(e.target.value)}
+                      placeholder="Search audiences…"
+                      className="flex-1 px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white" />
+                    {loadingAudiences && <span className="text-[10px] text-white/30">Loading…</span>}
+                  </div>
+                  {audienceSearch.trim().length === 0 && <p className="text-[10px] text-white/25 italic px-1">Type to search your account audiences…</p>}
+                  {customAudiences.length > 0 && (
+                    <div className="max-h-36 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
+                      {customAudiences.map((aud) => {
+                        const isSel = (tmRow.targetedAudiences || '').includes(aud.name);
+                        return (
+                          <button key={aud.id} onClick={() => {
+                            const cur = tmRow.targetedAudiences ? tmRow.targetedAudiences.split('\n').filter(Boolean) : [];
+                            update(tmRow.id, { targetedAudiences: isSel ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                          }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
+                            isSel ? 'bg-[rgba(0,190,239,0.1)] text-[#00BEEF]' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
+                            <span>{aud.name}</span>
+                            <span className="text-[10px] text-white/25">{aud.subtype} {aud.approximateCount ? `• ${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {tmRow.targetedAudiences && (
+                    <div className="flex flex-wrap gap-1">
+                      {tmRow.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                        <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.2)] rounded-full text-[10px] text-[#00BEEF]">
+                          {a}
+                          <button onClick={() => update(tmRow.id, { targetedAudiences: tmRow.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <textarea value={tmRow.targetedAudiences} onChange={e => update(tmRow.id, { targetedAudiences: e.target.value })}
+                  placeholder="Website Visitors 180d, Email List LAL 1%…" rows={3}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
+              )}
+            </div>
+            {/* Excluded — stacked below with its own search */}
+            <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Excluded Custom / LAL Audiences</label>
+              {hasCredentials ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <input value={audienceSearch} onChange={e => setAudienceSearch(e.target.value)}
+                      placeholder="Search audiences to exclude…"
+                      className="flex-1 px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white" />
+                    {loadingAudiences && <span className="text-[10px] text-white/30">Loading…</span>}
+                  </div>
+                  {audienceSearch.trim().length === 0 && <p className="text-[10px] text-white/25 italic px-1">Type to search audiences to exclude…</p>}
+                  {customAudiences.length > 0 && (
+                    <div className="max-h-36 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
+                      {customAudiences.map((aud) => {
+                        const isExcl = (tmRow.excludedAudiences || '').includes(aud.name);
+                        return (
+                          <button key={aud.id} onClick={() => {
+                            const cur = tmRow.excludedAudiences ? tmRow.excludedAudiences.split('\n').filter(Boolean) : [];
+                            update(tmRow.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                          }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
+                            isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
+                            <span>{aud.name}</span>
+                            <span className="text-[10px] text-white/25">{aud.subtype}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {tmRow.excludedAudiences && (
+                    <div className="flex flex-wrap gap-1">
+                      {tmRow.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                        <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
+                          {a}
+                          <button onClick={() => update(tmRow.id, { excludedAudiences: tmRow.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <textarea value={tmRow.excludedAudiences} onChange={e => update(tmRow.id, { excludedAudiences: e.target.value })}
+                  placeholder="Existing Customers, Purchasers 180d…" rows={3}
+                  className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Footer */}
+      <div className="flex items-center justify-end px-4 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <button onClick={onClose}
+          className="px-4 py-1.5 rounded-lg bg-[#00BEEF] text-[#0e0d3a] text-[11px] font-700 hover:bg-[#00d4ff] transition-colors">
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Optional Fields Popup (inline, anchored to cell) ──────────────────────────
+type OptionalFieldsPopupProps = {
+  row: AdSetRow;
+  optFields: Set<string>;
+  freqMandatory: boolean;
+  showFreqControl: boolean;
+  showLeadGen: boolean;
+  addOptField: (rowId: string, key: string) => void;
+  removeOptField: (rowId: string, key: string) => void;
+  update: (id: string, updates: Partial<AdSetRow>) => void;
+  onClose: () => void;
+};
+
+function OptionalFieldsPopup({
+  row, optFields, freqMandatory, showFreqControl, showLeadGen,
+  addOptField, removeOptField, update, onClose,
+}: OptionalFieldsPopupProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref}
+      className="absolute z-[70] top-full right-0 mt-1 rounded-xl shadow-2xl"
+      style={{ width: 380, maxHeight: 480, overflowY: 'auto', background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}
+    >
+      <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <span className="text-[12px] font-700 text-white">Optional Fields</span>
+        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors"><X size={14} /></button>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        {/* Field selector */}
+        <div className="flex flex-wrap gap-1.5">
+          {TREE_FIELDS.map(f => {
+            const isActive = Array.from(optFields).includes(f.key as string);
+            const isMandatoryFreq = f.key === 'frequencyControl' && freqMandatory;
+            return (
+              <button
+                key={f.key as string}
+                onClick={() => {
+                  if (isActive) removeOptField(row.id, f.key as string);
+                  else addOptField(row.id, f.key as string);
+                }}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-600 transition-all',
+                  isActive || isMandatoryFreq
+                    ? 'bg-primary/15 border-primary/40 text-primary'
+                    : 'bg-transparent border-[rgba(255,255,255,0.12)] text-white/40 hover:text-white/70 hover:border-[rgba(255,255,255,0.25)]'
+                )}
+              >
+                {isActive && <Check size={9} />}
+                {f.label}
+                {isMandatoryFreq && <span className="text-amber-400 ml-0.5">*</span>}
+              </button>
+            );
+          })}
+        </div>
+        {/* Active field inputs */}
+        <div className="space-y-3">
+          {optFields.has('language') && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Language</label>
+              <select value={row.language ?? ''} onChange={e => update(row.id, { language: e.target.value })}
+                className="px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white">
+                <option value="">Any</option>
+                {LANGUAGE_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+            </div>
+          )}
+          {optFields.has('operatingSystem') && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Operating System</label>
+              <BtnGroup
+                options={[{ value: 'all', label: 'All' }, { value: 'android', label: 'Android' }, { value: 'ios', label: 'iOS' }]}
+                value={row.operatingSystem ?? 'all'}
+                onChange={v => update(row.id, { operatingSystem: v })}
+              />
+            </div>
+          )}
+          {optFields.has('devicePlatforms') && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Device Type</label>
+              <BtnGroup
+                options={[{ value: 'all', label: 'All' }, { value: 'mobile', label: 'Mobile' }, { value: 'desktop', label: 'Desktop' }]}
+                value={row.devicePlatforms ?? 'all'}
+                onChange={v => update(row.id, { devicePlatforms: v })}
+              />
+            </div>
+          )}
+          {(optFields.has('frequencyControl') || freqMandatory) && showFreqControl && (
+            <FrequencyControlPanel row={row} goal={row.optimizationGoal} onChange={fc => update(row.id, { frequencyControl: fc })} />
+          )}
+          {optFields.has('attributionWindow') && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Attribution Window</label>
+              <select value={row.attributionWindow} onChange={e => update(row.id, { attributionWindow: e.target.value })}
+                className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white">
+                <option value="7d_click_1d_engaged_1d_view">7-day click, 1-day engaged view, 1-day view (default)</option>
+                <option value="7d_click">7-day click</option>
+                <option value="1d_click">1-day click</option>
+                <option value="7d_click_1d_view">7-day click, 1-day view</option>
+                <option value="1d_click_1d_view">1-day click, 1-day view</option>
+              </select>
+            </div>
+          )}
+          {optFields.has('attributionModel') && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Attribution Model</label>
+              <BtnGroup
+                options={[{ value: 'standard', label: 'Standard' }, { value: 'incremental', label: 'Incremental' }]}
+                value={row.attributionModel ?? 'standard'}
+                onChange={v => update(row.id, { attributionModel: v })}
+              />
+            </div>
+          )}
+          {optFields.has('leadGenFormId') && showLeadGen && (
+            <div>
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Lead Gen Form ID</label>
+              <input value={row.leadGenFormId ?? ''} onChange={e => update(row.id, { leadGenFormId: e.target.value })}
+                placeholder="Form ID from Meta or created above…"
+                className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white" />
+            </div>
+          )}
+          {optFields.has('adScheduling') && (
+            <DayPartingGrid value={row.adScheduling ?? ''} onChange={v => update(row.id, { adScheduling: v })} />
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-end px-4 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+        <button onClick={onClose}
+          className="px-4 py-1.5 rounded-lg bg-[#00BEEF] text-[#0e0d3a] text-[11px] font-700 hover:bg-[#00d4ff] transition-colors">
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Placement Picker Popover ──────────────────────────────────────────────────
 function PlacementPicker({ row, onChange, onClose }: {
   row: AdSetRow;
@@ -899,11 +1455,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Budget */}
-                    <td className="border-r border-border/30 p-0 min-w-[140px]">
-                      <div className="flex flex-col px-2 py-1.5 gap-1">
+                    <td className="border-r border-border/30 p-0 min-w-[110px]">
+                      <div className="flex flex-col px-1.5 py-1 gap-0.5">
                         <BtnGroup
                           options={[
-                            { value: 'LIFETIME', label: 'Lifetime' },
+                            { value: 'LIFETIME', label: 'LT' },
                             { value: 'DAILY', label: 'Daily' },
                           ]}
                           value={row.budgetType}
@@ -911,13 +1467,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                           small
                         />
                         <div className="flex items-center gap-0.5">
-                          <span className="text-muted-foreground/50 text-[11px]">$</span>
+                          <span className="text-muted-foreground/50 text-[10px]">$</span>
                           <CellInput
                             value={row.budget}
                             onChange={v => update(row.id, { budget: v })}
                             placeholder="0.00"
                             type="number"
-                            className="w-full"
+                            className="w-full text-[11px]"
                           />
                         </div>
                       </div>
@@ -1083,23 +1639,23 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Age + Gender combined */}
-                    <td className="border-r border-border/30 p-0 min-w-[140px]">
+                    <td className="border-r border-border/30 p-0 min-w-[120px]">
                       <div className={cn('flex flex-col divide-y divide-border/30', sacRestricted && 'opacity-40 pointer-events-none')}>
                         {/* Age row */}
-                        <div className="flex items-center gap-1 px-2 py-1.5">
+                        <div className="flex items-center gap-0.5 px-1.5 py-0.5">
                           <input type="number" min={18} max={65}
                             value={row.ageMin}
                             onChange={e => update(row.id, { ageMin: e.target.value })}
-                            className="w-14 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
+                            className="w-10 px-1 py-0.5 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
                           <span className="text-muted-foreground text-[10px]">–</span>
                           <input type="number" min={18} max={65}
                             value={row.ageMax}
                             onChange={e => update(row.id, { ageMax: e.target.value })}
-                            className="w-14 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
-                          {sacRestricted && <span className="text-[9px] text-amber-400 ml-1">SAC</span>}
+                            className="w-10 px-1 py-0.5 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
+                          {sacRestricted && <span className="text-[9px] text-amber-400 ml-0.5">SAC</span>}
                         </div>
                         {/* Gender row */}
-                        <div className="px-1 py-1">
+                        <div className="px-1 py-0.5">
                           <BtnGroup
                             options={[
                               { value: 'all', label: 'All' },
@@ -1114,10 +1670,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                       </div>
                     </td>
 
-                    {/* Unified Targeting — opens modal */}
-                    <td className="border-r border-border/30 p-0 min-w-[130px]">
+                    {/* Unified Targeting — inline popup (like Placements) */}
+                    <td className="border-r border-border/30 p-0 min-w-[130px] relative">
                       <button
-                        onClick={() => openTargetingModal(row.id)}
+                        onClick={() => {
+                          if (targetingModal?.rowId === row.id) { closeTargetingModal(); }
+                          else { openTargetingModal(row.id); }
+                        }}
                         className={cn(
                           'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
                           targetingModal?.rowId === row.id && 'text-primary'
@@ -1129,14 +1688,58 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                           {[row.geoLocations && 'Loc', row.detailedInterests && 'Int', row.targetedAudiences && 'Aud']
                             .filter(Boolean).join(' · ') || 'Add…'}
                         </span>
-                        <ExternalLink size={9} className="ml-auto text-muted-foreground/40" />
+                        <ChevronDown size={9} className={cn('ml-auto transition-transform', targetingModal?.rowId === row.id && 'rotate-180 text-primary')} />
                       </button>
+                      {targetingModal?.rowId === row.id && (() => {
+                        const tmRow = row;
+                        return (
+                          <TargetingPopup
+                            tmRow={tmRow}
+                            audienceFocus={audienceFocus}
+                            setAudienceFocus={setAudienceFocus}
+                            hasCredentials={hasCredentials}
+                            locationQuery={locationQuery}
+                            locationRowId={locationRowId}
+                            setLocationQuery={setLocationQuery}
+                            setLocationRowId={setLocationRowId}
+                            locationResults={locationResults}
+                            searchingLocations={searchingLocations}
+                            detailedQuery={detailedQuery}
+                            detailedRowId={detailedRowId}
+                            setDetailedQuery={setDetailedQuery}
+                            setDetailedRowId={setDetailedRowId}
+                            detailedType={detailedType}
+                            setDetailedType={setDetailedType}
+                            detailedResults={detailedResults}
+                            searchingDetailed={searchingDetailed}
+                            narrowQuery={narrowQuery}
+                            narrowRowId={narrowRowId}
+                            setNarrowQuery={setNarrowQuery}
+                            setNarrowRowId={setNarrowRowId}
+                            narrowType={narrowType}
+                            setNarrowType={setNarrowType}
+                            narrowResults={narrowResults}
+                            searchingNarrow={searchingNarrow}
+                            audienceSearch={audienceSearch}
+                            setAudienceSearch={setAudienceSearch}
+                            customAudiences={customAudiences}
+                            loadingAudiences={loadingAudiences}
+                            update={update}
+                            onClose={closeTargetingModal}
+                            setBulkLocModal={setBulkLocModal}
+                            setBulkLocText={setBulkLocText}
+                          />
+                        );
+                      })()}
                     </td>
 
-                    {/* Optional Fields expand button */}
-                    <td className="border-r border-border/30 p-0 min-w-[110px]">
+                    {/* Optional Fields — inline popup */}
+                    <td className="border-r border-border/30 p-0 min-w-[110px] relative">
                       <button
-                        onClick={() => togglePanel(row.id, 'optional')}
+                        onClick={() => {
+                          if (isExpanded && expandedPanel?.panel === 'optional') setExpandedPanel(null);
+                          else setExpandedPanel({ rowId: row.id, panel: 'optional' });
+                        }}
                         className={cn(
                           'flex items-center gap-1.5 px-2 py-1.5 w-full text-left hover:bg-surface-2/60 transition-colors',
                           isExpanded && expandedPanel?.panel === 'optional' && 'text-primary'
@@ -1146,10 +1749,21 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                         <span className={cn('text-[11px]', optFields.size > 0 ? 'text-primary' : 'text-muted-foreground/40')}>
                           {optFields.size > 0 ? `${optFields.size} active` : 'Add…'}
                         </span>
-                        {isExpanded && expandedPanel?.panel === 'optional'
-                          ? <ChevronUp size={10} className="ml-auto text-muted-foreground" />
-                          : <ChevronDown size={10} className="ml-auto text-muted-foreground/40" />}
+                        <ChevronDown size={10} className={cn('ml-auto transition-transform', isExpanded && expandedPanel?.panel === 'optional' && 'rotate-180 text-primary')} />
                       </button>
+                      {isExpanded && expandedPanel?.panel === 'optional' && (
+                        <OptionalFieldsPopup
+                          row={row}
+                          optFields={optFields}
+                          freqMandatory={freqMandatory}
+                          showFreqControl={showFreqControl}
+                          showLeadGen={showLeadGen}
+                          addOptField={addOptField}
+                          removeOptField={removeOptField}
+                          update={update}
+                          onClose={() => setExpandedPanel(null)}
+                        />
+                      )}
                     </td>
 
                     {/* Row actions */}
@@ -1167,8 +1781,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
                   </tr>
 
-                  {/* Expanded panel row — Optional Fields only (targeting now in modal) */}
-                  {isExpanded && expandedPanel?.panel === 'optional' && (
+                  {/* Expanded panel row — REMOVED: targeting and optional fields now use inline popups */}
+                  {false && (
                     <tr key={`${row.id}-expanded`} className="border-b border-border bg-surface-2/10">
                       <td colSpan={15} className="p-0 overflow-hidden">
                         <div className="sticky left-0 px-6 py-4 space-y-4" style={{ width: 'min(100vw - 2rem, 860px)' }}>
@@ -1808,383 +2422,6 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
         </button>
       )}
 
-      {/* ── Targeting Modal ──────────────────────────────────────────────────── */}
-      {targetingModal && (() => {
-        const tmRow = rows.find(r => r.id === targetingModal.rowId);
-        if (!tmRow) return null;
-        return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={closeTargetingModal}>
-            <div
-              className="bg-[#0e0d3a] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[88vh] flex flex-col"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Modal header */}
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(255,255,255,0.07)]">
-                <div className="flex items-center gap-2">
-                  <MapPin size={14} className="text-[#00BEEF]" />
-                  <span className="text-[14px] font-700 text-white">Targeting · {tmRow.name}</span>
-                </div>
-                <button onClick={closeTargetingModal} className="text-white/40 hover:text-white/80 transition-colors"><X size={16} /></button>
-              </div>
-
-              {/* Tab bar */}
-              <div className="flex items-center gap-0.5 px-5 pt-3 pb-0">
-                {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => (
-                  <button key={f} onClick={() => setAudienceFocus(f)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-t text-[11px] font-600 border-b-2 transition-all',
-                      audienceFocus === f
-                        ? 'border-[#00BEEF] text-[#00BEEF] bg-[rgba(0,190,239,0.06)]'
-                        : 'border-transparent text-white/40 hover:text-white/70'
-                    )}>
-                    {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : '👥 Custom'}
-                  </button>
-                ))}
-                {audienceFocus === 'location' && (
-                  <button onClick={() => { setBulkLocModal({ rowId: tmRow.id }); setBulkLocText(''); }}
-                    className="ml-auto flex items-center gap-1 px-2 py-1 rounded border border-[rgba(255,255,255,0.12)] text-[10px] font-600 text-white/50 hover:text-white/80 hover:border-[rgba(255,255,255,0.25)] transition-colors">
-                    <Plus size={9} /> Bulk Paste
-                  </button>
-                )}
-              </div>
-
-              {/* Tab content */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-                {/* LOCATION TAB */}
-                {audienceFocus === 'location' && (
-                  <div className="space-y-3">
-                    {hasCredentials ? (
-                      <div className="relative">
-                        <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1.5">Search Locations</label>
-                        <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2">
-                          <MapPin size={12} className="text-white/30 shrink-0" />
-                          <input
-                            value={locationRowId === tmRow.id ? locationQuery : ''}
-                            onChange={e => { setLocationQuery(e.target.value); setLocationRowId(tmRow.id); }}
-                            onFocus={() => setLocationRowId(tmRow.id)}
-                            placeholder="Type city, state, country, or zip…"
-                            className="flex-1 bg-transparent text-[12px] text-white outline-none placeholder:text-white/25"
-                          />
-                          {searchingLocations && <span className="text-[10px] text-white/30">…</span>}
-                        </div>
-                        {locationRowId === tmRow.id && locationQuery.length >= 2 && locationResults != null && ((locationResults as { results?: unknown[] }).results?.length ?? 0) > 0 && (
-                          <div className="absolute z-50 mt-1 w-full bg-[#0e0d3a] border border-[rgba(255,255,255,0.12)] rounded-lg shadow-2xl max-h-52 overflow-y-auto">
-                            {((locationResults as { results?: { key: string; name: string; type?: string; countryCode?: string; countryName?: string; region?: string }[] }).results ?? []).map((loc) => (
-                              <button key={loc.key} onClick={() => {
-                                const label = [loc.name, loc.region, loc.countryName].filter(Boolean).join(', ');
-                                const current = tmRow.geoLocations ? tmRow.geoLocations.split('\n').filter(Boolean) : [];
-                                const currentObjs = tmRow.geoLocationObjects || [];
-                                if (!current.includes(label)) {
-                                  update(tmRow.id, {
-                                    geoLocations: [...current, label].join('\n'),
-                                    geoLocationObjects: [...currentObjs, { key: loc.key, type: loc.type || 'country', name: label }],
-                                  });
-                                }
-                                setLocationQuery('');
-                                setLocationRowId(null);
-                              }} className="w-full text-left px-4 py-2.5 text-[12px] hover:bg-[rgba(255,255,255,0.05)] transition-colors flex items-center justify-between gap-2">
-                                <span className="text-white">{loc.name}{loc.region ? `, ${loc.region}` : ''}{loc.countryName ? ` (${loc.countryName})` : ''}</span>
-                                <span className="text-[10px] text-white/30 capitalize">{loc.type}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-amber-400">Add credentials in Settings to enable location search.</p>
-                    )}
-                    {/* Selected locations chips */}
-                    {tmRow.geoLocations && (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Selected ({tmRow.geoLocations.split('\n').filter(Boolean).length})</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {tmRow.geoLocations.split('\n').filter(Boolean).map((loc, i) => (
-                            <span key={i} className="flex items-center gap-1 px-2.5 py-1 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.25)] rounded-full text-[11px] text-[#00BEEF]">
-                              {loc}
-                              <button onClick={() => {
-                                const updated = tmRow.geoLocations!.split('\n').filter((_, li) => li !== i).join('\n');
-                                const updatedObjs = (tmRow.geoLocationObjects || []).filter((_, oi) => oi !== i);
-                                update(tmRow.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
-                              }} className="hover:text-red-400 transition-colors"><X size={10} /></button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Paste list shortcut */}
-                    <details className="group">
-                      <summary className="text-[11px] text-[#00BEEF] cursor-pointer list-none flex items-center gap-1">
-                        <ChevronDown size={11} className="group-open:rotate-180 transition-transform" />
-                        Or paste a list (one per line)
-                      </summary>
-                      <textarea
-                        value={tmRow.geoLocations}
-                        onChange={e => update(tmRow.id, { geoLocations: e.target.value })}
-                        placeholder="New York, NY&#10;Los Angeles, CA&#10;90210"
-                        rows={4}
-                        className="mt-2 w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white"
-                      />
-                    </details>
-                  </div>
-                )}
-
-                {/* INTERESTS TAB */}
-                {audienceFocus === 'interests' && (
-                  <div className="flex flex-col gap-6">
-                    {/* Detailed Targeting */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase">Detailed Targeting</label>
-                        <div className="flex gap-0.5">
-                          {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
-                            <button key={t} onClick={() => setDetailedType(t)}
-                              className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
-                                detailedType === t ? 'bg-[#00BEEF] text-[#0e0d3a] font-700' : 'bg-[rgba(255,255,255,0.06)] text-white/40 hover:text-white/70'
-                              }`}>
-                              {t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <input
-                          value={detailedRowId === tmRow.id ? detailedQuery : ''}
-                          onChange={e => { setDetailedRowId(tmRow.id); setDetailedQuery(e.target.value); }}
-                          onFocus={() => setDetailedRowId(tmRow.id)}
-                          placeholder={hasCredentials ? `Search ${detailedType === 'adinterest' ? 'interests' : detailedType}…` : 'Enter credentials in Settings first'}
-                          className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
-                        />
-                        {searchingDetailed && detailedRowId === tmRow.id && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/30">…</span>
-                        )}
-                      </div>
-                      {detailedRowId === tmRow.id && detailedQuery.length >= 2 && (detailedResults?.results?.length ?? 0) > 0 && (
-                        <div className="border border-[rgba(255,255,255,0.1)] rounded-lg bg-[#0e0d3a] shadow-2xl max-h-40 overflow-y-auto divide-y divide-[rgba(255,255,255,0.05)]">
-                          {(detailedResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; type?: string; audienceSizeLower?: number }) => (
-                            <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
-                              const current = tmRow.detailedInterests ? tmRow.detailedInterests.split('\n').filter(Boolean) : [];
-                              const currentObjs = tmRow.detailedInterestObjects || [];
-                              if (!current.includes(r.name)) {
-                                update(tmRow.id, {
-                                  detailedInterests: [...current, r.name].join('\n'),
-                                  detailedInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
-                                });
-                              }
-                              setDetailedQuery('');
-                              setDetailedRowId(null);
-                            }} className="w-full text-left px-3 py-2 text-[11px] flex items-center justify-between gap-2 hover:bg-[rgba(255,255,255,0.05)] transition-colors">
-                              <span className="text-white">{r.name}</span>
-                              {r.audienceSizeLower && <span className="text-[10px] text-white/30">{(r.audienceSizeLower / 1_000_000).toFixed(1)}M</span>}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {tmRow.detailedInterests && (
-                        <div className="flex flex-wrap gap-1">
-                          {tmRow.detailedInterests.split('\n').filter(Boolean).map((interest, i) => (
-                            <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.2)] rounded-full text-[10px] text-[#00BEEF]">
-                              {interest}
-                              <button onClick={() => {
-                                const updatedObjs = (tmRow.detailedInterestObjects || []).filter((_, oi) => oi !== i);
-                                update(tmRow.id, {
-                                  detailedInterests: tmRow.detailedInterests!.split('\n').filter((_, li) => li !== i).join('\n'),
-                                  detailedInterestObjects: updatedObjs,
-                                });
-                              }} className="hover:text-red-400"><X size={9} /></button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {!hasCredentials && (
-                        <textarea value={tmRow.detailedInterests} onChange={e => update(tmRow.id, { detailedInterests: e.target.value })}
-                          placeholder="Running, Fitness, Nike…" rows={2}
-                          className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
-                      )}
-                    </div>
-                    {/* Narrow Targeting — stacked below Detailed */}
-                    <div className="space-y-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase">Narrow Targeting (AND)</label>
-                        <div className="flex gap-0.5">
-                          {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
-                            <button key={t} onClick={() => setNarrowType(t)}
-                              className={`px-1.5 py-0.5 text-[9px] rounded transition-colors ${
-                                narrowType === t ? 'bg-amber-500 text-black font-700' : 'bg-[rgba(255,255,255,0.06)] text-white/40 hover:text-white/70'
-                              }`}>
-                              {t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <input
-                          value={narrowRowId === tmRow.id ? narrowQuery : ''}
-                          onChange={e => { setNarrowRowId(tmRow.id); setNarrowQuery(e.target.value); }}
-                          onFocus={() => setNarrowRowId(tmRow.id)}
-                          placeholder={hasCredentials ? `Search ${narrowType === 'adinterest' ? 'interests' : narrowType} to narrow by…` : 'Enter credentials in Settings first'}
-                          className="w-full px-3 py-2 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
-                        />
-                        {searchingNarrow && narrowRowId === tmRow.id && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/30">…</span>
-                        )}
-                      </div>
-                      {narrowRowId === tmRow.id && narrowQuery.length >= 2 && (narrowResults?.results?.length ?? 0) > 0 && (
-                        <div className="border border-[rgba(255,255,255,0.1)] rounded-lg bg-[#0e0d3a] shadow-2xl max-h-40 overflow-y-auto divide-y divide-[rgba(255,255,255,0.05)]">
-                          {(narrowResults?.results ?? []).slice(0, 10).map((r: { id: string; name: string; type?: string; audienceSizeLower?: number }) => (
-                            <button key={r.id} onMouseDown={e => e.preventDefault()} onClick={() => {
-                              const current = tmRow.narrowInterests ? tmRow.narrowInterests.split('\n').filter(Boolean) : [];
-                              const currentObjs = tmRow.narrowInterestObjects || [];
-                              if (!current.includes(r.name)) {
-                                update(tmRow.id, {
-                                  narrowInterests: [...current, r.name].join('\n'),
-                                  narrowInterestObjects: [...currentObjs, { id: r.id, type: r.type || 'adinterest', name: r.name }],
-                                });
-                              }
-                              setNarrowQuery('');
-                              setNarrowRowId(null);
-                            }} className="w-full text-left px-3 py-2 text-[11px] flex items-center justify-between gap-2 hover:bg-[rgba(255,255,255,0.05)] transition-colors">
-                              <span className="text-white">{r.name}</span>
-                              {r.audienceSizeLower && <span className="text-[10px] text-white/30">{(r.audienceSizeLower / 1_000_000).toFixed(1)}M</span>}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {tmRow.narrowInterests && (
-                        <div className="flex flex-wrap gap-1">
-                          {tmRow.narrowInterests.split('\n').filter(Boolean).map((interest, i) => (
-                            <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-full text-[10px] text-amber-400">
-                              {interest}
-                              <button onClick={() => update(tmRow.id, { narrowInterests: tmRow.narrowInterests!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-amber-600"><X size={9} /></button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {!hasCredentials && (
-                        <textarea value={tmRow.narrowInterests} onChange={e => update(tmRow.id, { narrowInterests: e.target.value })}
-                          placeholder="Must also match…" rows={2}
-                          className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* CUSTOM / LAL TAB */}
-                {audienceFocus === 'custom' && (
-                  <div className="flex flex-col gap-6">
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Targeted Custom / LAL Audiences</label>
-                      {hasCredentials ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <input value={audienceSearch} onChange={e => setAudienceSearch(e.target.value)}
-                              placeholder="Search audiences…"
-                              className="flex-1 px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white" />
-                            {loadingAudiences && <span className="text-[10px] text-white/30">Loading…</span>}
-                          </div>
-                          {audienceSearch.trim().length === 0 && (
-                            <p className="text-[10px] text-white/25 italic px-1">Type to search your account audiences…</p>
-                          )}
-                          {customAudiences.length > 0 && (
-                            <div className="max-h-40 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
-                              {customAudiences.map((aud: { id: string; name: string; approximateCount?: number; subtype?: string }) => {
-                                const isSel = (tmRow.targetedAudiences || '').includes(aud.name);
-                                return (
-                                  <button key={aud.id} onClick={() => {
-                                    const cur = tmRow.targetedAudiences ? tmRow.targetedAudiences.split('\n').filter(Boolean) : [];
-                                    update(tmRow.id, { targetedAudiences: isSel ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
-                                  }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                    isSel ? 'bg-[rgba(0,190,239,0.1)] text-[#00BEEF]' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
-                                    <span>{aud.name}</span>
-                                    <span className="text-[10px] text-white/25">{aud.subtype} {aud.approximateCount ? `• ${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {tmRow.targetedAudiences && (
-                            <div className="flex flex-wrap gap-1">
-                              {tmRow.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
-                                <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.2)] rounded-full text-[10px] text-[#00BEEF]">
-                                  {a}
-                                  <button onClick={() => update(tmRow.id, { targetedAudiences: tmRow.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <textarea value={tmRow.targetedAudiences} onChange={e => update(tmRow.id, { targetedAudiences: e.target.value })}
-                          placeholder="Website Visitors 180d, Email List LAL 1%…" rows={3}
-                          className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
-                      )}
-                    </div>
-                    {/* Excluded — stacked below Targeted, with its own search */}
-                    <div className="space-y-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-                      <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Excluded Custom / LAL Audiences</label>
-                      {hasCredentials ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <input
-                              value={audienceSearch}
-                              onChange={e => setAudienceSearch(e.target.value)}
-                              placeholder="Search audiences to exclude…"
-                              className="flex-1 px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] placeholder:text-white/20 text-white"
-                            />
-                            {loadingAudiences && <span className="text-[10px] text-white/30">Loading…</span>}
-                          </div>
-                          {audienceSearch.trim().length === 0 && (
-                            <p className="text-[10px] text-white/25 italic px-1">Type to search audiences to exclude…</p>
-                          )}
-                          {customAudiences.length > 0 && (
-                            <div className="max-h-40 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
-                              {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                                const isExcl = (tmRow.excludedAudiences || '').includes(aud.name);
-                                return (
-                                  <button key={aud.id} onClick={() => {
-                                    const cur = tmRow.excludedAudiences ? tmRow.excludedAudiences.split('\n').filter(Boolean) : [];
-                                    update(tmRow.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
-                                  }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
-                                    isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
-                                    <span>{aud.name}</span>
-                                    <span className="text-[10px] text-white/25">{aud.subtype}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {tmRow.excludedAudiences && (
-                            <div className="flex flex-wrap gap-1">
-                              {tmRow.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
-                                <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
-                                  {a}
-                                  <button onClick={() => update(tmRow.id, { excludedAudiences: tmRow.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <textarea value={tmRow.excludedAudiences} onChange={e => update(tmRow.id, { excludedAudiences: e.target.value })}
-                          placeholder="Existing Customers, Purchasers 180d…" rows={3}
-                          className="w-full px-3 py-2 text-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.1)] rounded-lg outline-none focus:border-[rgba(0,190,239,0.4)] resize-none placeholder:text-white/20 text-white" />
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Modal footer */}
-              <div className="flex items-center justify-end px-5 py-3.5 border-t border-[rgba(255,255,255,0.07)]">
-                <button onClick={closeTargetingModal}
-                  className="px-5 py-2 rounded-lg bg-[#00BEEF] text-[#0e0d3a] text-[12px] font-700 hover:bg-[#00d4ff] transition-colors">
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ── Analysis Modal (Reach + Overlap) ─────────────────────────────────── */}
       {analysisModal && (

@@ -387,14 +387,22 @@
 
 ## Admin Campaign Builder — Bug Fixes (Round 3)
 
-- [ ] Datetime picker: force white icon via SVG background-image override (color-scheme + filter approach not working)
-- [ ] Ad Sets tab: combine Start and End date columns into single Start/End column (start on top, end on bottom in same cell)
-- [ ] Placements popup: solid dark navy background (#0e0d3a), no transparency — match sessions/QA fix
-- [ ] Age column: widen to prevent truncation; combine Age + Gender into single column (age on top, gender on bottom)
-- [ ] Targeting modal: fix backdrop so builder table is visible behind modal (not black screen)
-- [ ] Budget column: stack Lifetime/Daily toggle buttons on top, budget input below; rename LT button to "Lifetime"
-- [ ] Reach Estimate modal: add "Run Overlap" button to the left of "Run Estimate" button
-- [ ] Reach Estimate modal: add checkbox to each ad set row; enable Run Overlap when ≥2 rows selected; results populate Audience Overlap tab
-- [ ] Audience Overlap modal: add Venn diagram view as selectable option (alongside Summary/Pairs tabs)
-- [ ] Audience Overlap modal: add overlap level column (Minimal 0-10%, Acceptable 11-20%, Medium 21-30%, High 31-40%, Very High 40%+) in Pairs, Venn, and Summary views
-- [ ] Audience Overlap modal: include confidence level in Venn diagram view
+- [x] Datetime picker: force white icon via strengthened CSS (filter: invert(1) brightness(10) saturate(0) + all datetime-edit pseudo-elements)
+- [x] Ad Sets tab: combine Start and End date columns into single Start/End column (start on top, end on bottom in same cell)
+- [x] Placements popup: solid dark navy background (#0e0d3a), no transparency — match sessions/QA fix
+- [x] Age column: widen to prevent truncation; combine Age + Gender into single column (age on top, gender on bottom)
+- [x] Targeting modal: fix backdrop so builder table is visible behind modal (rgba(0,0,0,0.55) + blur(2px))
+- [x] Budget column: stack Lifetime/Daily toggle buttons on top, budget input below; rename LT button to "Lifetime"
+- [x] Reach Estimate modal: add "Run Overlap" button to the left of "Run Estimate" button
+- [x] Reach Estimate modal: add checkbox to each ad set row; enable Run Overlap when ≥2 rows selected; results populate Audience Overlap tab
+- [x] Audience Overlap modal: add Venn diagram view as selectable option (alongside Summary/Pairs tabs)
+- [x] Audience Overlap modal: add overlap level column (Minimal 0-10%, Acceptable 11-20%, Medium 21-30%, High 31-40%, Very High 40%+) in Pairs, Venn, and Summary views
+- [x] Audience Overlap modal: include confidence level in Venn diagram view
+
+## Admin Campaign Builder — Bug Fixes (Round 4)
+
+- [x] Age/Gender column: make more compact (tighter spacing, smaller inputs, no excess padding)
+- [x] Budget column: make more compact (tighter spacing, smaller toggle buttons)
+- [x] Targeting: convert from full-screen modal to inline dropdown popup anchored to the row cell (like Placements popup)
+- [x] Optional Fields: convert from accordion panel to inline dropdown popup (like Placements popup)
+- [x] Audience Overlap Venn: show two Venn diagrams per pair — one from each ad set's perspective (A's overlap of B, B's overlap of A)
