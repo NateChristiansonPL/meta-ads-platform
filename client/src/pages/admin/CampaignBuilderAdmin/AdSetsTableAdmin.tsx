@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { trpc } from '@/lib/trpc';
 import { BuildSettings } from './campaignStoreAdmin';
 import { ReachEstimatePanel, AudienceOverlapPanel } from './BuilderReachOverlapPanelAdmin';
+import { buildBuilderTargetingSpec } from './builderMetaMappingAdmin';
 
 interface Props {
   rows: AdSetRow[];
@@ -195,7 +196,7 @@ function PlacementPicker({ row, onChange, onClose }: {
 
   return (
     <div ref={ref}
-      className="absolute z-50 top-full left-0 mt-1 w-72 bg-surface-1 border border-border rounded-lg shadow-2xl p-3 space-y-3">
+      className="absolute z-50 top-full left-0 mt-1 w-72 rounded-lg shadow-2xl p-3 space-y-3" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
       {/* Advantage+ toggle */}
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-600 text-muted-foreground">Placement Type</span>
@@ -578,6 +579,38 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
   // ── Analysis modal (reach + overlap) ──────────────────────────────────────
   const [analysisModal, setAnalysisModal] = useState<{ tab: 'reach' | 'overlap' } | null>(null);
+  const [overlapRunning, setOverlapRunning] = useState(false);
+  const builderOverlapMutation = trpc.adminMeta.builderAudienceOverlap.useMutation();
+
+  const handleRunOverlapFromReach = useCallback(async (selectedIds: string[]) => {
+    if (!settings?.accessToken || !settings?.adAccountId) return;
+    const targetRows = rows.filter(r => selectedIds.includes(r.id));
+    if (targetRows.length < 2) return;
+    setOverlapRunning(true);
+    try {
+      const adSets = targetRows.map(row => ({
+        id: row.id,
+        name: row.name,
+        campaignName: row.campaignName,
+        targetingSpec: (() => {
+          try { return buildBuilderTargetingSpec(row) as Record<string, unknown>; } catch { return {}; }
+        })(),
+        isNarrowed: !!(row.narrowInterests || row.narrowInterestObjects?.length),
+      }));
+      const result = await builderOverlapMutation.mutateAsync({
+        accessToken: settings.accessToken,
+        adAccountId: settings.adAccountId,
+        adSets,
+      });
+      const run = { runAt: Date.now(), overlapResults: result.overlapResults, pairList: result.pairList };
+      onOverlapHistoryChange([run, ...overlapHistory].slice(0, 10));
+      setAnalysisModal({ tab: 'overlap' });
+    } catch (err) {
+      console.error('Overlap from reach failed:', err);
+    } finally {
+      setOverlapRunning(false);
+    }
+  }, [rows, settings, overlapHistory, onOverlapHistoryChange, builderOverlapMutation]);
 
   // ── Pre-Launch QA rail ─────────────────────────────────────────────────────
   const [qaOpen, setQaOpen] = useState(false);
@@ -773,13 +806,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
               <Th required>Campaign</Th>
               <Th required>Ad Set Name</Th>
               <Th required>Budget</Th>
-              <Th required>Start</Th>
-              <Th required>End</Th>
+              <Th required>Start / End</Th>
               <Th required>Opt Goal</Th>
               <Th>Conv. Location</Th>
               <Th required>Placements</Th>
-              <Th>Age</Th>
-              <Th>Gender</Th>
+              <Th>Age / Gender</Th>
               <Th>Targeting</Th>
               <Th>Optional Fields</Th>
               <Th className="w-16" />
@@ -868,54 +899,52 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Budget */}
-                    <td className="border-r border-border/30 p-0 min-w-[160px]">
-                      <div className="flex items-center">
+                    <td className="border-r border-border/30 p-0 min-w-[140px]">
+                      <div className="flex flex-col px-2 py-1.5 gap-1">
                         <BtnGroup
                           options={[
-                            { value: 'LIFETIME', label: 'LT' },
+                            { value: 'LIFETIME', label: 'Lifetime' },
                             { value: 'DAILY', label: 'Daily' },
                           ]}
                           value={row.budgetType}
                           onChange={v => update(row.id, { budgetType: v as 'LIFETIME' | 'DAILY' })}
                           small
                         />
-                        <div className="flex items-center gap-0.5 px-1">
+                        <div className="flex items-center gap-0.5">
                           <span className="text-muted-foreground/50 text-[11px]">$</span>
                           <CellInput
                             value={row.budget}
                             onChange={v => update(row.id, { budget: v })}
                             placeholder="0.00"
                             type="number"
-                            className="w-20"
+                            className="w-full"
                           />
                         </div>
                       </div>
                     </td>
 
-                    {/* Start date */}
-                    <td className="border-r border-border/30 p-0 min-w-[170px]">
-                      <input
-                        type="datetime-local"
-                        value={row.startDate && row.startTime ? `${row.startDate}T${row.startTime}` : row.startDate ? `${row.startDate}T08:00` : ''}
-                        onChange={e => {
-                          const [d, t] = e.target.value.split('T');
-                          update(row.id, { startDate: d ?? '', startTime: t ?? '08:00' });
-                        }}
-                        className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
-                      />
-                    </td>
-
-                    {/* End date */}
-                    <td className="border-r border-border/30 p-0 min-w-[170px]">
-                      <input
-                        type="datetime-local"
-                        value={row.endDate && row.endTime ? `${row.endDate}T${row.endTime}` : row.endDate ? `${row.endDate}T20:00` : ''}
-                        onChange={e => {
-                          const [d, t] = e.target.value.split('T');
-                          update(row.id, { endDate: d ?? '', endTime: t ?? '20:00' });
-                        }}
-                        className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
-                      />
+                    {/* Start / End combined */}
+                    <td className="border-r border-border/30 p-0 min-w-[180px]">
+                      <div className="flex flex-col divide-y divide-border/30">
+                        <input
+                          type="datetime-local"
+                          value={row.startDate && row.startTime ? `${row.startDate}T${row.startTime}` : row.startDate ? `${row.startDate}T08:00` : ''}
+                          onChange={e => {
+                            const [d, t] = e.target.value.split('T');
+                            update(row.id, { startDate: d ?? '', startTime: t ?? '08:00' });
+                          }}
+                          className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={row.endDate && row.endTime ? `${row.endDate}T${row.endTime}` : row.endDate ? `${row.endDate}T20:00` : ''}
+                          onChange={e => {
+                            const [d, t] = e.target.value.split('T');
+                            update(row.id, { endDate: d ?? '', endTime: t ?? '20:00' });
+                          }}
+                          className="cell-input datetime-white px-2 py-1.5 text-[11px] bg-transparent border-0 outline-none w-full"
+                        />
+                      </div>
                     </td>
 
                     {/* Optimization Goal */}
@@ -1053,35 +1082,35 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                       )}
                     </td>
 
-                    {/* Age Range */}
-                    <td className="border-r border-border/30 p-0 min-w-[110px]">
-                      <div className={cn('flex items-center gap-1 px-2 py-1.5', sacRestricted && 'opacity-40 pointer-events-none')}>
-                        <input type="number" min={18} max={65}
-                          value={row.ageMin}
-                          onChange={e => update(row.id, { ageMin: e.target.value })}
-                          className="w-12 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
-                        <span className="text-muted-foreground text-[10px]">–</span>
-                        <input type="number" min={18} max={65}
-                          value={row.ageMax}
-                          onChange={e => update(row.id, { ageMax: e.target.value })}
-                          className="w-12 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
-                        {sacRestricted && <span className="text-[9px] text-amber-400 ml-1">SAC</span>}
-                      </div>
-                    </td>
-
-                    {/* Gender */}
-                    <td className="border-r border-border/30 p-0 min-w-[120px]">
-                      <div className={cn('px-1 py-1', sacRestricted && 'opacity-40 pointer-events-none')}>
-                        <BtnGroup
-                          options={[
-                            { value: 'all', label: 'All' },
-                            { value: '1', label: 'M' },
-                            { value: '2', label: 'F' },
-                          ]}
-                          value={row.genders}
-                          onChange={v => update(row.id, { genders: v })}
-                          small
-                        />
+                    {/* Age + Gender combined */}
+                    <td className="border-r border-border/30 p-0 min-w-[140px]">
+                      <div className={cn('flex flex-col divide-y divide-border/30', sacRestricted && 'opacity-40 pointer-events-none')}>
+                        {/* Age row */}
+                        <div className="flex items-center gap-1 px-2 py-1.5">
+                          <input type="number" min={18} max={65}
+                            value={row.ageMin}
+                            onChange={e => update(row.id, { ageMin: e.target.value })}
+                            className="w-14 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
+                          <span className="text-muted-foreground text-[10px]">–</span>
+                          <input type="number" min={18} max={65}
+                            value={row.ageMax}
+                            onChange={e => update(row.id, { ageMax: e.target.value })}
+                            className="w-14 px-1.5 py-1 text-[11px] bg-surface-2/50 border border-border/50 rounded text-center cell-input" />
+                          {sacRestricted && <span className="text-[9px] text-amber-400 ml-1">SAC</span>}
+                        </div>
+                        {/* Gender row */}
+                        <div className="px-1 py-1">
+                          <BtnGroup
+                            options={[
+                              { value: 'all', label: 'All' },
+                              { value: '1', label: 'M' },
+                              { value: '2', label: 'F' },
+                            ]}
+                            value={row.genders}
+                            onChange={v => update(row.id, { genders: v })}
+                            small
+                          />
+                        </div>
                       </div>
                     </td>
 
@@ -1784,7 +1813,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
         const tmRow = rows.find(r => r.id === targetingModal.rowId);
         if (!tmRow) return null;
         return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-[2px]" onClick={closeTargetingModal}>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={closeTargetingModal}>
             <div
               className="bg-[#0e0d3a] border border-[rgba(255,255,255,0.08)] rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[88vh] flex flex-col"
               onClick={e => e.stopPropagation()}
@@ -2159,8 +2188,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
       {/* ── Analysis Modal (Reach + Overlap) ─────────────────────────────────── */}
       {analysisModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setAnalysisModal(null)}>
-          <div className="bg-surface-1 border border-border rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={() => setAnalysisModal(null)}>
+          <div className="rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[88vh] flex flex-col" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <div className="flex items-center gap-3">
@@ -2194,6 +2223,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                   settings={settings}
                   history={reachHistory}
                   onHistoryChange={onReachHistoryChange}
+                  onRunOverlap={handleRunOverlapFromReach}
+                  overlapRunning={overlapRunning}
                 />
               )}
               {analysisModal.tab === 'overlap' && (

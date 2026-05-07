@@ -372,15 +372,29 @@
 
 ## Admin Campaign Builder — Bug Fixes (Round 2)
 
-- [ ] QA rail: convert from absolute overlay to flex push layout (table shrinks when QA expands)
-- [ ] QA rail: solid dark navy background (#141349), no transparency
-- [ ] QA rail: collapsed state = thin vertical tab on right edge with rotated "Pre-Launch QA · N issues" text + expand arrow
-- [ ] QA rail: expanded state = ~280px wide panel, content visible, table content shifts left
-- [ ] Sessions dropdown: solid dark navy background, no transparency
-- [ ] Account Setup modal: solid dark navy background, no transparency
-- [ ] Targeting modal: semi-transparent backdrop (not full black), builder visible behind modal
-- [ ] Targeting modal Interests tab: stack Narrow Targeting (AND) below Detailed Targeting (not side-by-side)
-- [ ] Targeting modal Custom tab: stack Excluded below Targeted (not side-by-side)
-- [ ] Targeting modal Custom tab: add searchable Excluded box with same audience search functionality as Targeted
-- [ ] Date/time picker: merge separate date + time pickers into single combined datetime picker per column
-- [ ] Date/time picker: make calendar/clock icon WHITE (currently black/invisible)
+- [x] QA rail: convert from absolute overlay to flex push layout (table shrinks when QA expands)
+- [x] QA rail: solid dark navy background (#0e0d3a), no transparency
+- [x] QA rail: collapsed state = thin vertical tab on right edge with rotated "QA · N" text
+- [x] QA rail: expanded state = 280px wide panel, content visible, table content shifts left
+- [x] Sessions dropdown: solid dark navy background (#0e0d3a), no transparency
+- [x] Account Setup modal: solid dark navy background (#0e0d3a), no transparency
+- [x] Targeting modal: semi-transparent backdrop (bg-black/60 + minimal blur), builder visible behind modal
+- [x] Targeting modal Interests tab: stack Narrow Targeting (AND) below Detailed Targeting (not side-by-side)
+- [x] Targeting modal Custom tab: stack Excluded below Targeted (not side-by-side)
+- [x] Targeting modal Custom tab: add searchable Excluded box with same audience search functionality as Targeted
+- [x] Date/time picker: merge separate date + time pickers into single combined datetime picker per column
+- [x] Date/time picker: make calendar/clock icon WHITE via .datetime-white CSS class (color-scheme: dark + filter: invert)
+
+## Admin Campaign Builder — Bug Fixes (Round 3)
+
+- [ ] Datetime picker: force white icon via SVG background-image override (color-scheme + filter approach not working)
+- [ ] Ad Sets tab: combine Start and End date columns into single Start/End column (start on top, end on bottom in same cell)
+- [ ] Placements popup: solid dark navy background (#0e0d3a), no transparency — match sessions/QA fix
+- [ ] Age column: widen to prevent truncation; combine Age + Gender into single column (age on top, gender on bottom)
+- [ ] Targeting modal: fix backdrop so builder table is visible behind modal (not black screen)
+- [ ] Budget column: stack Lifetime/Daily toggle buttons on top, budget input below; rename LT button to "Lifetime"
+- [ ] Reach Estimate modal: add "Run Overlap" button to the left of "Run Estimate" button
+- [ ] Reach Estimate modal: add checkbox to each ad set row; enable Run Overlap when ≥2 rows selected; results populate Audience Overlap tab
+- [ ] Audience Overlap modal: add Venn diagram view as selectable option (alongside Summary/Pairs tabs)
+- [ ] Audience Overlap modal: add overlap level column (Minimal 0-10%, Acceptable 11-20%, Medium 21-30%, High 31-40%, Very High 40%+) in Pairs, Venn, and Summary views
+- [ ] Audience Overlap modal: include confidence level in Venn diagram view

@@ -2,7 +2,7 @@
 // Reach Estimate + Audience Overlap panels for the Campaign Builder Ad Sets tab.
 // Results are persisted in session via the parent CampaignBuilderState.
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { BarChart2, Users, RefreshCw, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { AdSetRow, BuildSettings, ReachEstimateRun, OverlapRun } from './campaignStoreAdmin';
@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 import { buildBuilderTargetingSpec } from './builderMetaMappingAdmin';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-// ReachEstimateRun and OverlapRun are defined in campaignStore.ts and re-exported here
 export type { ReachEstimateRun, OverlapRun };
 
 interface Props {
@@ -30,18 +29,34 @@ function fmt(n: number): string {
   return String(n);
 }
 
+/** Overlap level label + color based on percentage */
+function overlapLevel(pct: number): { label: string; color: string; bg: string } {
+  if (pct >= 40) return { label: 'Very High', color: 'text-red-400', bg: 'bg-red-500/15 border-red-500/30' };
+  if (pct >= 31) return { label: 'High', color: 'text-orange-400', bg: 'bg-orange-500/15 border-orange-500/30' };
+  if (pct >= 21) return { label: 'Medium', color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' };
+  if (pct >= 11) return { label: 'Acceptable', color: 'text-yellow-400', bg: 'bg-yellow-500/15 border-yellow-500/30' };
+  return { label: 'Minimal', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' };
+}
+
 function overlapColor(pct: number): string {
-  if (pct >= 60) return 'text-red-400';
-  if (pct >= 40) return 'text-amber-400';
-  if (pct >= 20) return 'text-yellow-400';
-  return 'text-emerald-400';
+  return overlapLevel(pct).color;
 }
 
 function overlapBg(pct: number): string {
-  if (pct >= 60) return 'bg-red-500/10 border-red-500/20';
-  if (pct >= 40) return 'bg-amber-500/10 border-amber-500/20';
-  if (pct >= 20) return 'bg-yellow-500/10 border-yellow-500/20';
+  if (pct >= 40) return 'bg-red-500/10 border-red-500/20';
+  if (pct >= 31) return 'bg-orange-500/10 border-orange-500/20';
+  if (pct >= 21) return 'bg-amber-500/10 border-amber-500/20';
+  if (pct >= 11) return 'bg-yellow-500/10 border-yellow-500/20';
   return 'bg-emerald-500/10 border-emerald-500/20';
+}
+
+function OverlapLevelBadge({ pct }: { pct: number }) {
+  const { label, color, bg } = overlapLevel(pct);
+  return (
+    <span className={cn('text-[9px] font-700 px-1.5 py-0.5 rounded border uppercase tracking-wide', color, bg)}>
+      {label}
+    </span>
+  );
 }
 
 function confidenceBadge(conf: string) {
@@ -54,19 +69,81 @@ function buildTargetingSpec(row: AdSetRow): Record<string, unknown> {
   return buildBuilderTargetingSpec(row);
 }
 
+// ─── Venn Diagram Component ───────────────────────────────────────────────────
+
+interface VennPair {
+  nameA: string;
+  nameB: string;
+  pct: number;
+  confidence: string;
+  intersectionReach: number;
+}
+
+function VennDiagram({ pair }: { pair: VennPair }) {
+  const { nameA, nameB, pct, confidence, intersectionReach } = pair;
+  const level = overlapLevel(pct);
+  // Overlap drives how much the circles overlap: 0% = barely touching, 100% = fully overlapping
+  // We map pct 0–100 → offset 120–0 (px, circles are r=60)
+  const offset = Math.max(0, 120 - pct * 1.2);
+
+  return (
+    <div className="flex flex-col items-center gap-2 p-4 rounded-xl border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+      {/* SVG Venn */}
+      <svg width="240" height="120" viewBox="0 0 240 120">
+        {/* Circle A */}
+        <circle cx={60 + offset / 2} cy={60} r={55} fill="rgba(0,190,239,0.18)" stroke="rgba(0,190,239,0.6)" strokeWidth={1.5} />
+        {/* Circle B */}
+        <circle cx={180 - offset / 2} cy={60} r={55} fill="rgba(237,19,95,0.18)" stroke="rgba(237,19,95,0.6)" strokeWidth={1.5} />
+        {/* Intersection label */}
+        <text x={120} y={56} textAnchor="middle" fontSize={13} fontWeight="700" fill="white">{pct}%</text>
+        <text x={120} y={70} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.5)">{fmt(intersectionReach)}</text>
+        {/* Name labels */}
+        <text x={60 + offset / 2 - 28} y={115} textAnchor="middle" fontSize={8} fill="rgba(0,190,239,0.8)" className="truncate">
+          {nameA.length > 14 ? nameA.slice(0, 13) + '…' : nameA}
+        </text>
+        <text x={180 - offset / 2 + 28} y={115} textAnchor="middle" fontSize={8} fill="rgba(237,19,95,0.8)">
+          {nameB.length > 14 ? nameB.slice(0, 13) + '…' : nameB}
+        </text>
+      </svg>
+      {/* Level + confidence */}
+      <div className="flex items-center gap-2">
+        <OverlapLevelBadge pct={pct} />
+        {confidenceBadge(confidence)}
+      </div>
+      <p className={cn('text-[11px] font-700', level.color)}>{pct}% overlap</p>
+    </div>
+  );
+}
+
 // ─── Reach Estimate Panel ─────────────────────────────────────────────────────
 
-function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
+function ReachEstimatePanel({ rows, settings, history, onHistoryChange, onRunOverlap, overlapRunning }: {
   rows: AdSetRow[];
   settings?: BuildSettings;
   history: ReachEstimateRun[];
   onHistoryChange: (h: ReachEstimateRun[]) => void;
+  onRunOverlap: (selectedIds: string[]) => void;
+  overlapRunning: boolean;
 }) {
   const [running, setRunning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedRun, setExpandedRun] = useState<number | null>(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const batchReach = trpc.adminMeta.batchReachEstimates.useMutation();
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === rows.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(rows.map(r => r.id)));
+  };
 
   const runEstimate = useCallback(async () => {
     if (!settings?.accessToken || !settings?.adAccountId) return;
@@ -94,7 +171,7 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
     }
   }, [rows, settings, history, onHistoryChange, batchReach]);
 
-  const latest = history[0];
+  const canRunOverlap = selectedIds.size >= 2;
 
   return (
     <div className="space-y-3">
@@ -112,24 +189,45 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
             </button>
           )}
         </div>
-        <button
-          onClick={runEstimate}
-          disabled={running || !settings?.accessToken}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
-            running || !settings?.accessToken
-              ? 'bg-surface-2 border-border text-muted-foreground cursor-not-allowed'
-              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
-          )}>
-          <RefreshCw size={11} className={running ? 'animate-spin' : ''} />
-          {running ? 'Running…' : 'Run Estimate'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Run Overlap button — enabled when 2+ rows selected */}
+          <button
+            onClick={() => canRunOverlap && onRunOverlap(Array.from(selectedIds))}
+            disabled={!canRunOverlap || overlapRunning || !settings?.accessToken}
+            title={!canRunOverlap ? 'Select 2 or more ad sets to run overlap' : 'Run audience overlap for selected ad sets'}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
+              canRunOverlap && settings?.accessToken && !overlapRunning
+                ? 'bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20'
+                : 'bg-surface-2/30 border-border/30 text-muted-foreground/40 cursor-not-allowed'
+            )}>
+            <Users size={11} className={overlapRunning ? 'animate-spin' : ''} />
+            {overlapRunning ? 'Analyzing…' : 'Run Overlap'}
+          </button>
+          {/* Run Estimate button */}
+          <button
+            onClick={runEstimate}
+            disabled={running || !settings?.accessToken}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
+              running || !settings?.accessToken
+                ? 'bg-surface-2 border-border text-muted-foreground cursor-not-allowed'
+                : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20'
+            )}>
+            <RefreshCw size={11} className={running ? 'animate-spin' : ''} />
+            {running ? 'Running…' : 'Run Estimate'}
+          </button>
+        </div>
       </div>
 
       {!settings?.accessToken && (
         <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
           <AlertTriangle size={11} /> Add Meta credentials in Settings to run reach estimates.
         </p>
+      )}
+
+      {selectedIds.size > 0 && selectedIds.size < 2 && (
+        <p className="text-[10px] text-muted-foreground/60">Select one more ad set to enable Run Overlap.</p>
       )}
 
       {/* History list */}
@@ -147,7 +245,7 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
         </div>
       )}
 
-      {/* Results table */}
+      {/* Results table with checkboxes */}
       {history.length > 0 && (() => {
         const run = history[expandedRun ?? 0];
         if (!run) return null;
@@ -165,6 +263,15 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-border bg-surface-2/50">
+                    <th className="px-3 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size === rows.length && rows.length > 0}
+                        ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length; }}
+                        onChange={toggleAll}
+                        className="w-3 h-3 accent-primary cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-3 py-2 text-muted-foreground font-600">Ad Set</th>
                     <th className="text-right px-3 py-2 text-muted-foreground font-600">Reach (Low)</th>
                     <th className="text-right px-3 py-2 text-muted-foreground font-600">Reach (Mid)</th>
@@ -174,7 +281,15 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
                 </thead>
                 <tbody>
                   {run.results.map(r => (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-surface-2/20">
+                    <tr key={r.id} className={cn('border-b border-border/50 hover:bg-surface-2/20 transition-colors', selectedIds.has(r.id) && 'bg-primary/5')}>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(r.id)}
+                          onChange={() => toggleSelect(r.id)}
+                          className="w-3 h-3 accent-primary cursor-pointer"
+                        />
+                      </td>
                       <td className="px-3 py-2 text-foreground font-500 max-w-[200px] truncate">{r.name}</td>
                       {r.error ? (
                         <td colSpan={4} className="px-3 py-2 text-red-400 text-[10px]">{r.error}</td>
@@ -191,9 +306,55 @@ function ReachEstimatePanel({ rows, settings, history, onHistoryChange }: {
                 </tbody>
               </table>
             </div>
+            {selectedIds.size >= 2 && (
+              <p className="text-[10px] text-purple-300/70">
+                {selectedIds.size} ad sets selected — click "Run Overlap" to analyze audience overlap.
+              </p>
+            )}
           </div>
         );
       })()}
+
+      {/* Empty state — no history yet, show rows with checkboxes for selection */}
+      {history.length === 0 && rows.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="border-b border-border bg-surface-2/50">
+                <th className="px-3 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === rows.length}
+                    ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < rows.length; }}
+                    onChange={toggleAll}
+                    className="w-3 h-3 accent-primary cursor-pointer"
+                  />
+                </th>
+                <th className="text-left px-3 py-2 text-muted-foreground font-600">Ad Set</th>
+                <th className="text-left px-3 py-2 text-muted-foreground font-600">Campaign</th>
+                <th className="text-right px-3 py-2 text-muted-foreground font-600">Budget</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className={cn('border-b border-border/50 hover:bg-surface-2/20 transition-colors', selectedIds.has(r.id) && 'bg-primary/5')}>
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                      className="w-3 h-3 accent-primary cursor-pointer"
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-foreground font-500 max-w-[200px] truncate">{r.name}</td>
+                  <td className="px-3 py-2 text-muted-foreground max-w-[160px] truncate">{r.campaignName}</td>
+                  <td className="px-3 py-2 text-right text-muted-foreground">${r.budget || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -209,15 +370,16 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
   const [running, setRunning] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedRun, setExpandedRun] = useState<number | null>(0);
-  const [view, setView] = useState<'summary' | 'pairs'>('summary');
+  const [view, setView] = useState<'summary' | 'pairs' | 'venn'>('summary');
 
   const builderOverlap = trpc.adminMeta.builderAudienceOverlap.useMutation();
 
-  const runOverlap = useCallback(async () => {
+  const runOverlap = useCallback(async (targetRows?: AdSetRow[]) => {
     if (!settings?.accessToken || !settings?.adAccountId) return;
     setRunning(true);
+    const analysisRows = targetRows ?? rows;
     try {
-      const adSets = rows.map(row => ({
+      const adSets = analysisRows.map(row => ({
         id: row.id,
         name: row.name,
         campaignName: row.campaignName,
@@ -244,6 +406,9 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
     }
   }, [rows, settings, history, onHistoryChange, builderOverlap]);
 
+  // Expose runOverlap for external calls (from reach panel)
+  (AudienceOverlapPanel as unknown as { _runOverlap?: typeof runOverlap })._runOverlap = runOverlap;
+
   const latest = history[expandedRun ?? 0];
 
   return (
@@ -263,7 +428,7 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
           )}
         </div>
         <button
-          onClick={runOverlap}
+          onClick={() => runOverlap()}
           disabled={running || !settings?.accessToken || rows.length < 2}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border',
@@ -312,19 +477,20 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
                 <button onClick={() => setExpandedRun(0)} className="text-[10px] text-primary hover:underline">← Latest</button>
               )}
               <div className="flex gap-0.5">
-                {(['summary', 'pairs'] as const).map(v => (
+                {(['summary', 'pairs', 'venn'] as const).map(v => (
                   <button key={v} onClick={() => setView(v)}
                     className={cn(
                       'px-2 py-0.5 text-[10px] rounded transition-colors capitalize',
                       view === v ? 'bg-primary text-primary-foreground' : 'bg-surface-2 text-muted-foreground hover:text-foreground'
                     )}>
-                    {v}
+                    {v === 'venn' ? '⬤ Venn' : v}
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
+          {/* SUMMARY VIEW */}
           {view === 'summary' && (
             <div className="grid grid-cols-2 gap-2">
               {latest.overlapResults.map(r => {
@@ -338,13 +504,18 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
                     {r.overlaps.length === 0 ? (
                       <p className="text-[10px] text-muted-foreground">No overlapping ad sets in same campaign.</p>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {r.overlaps.slice(0, 3).map((o, i) => (
-                          <div key={i} className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{o.name}</span>
-                            <div className="flex items-center gap-1">
-                              <span className={cn('text-[11px] font-700', overlapColor(o.pct))}>{o.pct}%</span>
-                              {confidenceBadge(o.confidence)}
+                          <div key={i} className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{o.name}</span>
+                              <div className="flex items-center gap-1">
+                                <span className={cn('text-[11px] font-700', overlapColor(o.pct))}>{o.pct}%</span>
+                                {confidenceBadge(o.confidence)}
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
+                              <OverlapLevelBadge pct={o.pct} />
                             </div>
                           </div>
                         ))}
@@ -359,6 +530,7 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
             </div>
           )}
 
+          {/* PAIRS VIEW */}
           {view === 'pairs' && (
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-[11px]">
@@ -369,22 +541,54 @@ function AudienceOverlapPanel({ rows, settings, history, onHistoryChange }: {
                     <th className="text-right px-3 py-2 text-muted-foreground font-600">Intersection</th>
                     <th className="text-right px-3 py-2 text-muted-foreground font-600">% of A</th>
                     <th className="text-right px-3 py-2 text-muted-foreground font-600">% of B</th>
+                    <th className="text-center px-3 py-2 text-muted-foreground font-600">Level</th>
                     <th className="text-center px-3 py-2 text-muted-foreground font-600">Conf.</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {latest.pairList.map((p, i) => (
-                    <tr key={i} className="border-b border-border/50 hover:bg-surface-2/20">
-                      <td className="px-3 py-2 text-foreground max-w-[140px] truncate">{p.adSetA.name}</td>
-                      <td className="px-3 py-2 text-foreground max-w-[140px] truncate">{p.adSetB.name}</td>
-                      <td className="px-3 py-2 text-right text-muted-foreground">{fmt(p.intersectionReach)}</td>
-                      <td className={cn('px-3 py-2 text-right font-700', overlapColor(p.overlapPctA))}>{p.overlapPctA}%</td>
-                      <td className={cn('px-3 py-2 text-right font-700', overlapColor(p.overlapPctB))}>{p.overlapPctB}%</td>
-                      <td className="px-3 py-2 text-center">{confidenceBadge(p.confidence)}</td>
-                    </tr>
-                  ))}
+                  {latest.pairList.map((p, i) => {
+                    const maxPct = Math.max(p.overlapPctA, p.overlapPctB);
+                    return (
+                      <tr key={i} className="border-b border-border/50 hover:bg-surface-2/20">
+                        <td className="px-3 py-2 text-foreground max-w-[140px] truncate">{p.adSetA.name}</td>
+                        <td className="px-3 py-2 text-foreground max-w-[140px] truncate">{p.adSetB.name}</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{fmt(p.intersectionReach)}</td>
+                        <td className={cn('px-3 py-2 text-right font-700', overlapColor(p.overlapPctA))}>{p.overlapPctA}%</td>
+                        <td className={cn('px-3 py-2 text-right font-700', overlapColor(p.overlapPctB))}>{p.overlapPctB}%</td>
+                        <td className="px-3 py-2 text-center"><OverlapLevelBadge pct={maxPct} /></td>
+                        <td className="px-3 py-2 text-center">{confidenceBadge(p.confidence)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* VENN VIEW */}
+          {view === 'venn' && (
+            <div className="space-y-3">
+              {latest.pairList.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground text-center py-4">No pairs to display.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {latest.pairList.map((p, i) => {
+                    const maxPct = Math.max(p.overlapPctA, p.overlapPctB);
+                    return (
+                      <VennDiagram
+                        key={i}
+                        pair={{
+                          nameA: p.adSetA.name,
+                          nameB: p.adSetB.name,
+                          pct: maxPct,
+                          confidence: p.confidence,
+                          intersectionReach: p.intersectionReach,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -403,6 +607,43 @@ export default function BuilderReachOverlapPanel({
   onReachHistoryChange, onOverlapHistoryChange,
 }: Props) {
   const [active, setActive] = useState<ActivePanel>(null);
+  const [overlapRunning, setOverlapRunning] = useState(false);
+  const overlapPanelRef = useRef<{ runOverlap: (targetRows: AdSetRow[]) => Promise<void> } | null>(null);
+
+  const builderOverlap = trpc.adminMeta.builderAudienceOverlap.useMutation();
+
+  const handleRunOverlapFromReach = useCallback(async (selectedIds: string[]) => {
+    if (!settings?.accessToken || !settings?.adAccountId) return;
+    const targetRows = rows.filter(r => selectedIds.includes(r.id));
+    if (targetRows.length < 2) return;
+    setOverlapRunning(true);
+    try {
+      const adSets = targetRows.map(row => ({
+        id: row.id,
+        name: row.name,
+        campaignName: row.campaignName,
+        targetingSpec: buildTargetingSpec(row),
+        isNarrowed: !!(row.narrowInterests || row.narrowInterestObjects?.length),
+      }));
+      const result = await builderOverlap.mutateAsync({
+        accessToken: settings.accessToken,
+        adAccountId: settings.adAccountId,
+        adSets,
+      });
+      const run: OverlapRun = {
+        runAt: Date.now(),
+        overlapResults: result.overlapResults,
+        pairList: result.pairList,
+      };
+      onOverlapHistoryChange([run, ...overlapHistory].slice(0, 10));
+      // Switch to overlap tab
+      setActive('overlap');
+    } catch (err) {
+      console.error('Overlap from reach failed:', err);
+    } finally {
+      setOverlapRunning(false);
+    }
+  }, [rows, settings, overlapHistory, onOverlapHistoryChange, builderOverlap]);
 
   return (
     <div className="flex items-center gap-2">
@@ -436,7 +677,6 @@ export default function BuilderReachOverlapPanel({
         )}
       </button>
 
-      {/* Inline panel (rendered below toolbar via portal-like approach in parent) */}
       {active && (
         <div className="fixed inset-0 z-40 pointer-events-none" />
       )}
