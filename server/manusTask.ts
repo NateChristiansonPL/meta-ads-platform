@@ -95,7 +95,6 @@ export function buildSkillPrompt(
     businessManagerId?: string;
     campaignIds?: string[];
     dateRange: string;
-    additionalInstructions?: string;
     accessToken?: string;
     /** Raw JSON string from a prior Audience Overlap run (sidecarJson) to inject as enrichment */
     enrichOverlapJson?: string;
@@ -103,7 +102,7 @@ export function buildSkillPrompt(
     enrichLifecycleJson?: string;
   }
 ): string {
-  const { adAccountId, campaignIds, dateRange, additionalInstructions, accessToken, enrichOverlapJson, enrichLifecycleJson } = params;
+  const { adAccountId, campaignIds, dateRange, accessToken, enrichOverlapJson, enrichLifecycleJson } = params;
 
   // Normalize account ID — ensure it has the act_ prefix
   const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
@@ -116,10 +115,6 @@ export function buildSkillPrompt(
     ? campaignIds.join(",")
     : "";
 
-  const additionalSection = additionalInstructions
-    ? `\n\nAdditional instructions from the user: ${additionalInstructions}`
-    : "";
-
   // Build the env-var export line that injects the token at runtime.
   // The skill config.py files read META_ACCESS_TOKEN from the environment.
   const tokenExport = accessToken
@@ -129,22 +124,22 @@ export function buildSkillPrompt(
 
   switch (skillId) {
     case "weekly-optimization":
-      return PROJECT_READ_PREAMBLE + buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildWeeklyOptPrompt(accountId, datePreset, campaignFilter, tokenExport);
 
     case "performance-insights":
-      return PROJECT_READ_PREAMBLE + buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport, enrichOverlapJson, enrichLifecycleJson);
+      return PROJECT_READ_PREAMBLE + buildPerformanceInsightsPrompt(accountId, datePreset, campaignFilter, tokenExport, enrichOverlapJson, enrichLifecycleJson);
 
     case "creative-lifecycle":
-      return PROJECT_READ_PREAMBLE + buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildCreativeLifecyclePrompt(accountId, datePreset, campaignFilter, tokenExport);
 
     case "structural-audit":
-      return PROJECT_READ_PREAMBLE + buildStructuralAuditPrompt(accountId, campaignFilter, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildStructuralAuditPrompt(accountId, campaignFilter, tokenExport);
 
     case "audience-overlap":
-      return PROJECT_READ_PREAMBLE + buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, additionalSection, tokenExport);
+      return PROJECT_READ_PREAMBLE + buildAudienceOverlapPrompt(accountId, datePreset, campaignFilter, tokenExport);
 
     default:
-      return PROJECT_READ_PREAMBLE + `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}${additionalSection}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
+      return PROJECT_READ_PREAMBLE + `Run the ${SKILL_IDS[skillId] ?? skillId} skill for Meta Ads account ${accountId}.\nDate range: ${dateRange}${campaignFilter ? `\nCampaigns: ${campaignFilter}` : ""}\n\nProvide a comprehensive, detailed report with all findings and actionable recommendations.`;
   }
 }
 
@@ -167,7 +162,6 @@ function buildWeeklyOptPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  additionalSection: string,
   tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaign-ids ${campaignFilter} ` : "";
@@ -176,7 +170,6 @@ function buildWeeklyOptPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${additionalSection}
 
 ## Instructions
 
@@ -202,7 +195,6 @@ function buildPerformanceInsightsPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  additionalSection: string,
   tokenExport: string,
   enrichOverlapJson?: string,
   enrichLifecycleJson?: string
@@ -249,7 +241,7 @@ function buildPerformanceInsightsPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${additionalSection}${enrichmentBlock}
+${enrichmentBlock}
 ## Instructions
 
 Read the skill at \`/home/ubuntu/skills/pl-performance-analysis-insights-v3/SKILL.md\` first, then execute the full analysis:
@@ -300,7 +292,6 @@ function buildCreativeLifecyclePrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  additionalSection: string,
   tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}" ` : "";
@@ -309,7 +300,6 @@ function buildCreativeLifecyclePrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${additionalSection}
 
 ## Instructions
 
@@ -338,7 +328,6 @@ Do **not** re-output the file contents as a message — the report will be retri
 function buildStructuralAuditPrompt(
   accountId: string,
   campaignFilter: string,
-  additionalSection: string,
   tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? campaignFilter.split(",").join(" ") : "";
@@ -352,7 +341,6 @@ function buildStructuralAuditPrompt(
 
 **Account ID:** ${accountId}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns (select the most significant ones)"}
-${additionalSection}
 
 ## Instructions
 
@@ -385,7 +373,6 @@ function buildAudienceOverlapPrompt(
   accountId: string,
   datePreset: string,
   campaignFilter: string,
-  additionalSection: string,
   tokenExport: string
 ): string {
   const campaignArg = campaignFilter ? `--campaigns "${campaignFilter}"` : "";
@@ -394,7 +381,6 @@ function buildAudienceOverlapPrompt(
 **Account ID:** ${accountId}
 **Date Preset:** ${datePreset}
 ${campaignFilter ? `**Campaign IDs:** ${campaignFilter}` : "**Scope:** All active campaigns"}
-${additionalSection}
 
 ## Instructions
 

@@ -231,7 +231,6 @@ export const appRouter = router({
         tokenId: z.number().int().positive().optional(),
         datePreset: z.string().default("last_7d"),
         campaignIds: z.array(z.string()).optional(),
-        additionalInstructions: z.string().optional(),
         extraParams: z.record(z.string(), z.unknown()).optional(),
         agentProfile: z.enum(["manus-1.6", "manus-1.6-lite", "manus-1.6-max"]).default("manus-1.6"),
       }))
@@ -305,7 +304,6 @@ export const appRouter = router({
               businessManagerId: input.businessManagerId,
               campaignIds: input.campaignIds,
               dateRange: input.datePreset,
-              additionalInstructions: input.additionalInstructions,
               accessToken: metaAccessToken,
               enrichOverlapJson,
               enrichLifecycleJson,

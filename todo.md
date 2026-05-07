@@ -323,3 +323,11 @@
 - [x] Remove "Recommend using 1.6 Lite model" note from all skill pages
 - [x] Hardcode model to 1.6 regular in routers.ts runs.execute procedure
 - [x] Verify no model selector appears in Campaign Builder Export tab either (removed from ExportPanel.tsx and ExportPanelAdmin.tsx)
+
+## Remove Additional Instructions Free-Text Input from Skill Pages
+
+- [x] Remove additionalInstructions state and textarea from SkillRunner.tsx
+- [x] Remove additionalInstructions from the execute mutation call in SkillRunner.tsx
+- [x] Remove additionalInstructions parameter from routers.ts runs.execute input schema
+- [x] Remove additionalInstructions from buildSkillPrompt calls in routers.ts
+- [x] Remove additionalInstructions parameter from buildSkillPrompt and all skill prompt builders in manusTask.ts

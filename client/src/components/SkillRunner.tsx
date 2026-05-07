@@ -58,7 +58,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [campaignFilter, setCampaignFilter] = useState<"active" | "last_30d" | "inactive">("active");
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [enabledModules, setEnabledModules] = useState<string[]>(config.modules?.map((m) => m.id) ?? []);
-  const [additionalInstructions, setAdditionalInstructions] = useState("");
+
   const [compare, setCompare] = useState(false);
   const agentProfile = "manus-1.6" as const;
 
@@ -250,7 +250,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
         tokenId: tokenId ?? undefined,
         datePreset,
         campaignIds: selectedCampaigns,
-        additionalInstructions,
         agentProfile,
         extraParams: {
           modules: enabledModules,
@@ -550,25 +549,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             </FormField>
           </Section>
         )}
-
-        {/* Additional Instructions */}
-        <Section title="Additional Instructions" optional hint="Add any free-text context for the agent — e.g. 'Focus on prospecting campaigns only' or 'We launched a new creative on April 15'. This is injected directly into the agent's prompt.">
-          <textarea
-            value={additionalInstructions}
-            onChange={(e) => setAdditionalInstructions(e.target.value)}
-            placeholder="Any extra context or focus areas for this analysis run…"
-            rows={3}
-            className="w-full text-xs rounded-lg px-3 py-2.5 resize-none outline-none transition-colors"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "#FAFAFA",
-              fontFamily: "'Montserrat', sans-serif",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = config.color + "60")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
-          />
-        </Section>
 
         {/* Run Button */}
         <div className="flex flex-col gap-1.5 mt-2">
