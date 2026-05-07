@@ -331,3 +331,15 @@
 - [x] Remove additionalInstructions parameter from routers.ts runs.execute input schema
 - [x] Remove additionalInstructions from buildSkillPrompt calls in routers.ts
 - [x] Remove additionalInstructions parameter from buildSkillPrompt and all skill prompt builders in manusTask.ts
+
+## Admin Campaign Builder — UI View Toggle (Pillar Hub alternate view)
+
+- [x] Create PillarHubAdmin.tsx — Pillar Hub alternate view for admin builder (port of option-e.jsx to React/TS using existing state types)
+- [x] Add viewMode state ('spreadsheet' | 'pillar') to CampaignBuilderAdmin.tsx
+- [x] Add tweakSettings state (density, friendly labels, advanced columns, dark mode) to CampaignBuilderAdmin.tsx
+- [x] Add "UI View" button to headerActions in CampaignBuilderAdmin.tsx (right of "Campaign Builder" title)
+- [x] Add TweaksPanel dropdown/popover that opens from the UI View button with: Density (compact/comfortable), Plain-language labels toggle, Advanced columns toggle
+- [x] Wire viewMode to conditionally render PillarHubAdmin vs existing spreadsheet tabs
+- [x] Apply tweakSettings as CSS classes/vars to the admin builder container
+- [x] Ensure Pillar Hub view reads from and writes to the same CampaignBuilderState (no duplicate state)
+- [x] Scope all new styles to admin builder only (no global CSS pollution)

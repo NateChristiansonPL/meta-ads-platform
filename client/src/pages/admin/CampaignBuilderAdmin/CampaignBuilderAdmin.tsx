@@ -5,7 +5,7 @@
  * Credential flow: BM token (vault) → ad account → FB page → IG → pixel
  * All credentials resolved server-side via tokenId; accessToken never typed manually.
  */
-import { useState } from "react";
+import { useState, useRef } from "react";
 import AppShell from "@/components/AppShell";
 import CampaignTable from "./CampaignTableAdmin";
 import AdSetsTable from "./AdSetsTableAdmin";
@@ -18,6 +18,8 @@ import LeadGenFormModal from "./LeadGenFormModalAdmin";
 import ImportMetaStructureModal from "./ImportMetaStructureModalAdmin";
 import CreativeLibrarySessionModal from "./CreativeLibrarySessionModalAdmin";
 import { useLaunchBuild } from "./useLaunchBuildAdmin";
+import PillarHubAdmin, { TweakSettings } from "./PillarHubAdmin";
+import TweaksPanelAdmin from "./TweaksPanelAdmin";
 import {
   CampaignBuilderState,
   BuildSettings,
@@ -32,11 +34,19 @@ import {
   ImportedMetaAdSet,
   CreativeRow,
 } from "./campaignStoreAdmin";
-import { DownloadCloud, Layers, Settings } from "lucide-react";
+import { DownloadCloud, Layers, Settings, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export";
+type ViewMode = "spreadsheet" | "pillar";
+
+const DEFAULT_TWEAKS: TweakSettings = {
+  density: "comfortable",
+  friendly: false,
+  advanced: false,
+  dark: true,
+};
 
 // ── Initial state ─────────────────────────────────────────────────────────────
 function makeInitialSettings(): BuildSettings {
@@ -80,6 +90,10 @@ export default function CampaignBuilderAdmin() {
   const [creativeImportOpen, setCreativeImportOpen] = useState(false);
   const [leadGenOpen, setLeadGenOpen] = useState(false);
   const [activeLeadGenFormId, setActiveLeadGenFormId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("spreadsheet");
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [tweaks, setTweaks] = useState<TweakSettings>(DEFAULT_TWEAKS);
+  const tweaksBtnRef = useRef<HTMLDivElement>(null);
 
   // ── Launch hook ──────────────────────────────────────────────────────────────
   const { launch, progress, reset } = useLaunchBuild(state, ({ ads, campaigns, adSets }) => {
@@ -299,6 +313,52 @@ export default function CampaignBuilderAdmin() {
           : <span>Setup Account</span>
         }
       </button>
+
+      {/* UI View toggle + tweaks */}
+      <div ref={tweaksBtnRef} style={{ position: "relative" }}>
+        <button
+          onClick={() => {
+            if (viewMode === "spreadsheet") {
+              setViewMode("pillar");
+              setTweaksOpen(true);
+            } else {
+              setTweaksOpen(v => !v);
+            }
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
+          style={{
+            background: viewMode === "pillar" ? "rgba(237,19,95,0.15)" : "rgba(255,255,255,0.08)",
+            color: viewMode === "pillar" ? "#ED135F" : "rgba(255,255,255,0.7)",
+            border: `1px solid ${viewMode === "pillar" ? "rgba(237,19,95,0.35)" : "rgba(255,255,255,0.16)"}`,
+          }}
+          title={viewMode === "spreadsheet" ? "Switch to Pillar Hub view" : "Pillar Hub view active — click to adjust tweaks"}
+        >
+          <LayoutGrid size={12} />
+          <span>UI View</span>
+        </button>
+        {viewMode === "pillar" && (
+          <button
+            onClick={() => setViewMode("spreadsheet")}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-600 transition-all"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.5)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              marginLeft: 4,
+            }}
+            title="Switch back to spreadsheet view"
+          >
+            ← Spreadsheet
+          </button>
+        )}
+        {tweaksOpen && viewMode === "pillar" && (
+          <TweaksPanelAdmin
+            tweaks={tweaks}
+            onChange={setTweaks}
+            onClose={() => setTweaksOpen(false)}
+          />
+        )}
+      </div>
     </div>
   );
 
@@ -312,125 +372,146 @@ export default function CampaignBuilderAdmin() {
       {/* Full-bleed container — cancels AppShell's p-6 */}
       <div className="-m-6 h-[calc(100%+3rem)] flex flex-col overflow-hidden">
 
-        {/* ── Build mode + tab bar ── */}
-        <div
-          className="flex items-center justify-between shrink-0 px-4"
-          style={{
-            height: 44,
-            background: "rgba(14,13,58,0.98)",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-          }}
-        >
-          {/* Build mode pills */}
-          <div className="flex items-center gap-1">
-            {BUILD_MODES.map(m => (
-              <button
-                key={m.id}
-                onClick={() => update("buildMode", m.id)}
-                className="px-2.5 py-1 rounded-md text-[11px] font-600 transition-all"
-                style={{
-                  background: state.buildMode === m.id ? "rgba(0,190,239,0.15)" : "transparent",
-                  color: state.buildMode === m.id ? "#00BEEF" : "rgba(255,255,255,0.4)",
-                  border: `1px solid ${state.buildMode === m.id ? "rgba(0,190,239,0.3)" : "transparent"}`,
-                }}
-                title={m.sub}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+        {/* ── Build mode + tab bar (spreadsheet view only) ── */}
+        {viewMode === "spreadsheet" && (
+          <div
+            className="flex items-center justify-between shrink-0 px-4"
+            style={{
+              height: 44,
+              background: "rgba(14,13,58,0.98)",
+              borderBottom: "1px solid rgba(255,255,255,0.07)",
+            }}
+          >
+            {/* Build mode pills */}
+            <div className="flex items-center gap-1">
+              {BUILD_MODES.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => update("buildMode", m.id)}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-600 transition-all"
+                  style={{
+                    background: state.buildMode === m.id ? "rgba(0,190,239,0.15)" : "transparent",
+                    color: state.buildMode === m.id ? "#00BEEF" : "rgba(255,255,255,0.4)",
+                    border: `1px solid ${state.buildMode === m.id ? "rgba(0,190,239,0.3)" : "transparent"}`,
+                  }}
+                  title={m.sub}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-0.5">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-600 transition-all"
-                style={{
-                  background: activeTab === tab.id ? "rgba(255,255,255,0.08)" : "transparent",
-                  color: activeTab === tab.id ? "#FAFAFA" : "rgba(255,255,255,0.4)",
-                  borderBottom: activeTab === tab.id ? "2px solid #00BEEF" : "2px solid transparent",
-                  borderRadius: "6px 6px 0 0",
-                }}
-              >
-                {tab.label}
-                {tab.count !== undefined && tab.count > 0 && (
-                  <span
-                    className="text-[9px] font-700 px-1 py-0.5 rounded-full"
-                    style={{ background: "rgba(0,190,239,0.2)", color: "#00BEEF" }}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            ))}
+            {/* Tabs */}
+            <div className="flex items-center gap-0.5">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-600 transition-all"
+                  style={{
+                    background: activeTab === tab.id ? "rgba(255,255,255,0.08)" : "transparent",
+                    color: activeTab === tab.id ? "#FAFAFA" : "rgba(255,255,255,0.4)",
+                    borderBottom: activeTab === tab.id ? "2px solid #00BEEF" : "2px solid transparent",
+                    borderRadius: "6px 6px 0 0",
+                  }}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && tab.count > 0 && (
+                    <span
+                      className="text-[9px] font-700 px-1 py-0.5 rounded-full"
+                      style={{ background: "rgba(0,190,239,0.2)", color: "#00BEEF" }}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* ── Tab content ── */}
+        {/* ── Content area ── */}
         <div className="flex-1 overflow-hidden">
-          {activeTab === "campaigns" && (
-            <div className="h-full overflow-auto">
-              <CampaignTable
-                rows={state.campaigns}
-                onChange={rows => update("campaigns", rows)}
-              />
-            </div>
+
+          {/* Pillar Hub view */}
+          {viewMode === "pillar" && (
+            <PillarHubAdmin
+              state={state}
+              tweaks={tweaks}
+              onStateChange={(key, val) => update(key as keyof CampaignBuilderState, val as CampaignBuilderState[keyof CampaignBuilderState])}
+              onGoToExport={() => {
+                setViewMode("spreadsheet");
+                setActiveTab("export");
+              }}
+            />
           )}
 
-          {activeTab === "ad-sets" && (
-            <div className="h-full overflow-auto">
-              <AdSetsTable
-                rows={state.adSets}
-                campaigns={state.campaigns}
-                onChange={rows => update("adSets", rows)}
-                settings={state.settings}
-                reachHistory={state.reachHistory}
-                overlapHistory={state.overlapHistory}
-                onReachHistoryChange={h => update("reachHistory", h)}
-                onOverlapHistoryChange={h => update("overlapHistory", h)}
-              />
-            </div>
-          )}
+          {/* Spreadsheet tabs */}
+          {viewMode === "spreadsheet" && (
+            <>
+              {activeTab === "campaigns" && (
+                <div className="h-full overflow-auto">
+                  <CampaignTable
+                    rows={state.campaigns}
+                    onChange={rows => update("campaigns", rows)}
+                  />
+                </div>
+              )}
 
-          {activeTab === "creative-library" && (
-            <div className="h-full overflow-auto">
-              <CreativesTable
-                rows={state.creatives}
-                carouselRows={state.carouselCreatives}
-                onChange={rows => update("creatives", rows)}
-                onCarouselChange={rows => update("carouselCreatives", rows)}
-                settings={state.settings}
-              />
-            </div>
-          )}
+              {activeTab === "ad-sets" && (
+                <div className="h-full overflow-auto">
+                  <AdSetsTable
+                    rows={state.adSets}
+                    campaigns={state.campaigns}
+                    onChange={rows => update("adSets", rows)}
+                    settings={state.settings}
+                    reachHistory={state.reachHistory}
+                    overlapHistory={state.overlapHistory}
+                    onReachHistoryChange={h => update("reachHistory", h)}
+                    onOverlapHistoryChange={h => update("overlapHistory", h)}
+                  />
+                </div>
+              )}
 
-          {activeTab === "ads" && (
-            <div className="h-full overflow-hidden">
-              <AdsMatrix
-                ads={state.ads}
-                adSets={state.adSets}
-                creatives={[...state.creatives, ...state.carouselCreatives]}
-                campaigns={state.campaigns}
-                buildMode={state.buildMode}
-                settings={state.settings.accessToken ? {
-                  accessToken: state.settings.accessToken,
-                  facebookPageId: state.settings.facebookPageId,
-                } : undefined}
-                onChange={ads => update("ads", ads)}
-              />
-            </div>
-          )}
+              {activeTab === "creative-library" && (
+                <div className="h-full overflow-auto">
+                  <CreativesTable
+                    rows={state.creatives}
+                    carouselRows={state.carouselCreatives}
+                    onChange={rows => update("creatives", rows)}
+                    onCarouselChange={rows => update("carouselCreatives", rows)}
+                    settings={state.settings}
+                  />
+                </div>
+              )}
 
-          {activeTab === "export" && (
-            <div className="h-full overflow-auto">
-              <ExportPanel
-                state={state}
-                onLaunch={launch}
-                launchProgress={progress}
-              />
-            </div>
+              {activeTab === "ads" && (
+                <div className="h-full overflow-hidden">
+                  <AdsMatrix
+                    ads={state.ads}
+                    adSets={state.adSets}
+                    creatives={[...state.creatives, ...state.carouselCreatives]}
+                    campaigns={state.campaigns}
+                    buildMode={state.buildMode}
+                    settings={state.settings.accessToken ? {
+                      accessToken: state.settings.accessToken,
+                      facebookPageId: state.settings.facebookPageId,
+                    } : undefined}
+                    onChange={ads => update("ads", ads)}
+                  />
+                </div>
+              )}
+
+              {activeTab === "export" && (
+                <div className="h-full overflow-auto">
+                  <ExportPanel
+                    state={state}
+                    onLaunch={launch}
+                    launchProgress={progress}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
