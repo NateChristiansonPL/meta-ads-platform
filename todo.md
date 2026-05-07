@@ -343,3 +343,29 @@
 - [x] Apply tweakSettings as CSS classes/vars to the admin builder container
 - [x] Ensure Pillar Hub view reads from and writes to the same CampaignBuilderState (no duplicate state)
 - [x] Scope all new styles to admin builder only (no global CSS pollution)
+
+## Admin Campaign Builder — Spreadsheet Design + Feature Updates
+
+### Design Tokens & Pre-Launch QA Panel
+- [x] Apply spreadsheet design tokens to admin builder: dark navy bg, row hover, header styling, cell input styles
+- [x] Add Pre-Launch QA collapsible right-side panel to CampaignBuilderAdmin (all tabs) matching design file
+- [x] QA panel: error/warning/info badge pills, issue cards with Jump links, Helpful Actions section
+
+### Ad Sets Tab — Checkboxes + Reach/Overlap Buttons
+- [x] Add checkbox to left of each ad set row in AdSetsTableAdmin
+- [x] Move "Reach Estimate" button to header with count badge (disabled until ≥1 checkbox selected)
+- [x] Move "Audience Overlap" button to header (separate from Reach Estimate)
+- [x] Enable Reach Estimate button when ≥1 ad set checkbox is checked
+
+### Targeting Modal Redesign
+- [x] Redesign targeting modal to match spreadsheet design (dark modal, tab bar with icons)
+- [x] Remove "Run Reach" and "Check Overlap" buttons from bottom of targeting modal
+- [x] Make targeting modal 30% wider than current design (~700px)
+- [x] Keep Location / Interests / Custom tabs wired up as they currently are
+
+### Combined Reach Estimate + Audience Overlap Modal
+- [x] Build combined modal with two tabs: "Reach Estimate" and "Audience Overlap"
+- [x] Reach Estimate tab: uses selected rows from table, runs against those rows, Close button bottom-left
+- [x] Audience Overlap tab: populated when user runs overlap, Close button bottom-left
+- [x] Persist reach estimate and overlap data between modal opens (survives close/reopen)
+- [x] If past data exists, enable Reach Estimate button on ad sets tab even with no checkbox selected
