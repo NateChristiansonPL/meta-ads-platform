@@ -233,7 +233,7 @@ export const appRouter = router({
         campaignIds: z.array(z.string()).optional(),
         additionalInstructions: z.string().optional(),
         extraParams: z.record(z.string(), z.unknown()).optional(),
-        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite", "manus-1.6-max"]).default("manus-1.6-lite"),
+        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite", "manus-1.6-max"]).default("manus-1.6"),
       }))
       .mutation(async ({ ctx, input }) => {
         const apiKey = process.env.MANUS_API_KEY;
@@ -819,7 +819,7 @@ export const appRouter = router({
         pixelId: z.string().optional(),
         buildMode: z.enum(["full", "ads-only", "update"]),
         stateJson: z.string().min(1), // full CampaignBuilderState as JSON
-        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6-lite"),
+        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6"),
         projectId: z.string().optional(), // override the Manus project ID (e.g. admin builder uses pl-meta-builder project)
       }))
       .mutation(async ({ ctx, input }) => {

@@ -60,7 +60,7 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
   const [enabledModules, setEnabledModules] = useState<string[]>(config.modules?.map((m) => m.id) ?? []);
   const [additionalInstructions, setAdditionalInstructions] = useState("");
   const [compare, setCompare] = useState(false);
-  const [agentProfile, setAgentProfile] = useState<"manus-1.6" | "manus-1.6-lite">("manus-1.6-lite");
+  const agentProfile = "manus-1.6" as const;
 
   // Enrichment: selected run IDs from prior Audience Overlap / Creative Lifecycle runs
   const [enrichOverlapRunId, setEnrichOverlapRunId] = useState<number | null>(null);
@@ -568,36 +568,6 @@ export default function SkillRunner({ config }: SkillRunnerProps) {
             onFocus={(e) => (e.currentTarget.style.borderColor = config.color + "60")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
           />
-        </Section>
-
-        {/* Model Selector */}
-        <Section title="Manus Model" hint="The Manus model controls the AI agent used for this run. 1.6 Lite is recommended for most runs for credit efficiency. Use 1.6 for more complex analyses that benefit from deeper reasoning.">
-          <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>
-            Recommend using <span style={{ color: "rgba(255,255,255,0.55)", fontWeight: 600 }}>1.6 Lite</span> model for credit efficiency.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {(["manus-1.6-lite", "manus-1.6"] as const).map((m) => {
-              const labels: Record<string, { short: string; sub: string }> = {
-                "manus-1.6-lite": { short: "1.6 Lite", sub: "Faster · fewer credits" },
-                "manus-1.6": { short: "1.6", sub: "Balanced" },
-              };
-              const active = agentProfile === m;
-              return (
-                <button
-                  key={m}
-                  onClick={() => setAgentProfile(m)}
-                  className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-center transition-all"
-                  style={{
-                    background: active ? `${config.color}20` : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${active ? config.color + "50" : "rgba(255,255,255,0.08)"}`,
-                  }}
-                >
-                  <span className="text-xs font-bold" style={{ color: active ? config.color : "rgba(255,255,255,0.6)" }}>{labels[m].short}</span>
-                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.6rem" }}>{labels[m].sub}</span>
-                </button>
-              );
-            })}
-          </div>
         </Section>
 
         {/* Run Button */}

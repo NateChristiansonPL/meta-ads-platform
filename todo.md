@@ -312,6 +312,14 @@
 - [x] TypeScript check (0 errors), tests (23 passing), checkpoint, package zip
 
 ## Invite System Fixes
-- [ ] Remove invite link from notifyOwner content so Manus does not forward it to invitees
-- [ ] Fix acceptedAt being set immediately on invite creation — should only be set when magic link is clicked
-- [ ] Fix Team Members page to only show isTeamMember=true users (keep invited users out of Team Members section)
+- [x] Remove invite link from notifyOwner content so Manus does not forward it to invitees
+- [x] Fix acceptedAt being set immediately on invite creation — should only be set when magic link is clicked (confirmed already correct)
+- [x] Fix Team Members page to only show isTeamMember=true users (keep invited users out of Team Members section)
+
+## Remove Model Selector from Skill Pages
+
+- [x] Remove model selector UI from SkillRunner component (or wherever it is rendered)
+- [x] Remove model-related state/props from all skill pages
+- [x] Remove "Recommend using 1.6 Lite model" note from all skill pages
+- [x] Hardcode model to 1.6 regular in routers.ts runs.execute procedure
+- [x] Verify no model selector appears in Campaign Builder Export tab either (removed from ExportPanel.tsx and ExportPanelAdmin.tsx)
