@@ -45,6 +45,8 @@ export type TargetingPopupProps = {
   setBulkLocText: (v: string) => void;
   /** When true, renders as an inline panel (no absolute positioning, no outside-click dismiss) */
   inline?: boolean;
+  /** When set, only this tab is active; other tabs are visually disabled */
+  lockedTab?: AudienceFocus;
 };
 
 export function TargetingPopup({
@@ -56,7 +58,7 @@ export function TargetingPopup({
   narrowQuery, narrowRowId, setNarrowQuery, setNarrowRowId,
   narrowType, setNarrowType, narrowResults, searchingNarrow,
   audienceSearch, setAudienceSearch, customAudiences, loadingAudiences,
-  update, onClose, setBulkLocModal, setBulkLocText, inline = false,
+  update, onClose, setBulkLocModal, setBulkLocText, inline = false, lockedTab,
 }: TargetingPopupProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -82,21 +84,29 @@ export function TargetingPopup({
           <MapPin size={12} className="text-[#00BEEF]" />
           <span className="text-[12px] font-700 text-white">Targeting · {tmRow.name}</span>
         </div>
-        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors"><X size={14} /></button>
+        {!inline && <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors"><X size={14} /></button>}
       </div>
       {/* Tab bar */}
       <div className="flex items-center gap-0.5 px-4 pt-2 pb-0">
-        {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => (
-          <button key={f} onClick={() => setAudienceFocus(f)}
-            className={cn(
-              'px-3 py-1.5 rounded-t text-[10px] font-600 border-b-2 transition-all',
-              audienceFocus === f
-                ? 'border-[#00BEEF] text-[#00BEEF] bg-[rgba(0,190,239,0.06)]'
-                : 'border-transparent text-white/40 hover:text-white/70'
-            )}>
-            {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : '👥 Custom'}
-          </button>
-        ))}
+        {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => {
+          const isLocked = lockedTab !== undefined && f !== lockedTab;
+          return (
+            <button key={f}
+              disabled={isLocked}
+              onClick={() => !isLocked && setAudienceFocus(f)}
+              title={isLocked ? 'Use the Audience step to edit this' : undefined}
+              className={cn(
+                'px-3 py-1.5 rounded-t text-[10px] font-600 border-b-2 transition-all',
+                audienceFocus === f && !isLocked
+                  ? 'border-[#00BEEF] text-[#00BEEF] bg-[rgba(0,190,239,0.06)]'
+                  : isLocked
+                    ? 'border-transparent text-white/20 cursor-not-allowed opacity-40'
+                    : 'border-transparent text-white/40 hover:text-white/70'
+              )}>
+              {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : '👥 Custom'}
+            </button>
+          );
+        })}
         {audienceFocus === 'location' && (
           <button onClick={() => { setBulkLocModal({ rowId: tmRow.id }); setBulkLocText(''); }}
             className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded border border-[rgba(255,255,255,0.12)] text-[10px] font-600 text-white/50 hover:text-white/80 hover:border-[rgba(255,255,255,0.25)] transition-colors">

@@ -424,16 +424,16 @@
 
 ## Pillar View — Round 2 Fixes & Enhancements
 
-- [ ] Fix bulk paste button click in Location tab (z-index / pointer-events issue when inline)
-- [ ] Fix Done button not working on any step (last step should navigate to next ad set or go back to list)
-- [ ] Schedule step: replace date-only inputs with datetime-local pickers (same as spreadsheet view)
-- [ ] Schedule step: remove Campaign dropdown
-- [ ] Schedule step: add Budget Type, Amount, Optimization Goal fields below start/end datetime
-- [ ] Schedule step: add Conversion Event searchable input (enabled only for CONVERSIONS/VALUE/QUALITY_LEAD goals, auto-populated from pixel events)
-- [ ] Rename "Budget" step to a name that covers schedule + budget + optimization (e.g. "Delivery")
-- [ ] Replace old Budget step with new "Platform" step: platform selector (FB, IG, etc.) + dynamic placement checkboxes
-- [ ] Platform step: combine FB Feed + IG Feed → "Feed", FB Stories + IG Stories → "Stories", FB Reels + IG Reels → "Reels" for simplified UX
-- [ ] Platform step: support multi-select placements, dynamic based on selected platforms
+- [x] Fix bulk paste button click in Location tab (z-index / pointer-events issue when inline)
+- [x] Fix Done button not working on any step (last step should navigate to next ad set or go back to list)
+- [x] Schedule step: replace date-only inputs with datetime-local pickers (same as spreadsheet view)
+- [x] Schedule step: remove Campaign dropdown
+- [x] Schedule step: add Budget Type, Amount, Optimization Goal fields below start/end datetime
+- [x] Schedule step: add Conversion Event searchable input (enabled only for CONVERSIONS/VALUE/QUALITY_LEAD goals, auto-populated from pixel events)
+- [x] Rename "Budget" step to a name that covers schedule + budget + optimization (e.g. "Delivery")
+- [x] Replace old Budget step with new "Platform" step: platform selector (FB, IG, etc.) + dynamic placement checkboxes
+- [x] Platform step: combine FB Feed + IG Feed → "Feed", FB Stories + IG Stories → "Stories", FB Reels + IG Reels → "Reels" for simplified UX
+- [x] Platform step: support multi-select placements, dynamic based on selected platforms
 
 ## Pillar View — Round 2 Fixes
 

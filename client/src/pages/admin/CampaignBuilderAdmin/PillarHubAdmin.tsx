@@ -729,6 +729,7 @@ function PillarAdSets({
                       inline
                       tmRow={focused}
                       audienceFocus="location"
+                      lockedTab="location"
                       setAudienceFocus={setAudienceFocus}
                       hasCredentials={hasCredentials}
                       locationQuery={locationQuery}
@@ -1596,7 +1597,7 @@ const PH_STYLES = `
 
 /* ── Form elements ── */
 .ph-form { display: flex; flex-direction: column; gap: 16px; }
-.ph-fld-group { border: 1px solid var(--ph-border); border-radius: 10px; overflow: hidden; }
+.ph-fld-group { border: 1px solid var(--ph-border); border-radius: 10px; overflow: visible; }
 .ph-fld-group-head {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
