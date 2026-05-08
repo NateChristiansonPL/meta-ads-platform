@@ -14,6 +14,9 @@ import {
   CampaignRow,
   CreativeRow,
   BuildSettings,
+  conversionEventApplicable,
+  OPTIMIZATION_GOAL_LABELS,
+  PLATFORM_PLACEMENTS,
 } from "./campaignStoreAdmin";
 import {
   CheckCircle2,
@@ -28,6 +31,8 @@ import {
   Calendar,
   DollarSign,
   Target,
+  Check,
+  Monitor,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { TargetingPopup, AudienceFocus } from "./TargetingPopupAdmin";
@@ -486,6 +491,7 @@ function PillarAdSets({
   const focused = adSets.find((a) => a.id === focusId) ?? adSets[0];
   const idx = adSets.findIndex((a) => a.id === focused?.id);
   const hasCredentials = !!(settings?.accessToken && settings?.adAccountId);
+  const hasPixel = !!(settings?.pixelId && hasCredentials);
 
   // ── Search state (mirrors AdSetsTableAdmin) ──────────────────────────────
   const [audienceFocus, setAudienceFocus] = useState<AudienceFocus>('location');
@@ -498,10 +504,15 @@ function PillarAdSets({
   const [narrowRowId, setNarrowRowId] = useState<string | null>(null);
   const [narrowType, setNarrowType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
   const [audienceSearch, setAudienceSearch] = useState('');
+
+  // ── Bulk paste state ──────────────────────────────────────────────────────
   const [bulkLocModal, setBulkLocModal] = useState<{ rowId: string } | null>(null);
   const [bulkLocText, setBulkLocText] = useState('');
+  const [bulkLocType, setBulkLocType] = useState<'city' | 'region' | 'country' | 'zip'>('city');
+  const [bulkLocMatching, setBulkLocMatching] = useState(false);
 
   // ── tRPC queries (mirrors AdSetsTableAdmin) ──────────────────────────────
+  const utils = trpc.useUtils();
   const { data: locationResults, isFetching: searchingLocations } = trpc.adminMeta.searchGeoLocations.useQuery(
     { accessToken: settings?.accessToken ?? '', query: locationQuery, location_types: ['city', 'region', 'country', 'zip'] },
     { enabled: hasCredentials && locationQuery.length >= 2, staleTime: 60 * 1000 }
@@ -518,7 +529,12 @@ function PillarAdSets({
     { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', search: audienceSearch || undefined },
     { enabled: hasCredentials && audienceSearch.trim().length > 0, staleTime: 2 * 60 * 1000 }
   );
+  const { data: pixelEventsData } = trpc.adminMeta.getPixelEvents.useQuery(
+    { accessToken: settings?.accessToken ?? '', pixelId: settings?.pixelId ?? '', adAccountId: settings?.adAccountId ?? '' },
+    { enabled: hasPixel, staleTime: 5 * 60 * 1000 }
+  );
   const customAudiences = customAudiencesData?.audiences ?? [];
+  const pixelEvents = pixelEventsData?.events ?? [];
 
   const updateFocused = useCallback(
     (patch: Partial<AdSetRow>) => {
@@ -526,7 +542,6 @@ function PillarAdSets({
     },
     [adSets, focused, onChange]
   );
-
   // Generic update by id (required by TargetingPopup)
   const updateById = useCallback(
     (id: string, patch: Partial<AdSetRow>) => {
@@ -535,7 +550,87 @@ function PillarAdSets({
     [adSets, onChange]
   );
 
-  const STEPS = ["Locations", "Audience", "Schedule", "Budget"];
+  // Steps: Locations | Audience | Delivery | Platform
+  const STEPS = ["Locations", "Audience", "Delivery", "Platform"];
+
+  // Conversion event applicable goals
+  const showConvEvent = focused
+    ? (focused.optimizationGoal === 'CONVERSIONS' || focused.optimizationGoal === 'VALUE' || focused.optimizationGoal === 'QUALITY_LEAD')
+    : false;
+
+  // Platform/placement helpers
+  const COMBINED_PLATFORMS = ['facebook', 'instagram', 'threads', 'messenger', 'audience_network'];
+  // Combined placement groups: Feed, Stories, Reels are merged across FB+IG
+  const COMBINED_PLACEMENTS: { key: string; label: string; platforms: string[] }[] = [
+    { key: 'feed',        label: 'Feed',            platforms: ['facebook', 'instagram'] },
+    { key: 'stories',     label: 'Stories',          platforms: ['facebook', 'instagram', 'messenger'] },
+    { key: 'reels',       label: 'Reels',            platforms: ['facebook', 'instagram'] },
+    { key: 'profile_feed',label: 'Profile Feed',     platforms: ['facebook', 'instagram'] },
+    { key: 'reels_overlay',label: 'Reels Overlay',   platforms: ['facebook'] },
+    { key: 'right_column',label: 'Right Column',     platforms: ['facebook'] },
+    { key: 'marketplace', label: 'Marketplace',      platforms: ['facebook'] },
+    { key: 'search',      label: 'Search',           platforms: ['facebook', 'instagram'] },
+    { key: 'business_explore', label: 'Business Explore', platforms: ['facebook'] },
+    { key: 'notifications', label: 'Notifications',  platforms: ['facebook'] },
+    { key: 'instream_reels', label: 'In-Stream Reels', platforms: ['facebook'] },
+    { key: 'explore_home',label: 'Explore Home',     platforms: ['instagram'] },
+    { key: 'threads_feed',label: 'Threads Feed',     platforms: ['threads'] },
+    { key: 'native',      label: 'Native',           platforms: ['audience_network'] },
+    { key: 'banner',      label: 'Banner',           platforms: ['audience_network'] },
+  ];
+  // Map combined key → actual API keys
+  const COMBINED_TO_API: Record<string, string[]> = {
+    feed:             ['facebook_feed', 'instagram_stream'],
+    stories:          ['facebook_stories', 'instagram_stories', 'messenger_stories'],
+    reels:            ['facebook_reels', 'instagram_reels'],
+    profile_feed:     ['facebook_profile_feed', 'instagram_profile_feed'],
+    reels_overlay:    ['facebook_reels_overlay'],
+    right_column:     ['facebook_right_column'],
+    marketplace:      ['facebook_marketplace'],
+    search:           ['facebook_search', 'instagram_search'],
+    business_explore: ['facebook_business_explore'],
+    notifications:    ['facebook_notifications'],
+    instream_reels:   ['facebook_instream_reels'],
+    explore_home:     ['instagram_explore_home'],
+    threads_feed:     ['threads_feed'],
+    native:           ['audience_network_native'],
+    banner:           ['audience_network_banner'],
+  };
+  // Check if a combined placement is "selected" (any of its API keys are in placements)
+  const isCombinedSelected = (combinedKey: string) => {
+    const apiKeys = COMBINED_TO_API[combinedKey] ?? [];
+    return apiKeys.some(k => (focused?.placements ?? []).includes(k));
+  };
+  // Toggle a combined placement
+  const toggleCombinedPlacement = (combinedKey: string) => {
+    if (!focused) return;
+    const apiKeys = COMBINED_TO_API[combinedKey] ?? [];
+    const currentlySelected = isCombinedSelected(combinedKey);
+    let next: string[];
+    if (currentlySelected) {
+      // Remove all API keys for this combined placement
+      next = focused.placements.filter(p => !apiKeys.includes(p));
+    } else {
+      // Add only the API keys that match selected platforms
+      const toAdd = apiKeys.filter(k =>
+        focused.platforms.some(pl => k.startsWith(pl === 'audience_network' ? 'audience_network' : pl))
+      );
+      next = [...focused.placements, ...toAdd.filter(k => !focused.placements.includes(k))];
+    }
+    updateFocused({ placements: next });
+  };
+  // Toggle platform
+  const togglePlatform = (p: string) => {
+    if (!focused) return;
+    const next = focused.platforms.includes(p)
+      ? focused.platforms.filter(x => x !== p)
+      : [...focused.platforms, p];
+    // Remove placements for deselected platform
+    const nextPlacements = focused.placements.filter(pl => next.some(np =>
+      np === 'audience_network' ? pl.startsWith('audience_network') : pl.startsWith(np)
+    ));
+    updateFocused({ platforms: next, placements: nextPlacements });
+  };
 
   return (
     <div className="ph-split">
@@ -566,7 +661,6 @@ function PillarAdSets({
           );
         })}
       </div>
-
       {/* Editor */}
       {focused && (
         <div className="ph-editor">
@@ -595,7 +689,6 @@ function PillarAdSets({
               </button>
             </div>
           </div>
-
           {/* Step progress */}
           <div className="ph-mini-steps">
             {STEPS.map((_, i) => (
@@ -605,7 +698,6 @@ function PillarAdSets({
               />
             ))}
           </div>
-
           <div className="ph-step-header">
             <div>
               <div className="ph-step-eyebrow">Step {step} of {STEPS.length}</div>
@@ -623,8 +715,8 @@ function PillarAdSets({
               ))}
             </div>
           </div>
-
           <div className="ph-form">
+            {/* ── STEP 1: Locations ── */}
             {step === 1 && (
               <div className="ph-fld-group">
                 <div className="ph-fld-group-head">
@@ -666,7 +758,7 @@ function PillarAdSets({
                       customAudiences={customAudiences}
                       loadingAudiences={loadingAudiences}
                       update={updateById}
-                      onClose={() => {}}
+                      onClose={() => {/* inline — no close needed */}}
                       setBulkLocModal={setBulkLocModal}
                       setBulkLocText={setBulkLocText}
                     />
@@ -674,60 +766,17 @@ function PillarAdSets({
                 </div>
               </div>
             )}
-
+            {/* ── STEP 2: Audience ── */}
             {step === 2 && (
               <div className="ph-fld-group">
                 <div className="ph-fld-group-head">
-                  <Users size={12} style={{ color: "var(--pl-orange)" }} />
-                  <h4>Who are we reaching?</h4>
+                  <Users size={12} style={{ color: "var(--pl-cyan)" }} />
+                  <h4>Who are they?</h4>
                 </div>
                 <div className="ph-fld-group-body">
-                  {/* Age / Gender row */}
-                  <div className="ph-fld-row">
-                    <div className="ph-fld">
-                      <label className="ph-lbl">Age Min</label>
-                      <input
-                        className="ph-input"
-                        value={focused.ageMin}
-                        onChange={(e) => updateFocused({ ageMin: e.target.value })}
-                        placeholder="18"
-                      />
-                    </div>
-                    <div className="ph-fld">
-                      <label className="ph-lbl">Age Max</label>
-                      <input
-                        className="ph-input"
-                        value={focused.ageMax}
-                        onChange={(e) => updateFocused({ ageMax: e.target.value })}
-                        placeholder="65"
-                      />
-                    </div>
-                    <div className="ph-fld">
-                      <label className="ph-lbl">Gender</label>
-                      <div className="ph-seg">
-                        {(["All", "M", "F"] as const).map((g) => {
-                          const val = g === "All" ? "" : g;
-                          const isOn = g === "All" ? !focused.genders : focused.genders === val;
-                          return (
-                            <button
-                              key={g}
-                              className={isOn ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
-                              onClick={() => updateFocused({ genders: val })}
-                            >
-                              {g}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Targeting summary chips */}
-                  <div className="ph-fld">
-                    <label className="ph-lbl" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Target size={11} style={{ color: 'var(--pl-cyan)' }} />
-                      Targeting
-                    </label>
+                  <div className="ph-fld" style={{ marginBottom: 8 }}>
+                    <label className="ph-lbl">Active Targeting</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
                       {focused.geoLocations?.split('\n').filter(Boolean).map((loc, i) => (
                         <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(0,190,239,0.1)', border: '1px solid rgba(0,190,239,0.25)', borderRadius: 999, fontSize: 10, color: '#00BEEF' }}>
@@ -759,10 +808,9 @@ function PillarAdSets({
                       )}
                     </div>
                   </div>
-
                   {/* Full TargetingPopup — rendered inline (not as a popup) */}
                   {focused && (
-                    <div>
+                    <div style={{ position: 'relative', zIndex: 10 }}>
                       <TargetingPopup
                         inline
                         tmRow={focused}
@@ -805,58 +853,42 @@ function PillarAdSets({
                 </div>
               </div>
             )}
-
+            {/* ── STEP 3: Delivery (Schedule + Budget + Optimization) ── */}
             {step === 3 && (
               <div className="ph-fld-group">
                 <div className="ph-fld-group-head">
                   <Calendar size={12} style={{ color: "var(--pl-cyan)" }} />
-                  <h4>When does it run?</h4>
+                  <h4>Schedule, Budget &amp; Optimization</h4>
                 </div>
                 <div className="ph-fld-group-body">
+                  {/* Datetime pickers */}
                   <div className="ph-fld-row">
                     <div className="ph-fld">
-                      <label className="ph-lbl">Start Date</label>
+                      <label className="ph-lbl">Start Date &amp; Time</label>
                       <input
                         className="ph-input"
-                        type="date"
-                        value={focused.startDate}
-                        onChange={(e) => updateFocused({ startDate: e.target.value })}
+                        type="datetime-local"
+                        value={focused.startDate && focused.startTime ? `${focused.startDate}T${focused.startTime}` : focused.startDate ? `${focused.startDate}T08:00` : ''}
+                        onChange={(e) => {
+                          const [d, t] = e.target.value.split('T');
+                          updateFocused({ startDate: d ?? '', startTime: t ?? '08:00' });
+                        }}
                       />
                     </div>
                     <div className="ph-fld">
-                      <label className="ph-lbl">End Date</label>
+                      <label className="ph-lbl">End Date &amp; Time</label>
                       <input
                         className="ph-input"
-                        type="date"
-                        value={focused.endDate}
-                        onChange={(e) => updateFocused({ endDate: e.target.value })}
+                        type="datetime-local"
+                        value={focused.endDate && focused.endTime ? `${focused.endDate}T${focused.endTime}` : focused.endDate ? `${focused.endDate}T20:00` : ''}
+                        onChange={(e) => {
+                          const [d, t] = e.target.value.split('T');
+                          updateFocused({ endDate: d ?? '', endTime: t ?? '20:00' });
+                        }}
                       />
                     </div>
                   </div>
-                  <div className="ph-fld">
-                    <label className="ph-lbl">Campaign</label>
-                    <select
-                      className="ph-input"
-                      value={focused.campaignName}
-                      onChange={(e) => updateFocused({ campaignName: e.target.value })}
-                    >
-                      <option value="">— Select campaign —</option>
-                      {campaigns.map((c) => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {step === 4 && (
-              <div className="ph-fld-group">
-                <div className="ph-fld-group-head">
-                  <DollarSign size={12} style={{ color: "var(--pl-green)" }} />
-                  <h4>Budget</h4>
-                </div>
-                <div className="ph-fld-group-body">
+                  {/* Budget */}
                   <div className="ph-fld-row">
                     <div className="ph-fld">
                       <label className="ph-lbl">Budget Type</label>
@@ -880,9 +912,10 @@ function PillarAdSets({
                         onChange={(e) => updateFocused({ budget: e.target.value })}
                         placeholder="250"
                       />
-                      <div className="ph-help">Average over the campaign run. Meta may spend up to 25% more in a single day.</div>
+                      <div className="ph-help">Meta may spend up to 25% more in a single day.</div>
                     </div>
                   </div>
+                  {/* Optimization Goal */}
                   <div className="ph-fld">
                     <label className="ph-lbl">Optimization Goal</label>
                     <select
@@ -890,15 +923,192 @@ function PillarAdSets({
                       value={focused.optimizationGoal}
                       onChange={(e) => updateFocused({ optimizationGoal: e.target.value as AdSetRow["optimizationGoal"] })}
                     >
-                      {["REACH","IMPRESSIONS","LINK_CLICKS","LANDING_PAGE_VIEWS","LEAD_GENERATION","QUALITY_LEAD","CONVERSIONS","VALUE","APP_INSTALLS","THRUPLAY","VIDEO_VIEWS","POST_ENGAGEMENT","PAGE_LIKES","PAGE_VISITS","AD_RECALL_LIFT"].map((g) => (
+                      {(["REACH","IMPRESSIONS","LINK_CLICKS","LANDING_PAGE_VIEWS","LEAD_GENERATION","QUALITY_LEAD","CONVERSIONS","VALUE","APP_INSTALLS","THRUPLAY","VIDEO_VIEWS","POST_ENGAGEMENT","PAGE_LIKES","PAGE_VISITS","AD_RECALL_LIFT"] as const).map((g) => (
                         <option key={g} value={g}>{g.replace(/_/g, " ")}</option>
                       ))}
                     </select>
                   </div>
+                  {/* Conversion Event — only shown for conversion-type goals */}
+                  <div className="ph-fld">
+                    <label className="ph-lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      Conversion Event
+                      {!showConvEvent && (
+                        <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 400, fontStyle: 'italic' }}>
+                          (select Conversions, Value, or Quality Lead to enable)
+                        </span>
+                      )}
+                    </label>
+                    {showConvEvent ? (
+                      pixelEvents.length > 0 ? (
+                        <select
+                          className="ph-input"
+                          value={focused.conversionEvent}
+                          onChange={(e) => updateFocused({ conversionEvent: e.target.value })}
+                        >
+                          <option value="">Select conversion event…</option>
+                          {pixelEvents.map((ev: string) => (
+                            <option key={ev} value={ev}>{ev}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="ph-input"
+                          value={focused.conversionEvent}
+                          onChange={(e) => updateFocused({ conversionEvent: e.target.value })}
+                          placeholder={hasPixel ? 'Loading events…' : 'No pixel configured — enter manually'}
+                        />
+                      )
+                    ) : (
+                      <input
+                        className="ph-input"
+                        disabled
+                        value=""
+                        placeholder="Not applicable for this optimization goal"
+                        style={{ opacity: 0.4, cursor: 'not-allowed' }}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
             )}
-
+            {/* ── STEP 4: Platform ── */}
+            {step === 4 && (
+              <div className="ph-fld-group">
+                <div className="ph-fld-group-head">
+                  <Monitor size={12} style={{ color: "var(--pl-cyan)" }} />
+                  <h4>Platform &amp; Placements</h4>
+                </div>
+                <div className="ph-fld-group-body">
+                  {/* Placement type toggle */}
+                  <div className="ph-fld">
+                    <label className="ph-lbl">Placement Type</label>
+                    <div className="ph-seg">
+                      {(['advantage_plus', 'manual'] as const).map(t => (
+                        <button
+                          key={t}
+                          className={focused.placementType === t ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
+                          onClick={() => updateFocused({ placementType: t, placements: t === 'advantage_plus' ? [] : focused.placements })}
+                        >
+                          {t === 'advantage_plus' ? 'Advantage+' : 'Manual'}
+                        </button>
+                      ))}
+                    </div>
+                    {focused.placementType === 'advantage_plus' && (
+                      <div className="ph-help">Meta automatically selects the best placements for your goal.</div>
+                    )}
+                  </div>
+                  {focused.placementType === 'manual' && (
+                    <>
+                      {/* Platform selector */}
+                      <div className="ph-fld">
+                        <label className="ph-lbl">Platforms</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {Object.keys(PLATFORM_PLACEMENTS).map(p => (
+                            <button
+                              key={p}
+                              className={focused.platforms.includes(p) ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
+                              onClick={() => {
+                                const next = focused.platforms.includes(p)
+                                  ? focused.platforms.filter(x => x !== p)
+                                  : [...focused.platforms, p];
+                                const nextPlacements = focused.placements.filter(pl => next.some(np => pl.startsWith(np)));
+                                updateFocused({ platforms: next, placements: nextPlacements });
+                              }}
+                            >
+                              {p === 'audience_network' ? 'Audience Network' : p.charAt(0).toUpperCase() + p.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Combined placements: Feed, Stories, Reels across selected platforms */}
+                      {focused.platforms.length > 0 && (() => {
+                        const hasFB = focused.platforms.includes('facebook');
+                        const hasIG = focused.platforms.includes('instagram');
+                        const hasMSG = focused.platforms.includes('messenger');
+                        const hasTH = focused.platforms.includes('threads');
+                        const hasAN = focused.platforms.includes('audience_network');
+                        const combinedGroups: { label: string; keys: string[] }[] = [];
+                        if (hasFB || hasIG) {
+                          combinedGroups.push({
+                            label: 'Feed',
+                            keys: [
+                              ...(hasFB ? ['facebook_feed', 'facebook_profile_feed'] : []),
+                              ...(hasIG ? ['instagram_stream', 'instagram_profile_feed'] : []),
+                            ],
+                          });
+                          combinedGroups.push({
+                            label: 'Stories',
+                            keys: [
+                              ...(hasFB ? ['facebook_stories'] : []),
+                              ...(hasIG ? ['instagram_stories'] : []),
+                              ...(hasMSG ? ['messenger_stories'] : []),
+                            ],
+                          });
+                          combinedGroups.push({
+                            label: 'Reels',
+                            keys: [
+                              ...(hasFB ? ['facebook_reels', 'facebook_reels_overlay', 'facebook_instream_reels'] : []),
+                              ...(hasIG ? ['instagram_reels'] : []),
+                            ],
+                          });
+                        }
+                        if (hasFB) {
+                          const fbExtra: [string, string][] = [
+                            ['facebook_right_column', 'Right Column'],
+                            ['facebook_marketplace', 'Marketplace'],
+                            ['facebook_search', 'Search'],
+                            ['facebook_business_explore', 'Business Explore'],
+                            ['facebook_notifications', 'Notifications'],
+                          ];
+                          fbExtra.forEach(([key, label]) => combinedGroups.push({ label, keys: [key] }));
+                        }
+                        if (hasIG) {
+                          combinedGroups.push({ label: 'Explore Home', keys: ['instagram_explore_home'] });
+                          combinedGroups.push({ label: 'IG Search', keys: ['instagram_search'] });
+                        }
+                        if (hasTH) combinedGroups.push({ label: 'Threads Feed', keys: ['threads_feed'] });
+                        if (hasAN) {
+                          combinedGroups.push({ label: 'AN Native', keys: ['audience_network_native'] });
+                          combinedGroups.push({ label: 'AN Banner', keys: ['audience_network_banner'] });
+                        }
+                        return (
+                          <div className="ph-fld">
+                            <label className="ph-lbl">Placements</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {combinedGroups.map(group => {
+                                const isOn = group.keys.some(k => focused.placements.includes(k));
+                                return (
+                                  <button
+                                    key={group.label}
+                                    className={isOn ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                    onClick={() => {
+                                      if (isOn) {
+                                        updateFocused({ placements: focused.placements.filter(p => !group.keys.includes(p)) });
+                                      } else {
+                                        updateFocused({ placements: [...focused.placements, ...group.keys.filter(k => !focused.placements.includes(k))] });
+                                      }
+                                    }}
+                                  >
+                                    {isOn && <Check size={9} />}
+                                    {group.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="ph-help">
+                              {focused.placements.length > 0
+                                ? `${focused.placements.length} placement${focused.placements.length !== 1 ? 's' : ''} selected`
+                                : 'Select at least one placement'}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Step nav */}
             <div className="ph-step-nav">
               <button
@@ -922,12 +1132,130 @@ function PillarAdSets({
                     if (idx < adSets.length - 1) {
                       onFocus(adSets[idx + 1].id);
                       setStep(1);
+                    } else {
+                      // Last ad set — go back to first step of current ad set (Done)
+                      setStep(1);
                     }
                   }}
                 >
-                  Save &amp; next ad set <ChevronRight size={11} />
+                  {idx < adSets.length - 1 ? (
+                    <><CheckCircle2 size={11} /> Done &amp; Next Ad Set <ChevronRight size={11} /></>
+                  ) : (
+                    <><CheckCircle2 size={11} /> Done</>
+                  )}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Bulk Paste Modal */}
+      {bulkLocModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setBulkLocModal(null)}
+        >
+          <div
+            className="rounded-xl shadow-2xl p-5 space-y-4"
+            style={{ width: 480, background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Bulk Paste Locations</h3>
+              <button onClick={() => setBulkLocModal(null)} style={{ color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Location Type</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['city', 'region', 'country', 'zip'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setBulkLocType(t)}
+                    style={{
+                      padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      border: bulkLocType === t ? '1px solid rgba(0,190,239,0.5)' : '1px solid rgba(255,255,255,0.12)',
+                      background: bulkLocType === t ? 'rgba(0,190,239,0.12)' : 'transparent',
+                      color: bulkLocType === t ? '#00BEEF' : 'rgba(255,255,255,0.5)',
+                    }}
+                  >
+                    {t === 'region' ? 'State/Region' : t === 'zip' ? 'Zip/Postal' : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Paste Locations (one per line)</label>
+              <textarea
+                value={bulkLocText}
+                onChange={(e) => setBulkLocText(e.target.value)}
+                placeholder={bulkLocType === 'city' ? 'New York\nLos Angeles\nChicago' : bulkLocType === 'region' ? 'California\nTexas\nNew York' : bulkLocType === 'zip' ? '10001\n90210\n60601' : 'United States\nCanada\nUnited Kingdom'}
+                rows={8}
+                style={{ width: '100%', padding: '8px 12px', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, outline: 'none', resize: 'none', color: '#fff', fontFamily: 'monospace' }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                {bulkLocText.split('\n').filter((s) => s.trim()).length} location{bulkLocText.split('\n').filter((s) => s.trim()).length !== 1 ? 's' : ''} entered
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setBulkLocModal(null)}
+                  style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={bulkLocMatching || !bulkLocText.trim()}
+                  onClick={async () => {
+                    if (!bulkLocModal) return;
+                    const lines = bulkLocText.split('\n').map((s) => s.trim()).filter(Boolean);
+                    if (!lines.length) return;
+                    setBulkLocMatching(true);
+                    try {
+                      const row = adSets.find((r) => r.id === bulkLocModal.rowId);
+                      if (!row) return;
+                      const matched: { key: string; type: string; name: string }[] = [];
+                      const labels: string[] = [];
+                      for (const line of lines) {
+                        try {
+                          const res = await utils.adminMeta.searchGeoLocations.fetch({
+                            accessToken: settings?.accessToken ?? '',
+                            query: line,
+                            location_types: [bulkLocType],
+                          });
+                          if (res?.results?.length) {
+                            const loc = res.results[0];
+                            const label = [loc.name, loc.region, loc.countryName].filter(Boolean).join(', ');
+                            matched.push({ key: loc.key, type: loc.type || bulkLocType, name: label });
+                            labels.push(label);
+                          }
+                        } catch { /* skip failed lookups */ }
+                      }
+                      const currentLabels = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
+                      const currentObjs = row.geoLocationObjects || [];
+                      const newLabels = labels.filter((l) => !currentLabels.includes(l));
+                      const newObjs = matched.filter((m) => !currentLabels.includes(m.name));
+                      updateById(bulkLocModal.rowId, {
+                        geoLocations: [...currentLabels, ...newLabels].join('\n'),
+                        geoLocationObjects: [...currentObjs, ...newObjs],
+                      });
+                      setBulkLocModal(null);
+                    } finally {
+                      setBulkLocMatching(false);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    background: bulkLocMatching || !bulkLocText.trim() ? 'rgba(0,190,239,0.3)' : '#00BEEF',
+                    color: '#0e0d3a', border: 'none',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    opacity: bulkLocMatching || !bulkLocText.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {bulkLocMatching ? '⟳ Matching…' : 'Match Locations'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

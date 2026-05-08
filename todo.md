@@ -421,3 +421,30 @@
 - [x] Pillar view: wire Custom/LAL Targeted Audiences section (reuse TargetingPopup Custom tab logic)
 - [x] Pillar view: wire Excluded Audiences section (reuse TargetingPopup Custom tab excluded logic)
 - [x] Pillar view: all targeting changes sync back to the same adSet state used by the spreadsheet view
+
+## Pillar View — Round 2 Fixes & Enhancements
+
+- [ ] Fix bulk paste button click in Location tab (z-index / pointer-events issue when inline)
+- [ ] Fix Done button not working on any step (last step should navigate to next ad set or go back to list)
+- [ ] Schedule step: replace date-only inputs with datetime-local pickers (same as spreadsheet view)
+- [ ] Schedule step: remove Campaign dropdown
+- [ ] Schedule step: add Budget Type, Amount, Optimization Goal fields below start/end datetime
+- [ ] Schedule step: add Conversion Event searchable input (enabled only for CONVERSIONS/VALUE/QUALITY_LEAD goals, auto-populated from pixel events)
+- [ ] Rename "Budget" step to a name that covers schedule + budget + optimization (e.g. "Delivery")
+- [ ] Replace old Budget step with new "Platform" step: platform selector (FB, IG, etc.) + dynamic placement checkboxes
+- [ ] Platform step: combine FB Feed + IG Feed → "Feed", FB Stories + IG Stories → "Stories", FB Reels + IG Reels → "Reels" for simplified UX
+- [ ] Platform step: support multi-select placements, dynamic based on selected platforms
+
+## Pillar View — Round 2 Fixes
+
+- [x] Fix bulk paste button not clickable in inline TargetingPopup (needs BulkLocModal rendered in PillarAdSets)
+- [x] Fix Done button on last step — should navigate back to ad set list (not disabled when last ad set)
+- [x] Schedule step: replace date inputs with datetime-local pickers (start date+time, end date+time)
+- [x] Schedule step: remove Campaign dropdown
+- [x] Schedule step: add Budget Type, Amount, Optimization Goal fields below datetime pickers
+- [x] Schedule step: add Conversion Event searchable input (enabled only when opt goal = CONVERSIONS, auto-populates from pixel events)
+- [x] Rename Budget step to Platform
+- [x] Platform step: platform selector (Facebook, Instagram, Threads, Messenger, Audience Network)
+- [x] Platform step: dynamic placement checkboxes based on selected platforms
+- [x] Platform step: combine FB Feed + IG Feed → Feed, FB Stories + IG Stories → Stories, FB Reels + IG Reels → Reels
+- [x] Platform step: Advantage+ vs Manual toggle
