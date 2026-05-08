@@ -467,3 +467,10 @@
 - [x] BulkEditPanel: add Gender field (All / Male / Female toggle)
 - [x] BulkEditPanel: add collapsed "Optional Fields" section that expands to show available optional fields for bulk editing
 - [x] BulkEditPanel optional fields: language, operating system, device type, attribution window, attribution model, frequency control
+
+## Bulk Edit — Placements & Detailed Targeting
+
+- [x] BulkEditPanel: add Placements field (Advantage+ toggle, platform selector, dynamic placement checkboxes with combined Feed/Stories/Reels)
+- [x] BulkEditPanel: add Detailed Targeting field (interests/behaviors search + chip list, mode: add/replace)
+- [x] BulkEditPanel: add Narrow Targeting (AND) field (interests/behaviors search for AND layer, mode: add/replace)
+- [x] BulkEditPanel: wire all new fields into handleApply logic

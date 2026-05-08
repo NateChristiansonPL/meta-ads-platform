@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import {
   AdSetRow, BuildSettings, OPTIMIZATION_GOAL_LABELS, OptimizationGoal,
   conversionEventApplicable, LANGUAGE_OPTIONS, TREE_FIELDS, FrequencyControl,
-  frequencyControlApplicable,
+  frequencyControlApplicable, PLATFORM_PLACEMENTS, InterestObject,
 } from './campaignStoreAdmin';
 import { trpc } from '@/lib/trpc';
 
@@ -55,6 +55,15 @@ interface BulkFields {
   targetedAudiencesMode: AudienceMode;
   excludedAudiencesToAdd: string[];
   excludedAudiencesMode: AudienceMode;
+  // placements
+  placementType: 'advantage_plus' | 'manual';
+  platforms: string[];
+  placements: string[];
+  // detailed targeting
+  detailedInterestObjects: InterestObject[];
+  detailedInterestsMode: 'add' | 'replace';
+  narrowInterestObjects: InterestObject[];
+  narrowInterestsMode: 'add' | 'replace';
   // optional fields
   language: string;
   operatingSystem: string;
@@ -73,6 +82,9 @@ interface EnabledFields {
   locations: boolean;
   targetedAudiences: boolean;
   excludedAudiences: boolean;
+  placements: boolean;
+  detailedTargeting: boolean;
+  narrowTargeting: boolean;
   // optional fields (each individually toggled inside the collapsed section)
   language: boolean;
   operatingSystem: boolean;
@@ -166,6 +178,21 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     { enabled: hasCredentials && locationQuery.trim().length >= 2, staleTime: 60 * 1000 },
   );
   const geoResults = (locationResults as { results?: { key: string; name: string; type: string; region?: string; countryName?: string }[] })?.results ?? [];
+  // ── Detailed targeting search ─────────────────────────────────────────────
+  const [detailedQuery, setDetailedQuery] = useState('');
+  const [detailedType, setDetailedType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
+  const [narrowQuery, setNarrowQuery] = useState('');
+  const [narrowType, setNarrowType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
+  const { data: detailedResults, isFetching: searchingDetailed } = trpc.adminMeta.searchTargeting.useQuery(
+    { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', query: detailedQuery, type: detailedType },
+    { enabled: hasCredentials && detailedQuery.trim().length >= 2, staleTime: 60 * 1000 },
+  );
+  const { data: narrowResults, isFetching: searchingNarrow } = trpc.adminMeta.searchTargeting.useQuery(
+    { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', query: narrowQuery, type: narrowType },
+    { enabled: hasCredentials && narrowQuery.trim().length >= 2, staleTime: 60 * 1000 },
+  );
+  const detailedSearchResults = (detailedResults as { results?: { id: string; name: string; type?: string; audience_size?: number }[] })?.results ?? [];
+  const narrowSearchResults = (narrowResults as { results?: { id: string; name: string; type?: string; audience_size?: number }[] })?.results ?? [];
 
   // ── Local field state ────────────────────────────────────────────────────────
   const [fields, setFields] = useState<BulkFields>({
@@ -186,6 +213,13 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     targetedAudiencesMode: 'add',
     excludedAudiencesToAdd: [],
     excludedAudiencesMode: 'add',
+    placementType: 'manual',
+    platforms: [],
+    placements: [],
+    detailedInterestObjects: [],
+    detailedInterestsMode: 'add',
+    narrowInterestObjects: [],
+    narrowInterestsMode: 'add',
     language: '',
     operatingSystem: 'all',
     devicePlatforms: 'all',
@@ -202,6 +236,9 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     locations: false,
     targetedAudiences: false,
     excludedAudiences: false,
+    placements: false,
+    detailedTargeting: false,
+    narrowTargeting: false,
     language: false,
     operatingSystem: false,
     devicePlatforms: false,
@@ -282,6 +319,39 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
         if (fields.ageMax) patch.ageMax = fields.ageMax;
         patch.genders = fields.genders;
       }
+      if (enabled.placements) {
+        patch.placementType = fields.placementType;
+        patch.platforms = fields.platforms;
+        patch.placements = fields.placements;
+      }
+      if (enabled.detailedTargeting) {
+        const newObjs = fields.detailedInterestObjects;
+        const newNames = newObjs.map(o => o.name);
+        if (fields.detailedInterestsMode === 'replace') {
+          patch.detailedInterests = newNames.join('\n');
+          patch.detailedInterestObjects = newObjs;
+        } else {
+          const existingObjs = row.detailedInterestObjects ?? [];
+          const existingIds = new Set(existingObjs.map(o => o.id));
+          const toAdd = newObjs.filter(o => !existingIds.has(o.id));
+          patch.detailedInterests = [...(row.detailedInterests ? row.detailedInterests.split('\n').filter(Boolean) : []), ...toAdd.map(o => o.name)].join('\n');
+          patch.detailedInterestObjects = [...existingObjs, ...toAdd];
+        }
+      }
+      if (enabled.narrowTargeting) {
+        const newObjs = fields.narrowInterestObjects;
+        const newNames = newObjs.map(o => o.name);
+        if (fields.narrowInterestsMode === 'replace') {
+          patch.narrowInterests = newNames.join('\n');
+          patch.narrowInterestObjects = newObjs;
+        } else {
+          const existingObjs = row.narrowInterestObjects ?? [];
+          const existingIds = new Set(existingObjs.map(o => o.id));
+          const toAdd = newObjs.filter(o => !existingIds.has(o.id));
+          patch.narrowInterests = [...(row.narrowInterests ? row.narrowInterests.split('\n').filter(Boolean) : []), ...toAdd.map(o => o.name)].join('\n');
+          patch.narrowInterestObjects = [...existingObjs, ...toAdd];
+        }
+      }
       if (enabled.language) patch.language = fields.language || undefined;
       if (enabled.operatingSystem) patch.operatingSystem = fields.operatingSystem !== 'all' ? fields.operatingSystem : undefined;
       if (enabled.devicePlatforms) patch.devicePlatforms = fields.devicePlatforms !== 'all' ? fields.devicePlatforms : undefined;
@@ -295,6 +365,75 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
   }, [applyCount, enabled, fields, selectedRows, allRows, onChange, onClose]);
 
   const showConvEvent = conversionEventApplicable(fields.optimizationGoal);
+
+  // ── Placement helpers (mirrors PillarHubAdmin logic) ───────────────────────
+  const COMBINED_PLACEMENTS = [
+    { key: 'feed',            label: 'Feed',            platforms: ['facebook', 'instagram'] },
+    { key: 'stories',         label: 'Stories',          platforms: ['facebook', 'instagram', 'messenger'] },
+    { key: 'reels',           label: 'Reels',            platforms: ['facebook', 'instagram'] },
+    { key: 'profile_feed',    label: 'Profile Feed',     platforms: ['facebook', 'instagram'] },
+    { key: 'reels_overlay',   label: 'Reels Overlay',    platforms: ['facebook'] },
+    { key: 'right_column',    label: 'Right Column',     platforms: ['facebook'] },
+    { key: 'marketplace',     label: 'Marketplace',      platforms: ['facebook'] },
+    { key: 'search',          label: 'Search',           platforms: ['facebook', 'instagram'] },
+    { key: 'business_explore',label: 'Business Explore', platforms: ['facebook'] },
+    { key: 'notifications',   label: 'Notifications',    platforms: ['facebook'] },
+    { key: 'instream_reels',  label: 'In-Stream Reels',  platforms: ['facebook'] },
+    { key: 'explore_home',    label: 'Explore Home',     platforms: ['instagram'] },
+    { key: 'threads_feed',    label: 'Threads Feed',     platforms: ['threads'] },
+    { key: 'native',          label: 'Native',           platforms: ['audience_network'] },
+    { key: 'banner',          label: 'Banner',           platforms: ['audience_network'] },
+  ] as const;
+  const COMBINED_TO_API: Record<string, string[]> = {
+    feed:             ['facebook_feed', 'instagram_stream'],
+    stories:          ['facebook_stories', 'instagram_stories', 'messenger_stories'],
+    reels:            ['facebook_reels', 'instagram_reels'],
+    profile_feed:     ['facebook_profile_feed', 'instagram_profile_feed'],
+    reels_overlay:    ['facebook_reels_overlay'],
+    right_column:     ['facebook_right_column'],
+    marketplace:      ['facebook_marketplace'],
+    search:           ['facebook_search', 'instagram_search'],
+    business_explore: ['facebook_business_explore'],
+    notifications:    ['facebook_notifications'],
+    instream_reels:   ['facebook_instream_reels'],
+    explore_home:     ['instagram_explore_home'],
+    threads_feed:     ['threads_feed'],
+    native:           ['audience_network_native'],
+    banner:           ['audience_network_banner'],
+  };
+  const isCombinedSelected = (combinedKey: string) =>
+    (COMBINED_TO_API[combinedKey] ?? []).some(k => fields.placements.includes(k));
+  const toggleCombinedPlacement = (combinedKey: string) => {
+    const apiKeys = COMBINED_TO_API[combinedKey] ?? [];
+    const currentlySelected = isCombinedSelected(combinedKey);
+    let next: string[];
+    if (currentlySelected) {
+      next = fields.placements.filter(p => !apiKeys.includes(p));
+    } else {
+      const toAdd = apiKeys.filter(k =>
+        fields.platforms.some(pl => k.startsWith(pl === 'audience_network' ? 'audience_network' : pl))
+      );
+      next = [...fields.placements, ...toAdd.filter(k => !fields.placements.includes(k))];
+    }
+    setField('placements', next);
+  };
+  const togglePlatform = (p: string) => {
+    const next = fields.platforms.includes(p)
+      ? fields.platforms.filter(x => x !== p)
+      : [...fields.platforms, p];
+    const nextPlacements = fields.placements.filter(pl => next.some(np =>
+      np === 'audience_network' ? pl.startsWith('audience_network') : pl.startsWith(np)
+    ));
+    setField('platforms', next);
+    setField('placements', nextPlacements);
+  };
+  const PLATFORM_LABELS: Record<string, string> = {
+    facebook: 'Facebook', instagram: 'Instagram', threads: 'Threads',
+    messenger: 'Messenger', audience_network: 'Audience Network',
+  };
+  const visibleCombined = COMBINED_PLACEMENTS.filter(cp =>
+    cp.platforms.some(p => fields.platforms.includes(p))
+  );
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -542,6 +681,196 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             )}
             {fields.locationsToAdd.length === 0 && (
               <p className="text-[10px] text-muted-foreground/50 italic">No locations added yet</p>
+            )}
+           </FieldToggle>
+
+          {/* Placements */}
+          <FieldToggle label="Placements" icon={<span className="text-[11px]">📲</span>} enabled={enabled.placements} onToggle={() => toggleEnabled('placements')}>
+            <div className="space-y-2">
+              {/* Advantage+ vs Manual toggle */}
+              <div className="flex gap-1">
+                {(['advantage_plus', 'manual'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setField('placementType', t)}
+                    className={cn(
+                      'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                      fields.placementType === t
+                        ? 'bg-primary/15 border-primary/40 text-primary'
+                        : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >{t === 'advantage_plus' ? 'Advantage+' : 'Manual'}</button>
+                ))}
+              </div>
+              {fields.placementType === 'manual' && (
+                <>
+                  {/* Platform selector */}
+                  <div>
+                    <label className="text-[10px] font-600 text-muted-foreground uppercase tracking-wider block mb-1">Platforms</label>
+                    <div className="flex flex-wrap gap-1">
+                      {Object.keys(PLATFORM_LABELS).map(p => (
+                        <button
+                          key={p}
+                          onClick={() => togglePlatform(p)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                            fields.platforms.includes(p)
+                              ? 'bg-primary/15 border-primary/40 text-primary'
+                              : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                          )}
+                        >{PLATFORM_LABELS[p]}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Placement checkboxes — dynamic based on selected platforms */}
+                  {fields.platforms.length > 0 && (
+                    <div>
+                      <label className="text-[10px] font-600 text-muted-foreground uppercase tracking-wider block mb-1">Placements</label>
+                      <div className="flex flex-wrap gap-1">
+                        {visibleCombined.map(cp => (
+                          <button
+                            key={cp.key}
+                            onClick={() => toggleCombinedPlacement(cp.key)}
+                            className={cn(
+                              'px-2.5 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                              isCombinedSelected(cp.key)
+                                ? 'bg-primary/15 border-primary/40 text-primary'
+                                : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                            )}
+                          >{cp.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {fields.platforms.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground/50 italic">Select at least one platform to see placements</p>
+                  )}
+                </>
+              )}
+              {fields.placementType === 'advantage_plus' && (
+                <p className="text-[10px] text-muted-foreground/60 italic">Advantage+ Placements — Meta will automatically optimize placement delivery.</p>
+              )}
+            </div>
+          </FieldToggle>
+
+          {/* Detailed Targeting (Interests & Behaviors) */}
+          <FieldToggle label="Detailed Targeting" icon={<Target size={13} />} enabled={enabled.detailedTargeting} onToggle={() => toggleEnabled('detailedTargeting')}>
+            <ModeToggle mode={fields.detailedInterestsMode} onChange={m => setField('detailedInterestsMode', m)} />
+            {/* Type selector */}
+            <div className="flex gap-1">
+              {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setDetailedType(t)}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                    detailedType === t
+                      ? 'bg-primary/15 border-primary/40 text-primary'
+                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
+              ))}
+            </div>
+            <div className="relative">
+              <input
+                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                placeholder="Search interests, behaviors..."
+                value={detailedQuery}
+                onChange={e => setDetailedQuery(e.target.value)}
+              />
+              {searchingDetailed && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
+            </div>
+            {detailedQuery.length >= 2 && detailedSearchResults.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+                {detailedSearchResults.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      const already = fields.detailedInterestObjects.some(o => o.id === r.id);
+                      if (!already) {
+                        setField('detailedInterestObjects', [...fields.detailedInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }]);
+                      }
+                      setDetailedQuery('');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
+                  >
+                    <span className="font-600">{r.name}</span>
+                    {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {fields.detailedInterestObjects.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {fields.detailedInterestObjects.map((obj, i) => (
+                  <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-primary/10 text-primary border border-primary/20">
+                    {obj.name}
+                    <button onClick={() => setField('detailedInterestObjects', fields.detailedInterestObjects.filter((_, oi) => oi !== i))} className="hover:text-red-400"><X size={9} /></button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/50 italic">No interests added yet</p>
+            )}
+          </FieldToggle>
+
+          {/* Narrow Targeting (AND layer) */}
+          <FieldToggle label="Narrow Targeting (AND)" icon={<span className="text-[11px]">🔍</span>} enabled={enabled.narrowTargeting} onToggle={() => toggleEnabled('narrowTargeting')}>
+            <ModeToggle mode={fields.narrowInterestsMode} onChange={m => setField('narrowInterestsMode', m)} />
+            <div className="flex gap-1">
+              {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setNarrowType(t)}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                    narrowType === t
+                      ? 'bg-primary/15 border-primary/40 text-primary'
+                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
+              ))}
+            </div>
+            <div className="relative">
+              <input
+                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                placeholder="Must also match..."
+                value={narrowQuery}
+                onChange={e => setNarrowQuery(e.target.value)}
+              />
+              {searchingNarrow && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
+            </div>
+            {narrowQuery.length >= 2 && narrowSearchResults.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+                {narrowSearchResults.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      const already = fields.narrowInterestObjects.some(o => o.id === r.id);
+                      if (!already) {
+                        setField('narrowInterestObjects', [...fields.narrowInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }]);
+                      }
+                      setNarrowQuery('');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
+                  >
+                    <span className="font-600">{r.name}</span>
+                    {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {fields.narrowInterestObjects.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {fields.narrowInterestObjects.map((obj, i) => (
+                  <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    {obj.name}
+                    <button onClick={() => setField('narrowInterestObjects', fields.narrowInterestObjects.filter((_, oi) => oi !== i))} className="hover:text-red-400"><X size={9} /></button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/50 italic">No narrow targets added yet</p>
             )}
           </FieldToggle>
 
