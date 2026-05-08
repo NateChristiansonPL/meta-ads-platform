@@ -474,3 +474,10 @@
 - [x] BulkEditPanel: add Detailed Targeting field (interests/behaviors search + chip list, mode: add/replace)
 - [x] BulkEditPanel: add Narrow Targeting (AND) field (interests/behaviors search for AND layer, mode: add/replace)
 - [x] BulkEditPanel: wire all new fields into handleApply logic
+
+## Bulk Edit — Round 2 Improvements
+
+- [x] BulkEditPanel: add Name field with mode selector (Prefix / Suffix / Replace) so users can version batches of ad sets
+- [x] BulkEditPanel: pre-populate all fields from selection when all selected rows share the same value (budget, dates, goal, age, gender, placements, etc.)
+- [x] Spreadsheet view: add Select All checkbox in the table header row to select/deselect all ad sets at once
+- [x] Pillar view: add Select All button in the ad set list header when multi-select mode is active

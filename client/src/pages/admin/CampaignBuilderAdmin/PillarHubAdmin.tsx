@@ -645,6 +645,25 @@ function PillarAdSets({
         <div className="ph-list-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <span className="ph-list-label">{adSets.length} Ad Sets</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {multiSelectMode && (
+              <button
+                onClick={() => {
+                  if (bulkSelectedIds.size === adSets.length) {
+                    setBulkSelectedIds(new Set());
+                  } else {
+                    setBulkSelectedIds(new Set(adSets.map(a => a.id)));
+                  }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.5)', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {bulkSelectedIds.size === adSets.length ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
             {multiSelectMode && bulkSelectedIds.size >= 2 && (
               <button
                 onClick={() => setBulkEditOpen(true)}

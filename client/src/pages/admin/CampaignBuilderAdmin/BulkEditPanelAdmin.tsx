@@ -37,7 +37,10 @@ export interface BulkEditPanelProps {
 type LocationMode = 'add' | 'replace';
 type AudienceMode = 'add' | 'replace';
 
+type NameMode = 'prefix' | 'suffix' | 'replace';
 interface BulkFields {
+  nameValue: string;
+  nameMode: NameMode;
   budgetType: 'DAILY' | 'LIFETIME';
   budget: string;
   startDate: string;
@@ -74,6 +77,7 @@ interface BulkFields {
 }
 
 interface EnabledFields {
+  name: boolean;
   budget: boolean;
   dates: boolean;
   optimizationGoal: boolean;
@@ -194,40 +198,58 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
   const detailedSearchResults = (detailedResults as { results?: { id: string; name: string; type?: string; audience_size?: number }[] })?.results ?? [];
   const narrowSearchResults = (narrowResults as { results?: { id: string; name: string; type?: string; audience_size?: number }[] })?.results ?? [];
 
-  // ── Local field state ────────────────────────────────────────────────────────
-  const [fields, setFields] = useState<BulkFields>({
-    budgetType: 'DAILY',
-    budget: '',
-    startDate: '',
-    startTime: '08:00',
-    endDate: '',
-    endTime: '20:00',
-    optimizationGoal: 'LINK_CLICKS',
-    conversionEvent: '',
-    ageMin: '18',
-    ageMax: '65',
-    genders: 'all',
+  // ── Pre-populate helper: returns the shared value if all rows agree, else the fallback ──
+  function shared<T>(getter: (r: AdSetRow) => T | undefined, fallback: T): T {
+    if (!selectedRows.length) return fallback;
+    const vals = selectedRows.map(getter);
+    const first = vals[0];
+    return vals.every(v => v === first) && first !== undefined ? first : fallback;
+  }
+
+  // ── Local field state (lazy initializer pre-populates shared values) ─────────
+  const [fields, setFields] = useState<BulkFields>(() => ({
+    nameValue: '',
+    nameMode: 'suffix',
+    // Budget — pre-fill if all selected rows share the same value
+    budgetType: shared(r => r.budgetType, 'DAILY'),
+    budget: shared(r => r.budget ? String(r.budget) : undefined, ''),
+    // Dates
+    startDate: shared(r => r.startDate || undefined, ''),
+    startTime: shared(r => r.startTime || undefined, '08:00'),
+    endDate: shared(r => r.endDate || undefined, ''),
+    endTime: shared(r => r.endTime || undefined, '20:00'),
+    // Optimization
+    optimizationGoal: shared(r => r.optimizationGoal || undefined, 'LINK_CLICKS' as OptimizationGoal),
+    conversionEvent: shared(r => r.conversionEvent || undefined, ''),
+    // Age & gender
+    ageMin: shared(r => r.ageMin ? String(r.ageMin) : undefined, '18'),
+    ageMax: shared(r => r.ageMax ? String(r.ageMax) : undefined, '65'),
+    genders: shared(r => r.genders || undefined, 'all'),
+    // Audiences (always start empty in add mode — merging makes more sense)
     locationsToAdd: [],
     locationsMode: 'add',
     targetedAudiencesToAdd: [],
     targetedAudiencesMode: 'add',
     excludedAudiencesToAdd: [],
     excludedAudiencesMode: 'add',
-    placementType: 'manual',
+    // Placements
+    placementType: shared(r => r.placementType || undefined, 'manual' as const),
     platforms: [],
     placements: [],
+    // Detailed targeting (always start empty in add mode)
     detailedInterestObjects: [],
     detailedInterestsMode: 'add',
     narrowInterestObjects: [],
     narrowInterestsMode: 'add',
-    language: '',
-    operatingSystem: 'all',
-    devicePlatforms: 'all',
-    attributionWindow: '7d_click_1d_engaged_1d_view',
-    attributionModel: 'standard',
-  });
-
+    // Optional
+    language: shared(r => r.language || undefined, ''),
+    operatingSystem: shared(r => r.operatingSystem || undefined, 'all'),
+    devicePlatforms: shared(r => r.devicePlatforms || undefined, 'all'),
+    attributionWindow: shared(r => r.attributionWindow || undefined, '7d_click_1d_engaged_1d_view'),
+    attributionModel: shared(r => r.attributionModel || undefined, 'standard'),
+  }));
   const [enabled, setEnabled] = useState<EnabledFields>({
+    name: false,
     budget: false,
     dates: false,
     optimizationGoal: false,
@@ -266,6 +288,12 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
       if (!selectedIds.has(row.id)) return row;
       const patch: Partial<AdSetRow> = {};
 
+      if (enabled.name && fields.nameValue) {
+        const current = row.name || '';
+        if (fields.nameMode === 'prefix') patch.name = fields.nameValue + current;
+        else if (fields.nameMode === 'suffix') patch.name = current + fields.nameValue;
+        else patch.name = fields.nameValue;
+      }
       if (enabled.budget) {
         patch.budgetType = fields.budgetType;
         if (fields.budget) patch.budget = fields.budget;
@@ -480,6 +508,41 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
 
         {/* Fields */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+
+          {/* Name */}
+          <FieldToggle label="Ad Set Name" icon={<span className="text-[11px]">✏️</span>} enabled={enabled.name} onToggle={() => toggleEnabled('name')}>
+            <div className="flex gap-1 mb-1">
+              {(['suffix', 'prefix', 'replace'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setField('nameMode', m)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-[11px] font-600 border transition-all capitalize',
+                    fields.nameMode === m
+                      ? 'bg-primary/15 border-primary/40 text-primary'
+                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >{m}</button>
+              ))}
+            </div>
+            <input
+              className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+              placeholder={
+                fields.nameMode === 'prefix' ? 'Text to add before name (e.g. "2026 - ")'
+                : fields.nameMode === 'suffix' ? 'Text to add after name (e.g. " - V2")'
+                : 'New name (replaces existing name)'
+              }
+              value={fields.nameValue}
+              onChange={e => setField('nameValue', e.target.value)}
+            />
+            {fields.nameValue && (
+              <p className="text-[10px] text-muted-foreground/60 italic">
+                {fields.nameMode === 'prefix' && `Preview: "${fields.nameValue}<original name>"`}
+                {fields.nameMode === 'suffix' && `Preview: "<original name>${fields.nameValue}"`}
+                {fields.nameMode === 'replace' && `Preview: "${fields.nameValue}" (all selected ad sets get this exact name)`}
+              </p>
+            )}
+          </FieldToggle>
 
           {/* Budget */}
           <FieldToggle label="Budget" icon={<DollarSign size={13} />} enabled={enabled.budget} onToggle={() => toggleEnabled('budget')}>
