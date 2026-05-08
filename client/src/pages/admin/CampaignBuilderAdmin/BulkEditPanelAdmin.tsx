@@ -10,11 +10,13 @@
 import React, { useState, useCallback } from 'react';
 import {
   X, Check, ChevronDown, DollarSign, Calendar, Target, MapPin, Users, Minus, Plus,
+  UserRound, Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   AdSetRow, BuildSettings, OPTIMIZATION_GOAL_LABELS, OptimizationGoal,
-  conversionEventApplicable,
+  conversionEventApplicable, LANGUAGE_OPTIONS, TREE_FIELDS, FrequencyControl,
+  frequencyControlApplicable,
 } from './campaignStoreAdmin';
 import { trpc } from '@/lib/trpc';
 
@@ -44,12 +46,22 @@ interface BulkFields {
   endTime: string;
   optimizationGoal: OptimizationGoal;
   conversionEvent: string;
+  ageMin: string;
+  ageMax: string;
+  genders: string;
   locationsToAdd: string[];          // display labels
   locationsMode: LocationMode;
   targetedAudiencesToAdd: string[];  // display names
   targetedAudiencesMode: AudienceMode;
   excludedAudiencesToAdd: string[];
   excludedAudiencesMode: AudienceMode;
+  // optional fields
+  language: string;
+  operatingSystem: string;
+  devicePlatforms: string;
+  attributionWindow: string;
+  attributionModel: string;
+  frequencyControl?: FrequencyControl;
 }
 
 interface EnabledFields {
@@ -57,9 +69,17 @@ interface EnabledFields {
   dates: boolean;
   optimizationGoal: boolean;
   conversionEvent: boolean;
+  ageGender: boolean;
   locations: boolean;
   targetedAudiences: boolean;
   excludedAudiences: boolean;
+  // optional fields (each individually toggled inside the collapsed section)
+  language: boolean;
+  operatingSystem: boolean;
+  devicePlatforms: boolean;
+  attributionWindow: boolean;
+  attributionModel: boolean;
+  frequencyControl: boolean;
 }
 
 // ── Toggle row helper ─────────────────────────────────────────────────────────
@@ -157,12 +177,20 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     endTime: '20:00',
     optimizationGoal: 'LINK_CLICKS',
     conversionEvent: '',
+    ageMin: '18',
+    ageMax: '65',
+    genders: 'all',
     locationsToAdd: [],
     locationsMode: 'add',
     targetedAudiencesToAdd: [],
     targetedAudiencesMode: 'add',
     excludedAudiencesToAdd: [],
     excludedAudiencesMode: 'add',
+    language: '',
+    operatingSystem: 'all',
+    devicePlatforms: 'all',
+    attributionWindow: '7d_click_1d_engaged_1d_view',
+    attributionModel: 'standard',
   });
 
   const [enabled, setEnabled] = useState<EnabledFields>({
@@ -170,10 +198,18 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     dates: false,
     optimizationGoal: false,
     conversionEvent: false,
+    ageGender: false,
     locations: false,
     targetedAudiences: false,
     excludedAudiences: false,
+    language: false,
+    operatingSystem: false,
+    devicePlatforms: false,
+    attributionWindow: false,
+    attributionModel: false,
+    frequencyControl: false,
   });
+  const [optionalOpen, setOptionalOpen] = useState(false);
 
   const setField = useCallback(<K extends keyof BulkFields>(key: K, val: BulkFields[K]) => {
     setFields(f => ({ ...f, [key]: val }));
@@ -241,7 +277,17 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
           patch.excludedAudiences = [...existing, ...newAuds].join('\n');
         }
       }
-
+      if (enabled.ageGender) {
+        if (fields.ageMin) patch.ageMin = fields.ageMin;
+        if (fields.ageMax) patch.ageMax = fields.ageMax;
+        patch.genders = fields.genders;
+      }
+      if (enabled.language) patch.language = fields.language || undefined;
+      if (enabled.operatingSystem) patch.operatingSystem = fields.operatingSystem !== 'all' ? fields.operatingSystem : undefined;
+      if (enabled.devicePlatforms) patch.devicePlatforms = fields.devicePlatforms !== 'all' ? fields.devicePlatforms : undefined;
+      if (enabled.attributionWindow) patch.attributionWindow = fields.attributionWindow;
+      if (enabled.attributionModel) patch.attributionModel = fields.attributionModel;
+      if (enabled.frequencyControl) patch.frequencyControl = fields.frequencyControl;
       return { ...row, ...patch };
     });
     onChange(updated);
@@ -393,6 +439,53 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
               )}
             </FieldToggle>
           )}
+
+          {/* Age & Gender */}
+          <FieldToggle label="Age & Gender" icon={<UserRound size={13} />} enabled={enabled.ageGender} onToggle={() => toggleEnabled('ageGender')}>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-[10px] font-600 text-muted-foreground uppercase tracking-wider block mb-1">Min Age</label>
+                  <input
+                    type="number"
+                    min={18} max={65}
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                    value={fields.ageMin}
+                    onChange={e => setField('ageMin', e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[10px] font-600 text-muted-foreground uppercase tracking-wider block mb-1">Max Age</label>
+                  <input
+                    type="number"
+                    min={18} max={65}
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                    value={fields.ageMax}
+                    onChange={e => setField('ageMax', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-600 text-muted-foreground uppercase tracking-wider block mb-1">Gender</label>
+                <div className="flex gap-1">
+                  {[{ value: 'all', label: 'All' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }].map(g => (
+                    <button
+                      key={g.value}
+                      onClick={() => setField('genders', g.value)}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                        fields.genders === g.value
+                          ? 'bg-primary/15 border-primary/40 text-primary'
+                          : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </FieldToggle>
 
           {/* Locations */}
           <FieldToggle label="Locations" icon={<MapPin size={13} />} enabled={enabled.locations} onToggle={() => toggleEnabled('locations')}>
@@ -559,10 +652,160 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             {fields.excludedAudiencesToAdd.length === 0 && (
               <p className="text-[10px] text-muted-foreground/50 italic">No exclusions added yet</p>
             )}
-          </FieldToggle>
+            </FieldToggle>
 
+          {/* ── Optional Fields (collapsed) ─────────────────────────────────── */}
+          <div className={cn(
+            'rounded-lg border transition-all',
+            optionalOpen ? 'border-primary/20 bg-primary/3' : 'border-border/50 bg-surface-2/20',
+          )}>
+            {/* Header row — always visible */}
+            <button
+              onClick={() => setOptionalOpen(o => !o)}
+              className="w-full flex items-center gap-2 px-3 py-2 select-none"
+            >
+              <Settings2 size={13} className="text-muted-foreground flex-shrink-0" />
+              <span className="text-[12px] font-700 text-foreground flex-1 text-left">Optional Fields</span>
+              {(() => {
+                const activeOptCount = (['language', 'operatingSystem', 'devicePlatforms', 'attributionWindow', 'attributionModel', 'frequencyControl'] as const).filter(k => enabled[k]).length;
+                return activeOptCount > 0 ? (
+                  <span className="text-[10px] font-700 text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full">{activeOptCount} active</span>
+                ) : null;
+              })()}
+              <ChevronDown size={13} className={cn('text-muted-foreground transition-transform flex-shrink-0', optionalOpen && 'rotate-180')} />
+            </button>
+
+            {/* Expanded content */}
+            {optionalOpen && (
+              <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
+                <p className="text-[10px] text-muted-foreground/60 italic pb-1">Check a field to include it in the bulk update.</p>
+
+                {/* Language */}
+                <FieldToggle label="Language" icon={<span className="text-[11px]">🌐</span>} enabled={enabled.language} onToggle={() => toggleEnabled('language')}>
+                  <select
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                    value={fields.language}
+                    onChange={e => setField('language', e.target.value)}
+                  >
+                    <option value="">Any language</option>
+                    {LANGUAGE_OPTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  </select>
+                </FieldToggle>
+
+                {/* Operating System */}
+                <FieldToggle label="Operating System" icon={<span className="text-[11px]">📱</span>} enabled={enabled.operatingSystem} onToggle={() => toggleEnabled('operatingSystem')}>
+                  <div className="flex gap-1">
+                    {[{ value: 'all', label: 'All' }, { value: 'android', label: 'Android' }, { value: 'ios', label: 'iOS' }].map(o => (
+                      <button
+                        key={o.value}
+                        onClick={() => setField('operatingSystem', o.value)}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                          fields.operatingSystem === o.value
+                            ? 'bg-primary/15 border-primary/40 text-primary'
+                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >{o.label}</button>
+                    ))}
+                  </div>
+                </FieldToggle>
+
+                {/* Device Type */}
+                <FieldToggle label="Device Type" icon={<span className="text-[11px]">💻</span>} enabled={enabled.devicePlatforms} onToggle={() => toggleEnabled('devicePlatforms')}>
+                  <div className="flex gap-1">
+                    {[{ value: 'all', label: 'All' }, { value: 'mobile', label: 'Mobile' }, { value: 'desktop', label: 'Desktop' }].map(d => (
+                      <button
+                        key={d.value}
+                        onClick={() => setField('devicePlatforms', d.value)}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                          fields.devicePlatforms === d.value
+                            ? 'bg-primary/15 border-primary/40 text-primary'
+                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >{d.label}</button>
+                    ))}
+                  </div>
+                </FieldToggle>
+
+                {/* Attribution Window */}
+                <FieldToggle label="Attribution Window" icon={<span className="text-[11px]">⏱</span>} enabled={enabled.attributionWindow} onToggle={() => toggleEnabled('attributionWindow')}>
+                  <select
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                    value={fields.attributionWindow}
+                    onChange={e => setField('attributionWindow', e.target.value)}
+                  >
+                    <option value="7d_click_1d_engaged_1d_view">7-day click, 1-day engaged view, 1-day view (default)</option>
+                    <option value="7d_click">7-day click</option>
+                    <option value="1d_click">1-day click</option>
+                    <option value="7d_click_1d_view">7-day click, 1-day view</option>
+                    <option value="1d_click_1d_view">1-day click, 1-day view</option>
+                  </select>
+                </FieldToggle>
+
+                {/* Attribution Model */}
+                <FieldToggle label="Attribution Model" icon={<span className="text-[11px]">🔀</span>} enabled={enabled.attributionModel} onToggle={() => toggleEnabled('attributionModel')}>
+                  <div className="flex gap-1">
+                    {[{ value: 'standard', label: 'Standard' }, { value: 'incremental', label: 'Incremental' }].map(m => (
+                      <button
+                        key={m.value}
+                        onClick={() => setField('attributionModel', m.value)}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                          fields.attributionModel === m.value
+                            ? 'bg-primary/15 border-primary/40 text-primary'
+                            : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                        )}
+                      >{m.label}</button>
+                    ))}
+                  </div>
+                </FieldToggle>
+
+                {/* Frequency Control — only shown when applicable */}
+                {frequencyControlApplicable(fields.optimizationGoal) && (
+                  <FieldToggle label="Frequency Control" icon={<span className="text-[11px]">🔁</span>} enabled={enabled.frequencyControl} onToggle={() => toggleEnabled('frequencyControl')}>
+                    <div className="space-y-2">
+                      <div className="flex gap-1">
+                        {(['target', 'cap'] as const).map(m => (
+                          <button
+                            key={m}
+                            onClick={() => setField('frequencyControl', { ...(fields.frequencyControl ?? { times: 2, days: 7, mode: 'target', enabled: true }), mode: m })}
+                            className={cn(
+                              'px-3 py-1 rounded-lg text-[11px] font-600 border transition-all',
+                              (fields.frequencyControl?.mode ?? 'target') === m
+                                ? 'bg-primary/15 border-primary/40 text-primary'
+                                : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                            )}
+                          >{m === 'target' ? 'Target Frequency' : 'Frequency Cap'}</button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-muted-foreground block mb-1">Times</label>
+                          <input
+                            type="number" min={1} max={10}
+                            className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                            value={fields.frequencyControl?.times ?? 2}
+                            onChange={e => setField('frequencyControl', { ...(fields.frequencyControl ?? { times: 2, days: 7, mode: 'target', enabled: true }), times: Number(e.target.value) })}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-muted-foreground block mb-1">Per N days</label>
+                          <input
+                            type="number" min={1} max={90}
+                            className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
+                            value={fields.frequencyControl?.days ?? 7}
+                            onChange={e => setField('frequencyControl', { ...(fields.frequencyControl ?? { times: 2, days: 7, mode: 'target', enabled: true }), days: Number(e.target.value) })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </FieldToggle>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-
         {/* Footer */}
         <div className="px-5 py-4 border-t border-border flex-shrink-0 flex items-center justify-between gap-3">
           <div className="text-[11px] text-muted-foreground">

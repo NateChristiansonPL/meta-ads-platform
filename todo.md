@@ -460,3 +460,10 @@
 - [x] Pillar view: add multi-select mode toggle to ad set list (checkbox per card)
 - [x] Pillar view: show "Bulk Edit X ad sets" button when 2+ are checked
 - [x] Pillar view: clicking Bulk Edit opens the BulkEditPanel drawer
+
+## Bulk Edit — Age, Gender & Optional Fields
+
+- [x] BulkEditPanel: add Age Range field (min age slider/input + max age slider/input)
+- [x] BulkEditPanel: add Gender field (All / Male / Female toggle)
+- [x] BulkEditPanel: add collapsed "Optional Fields" section that expands to show available optional fields for bulk editing
+- [x] BulkEditPanel optional fields: language, operating system, device type, attribution window, attribution model, frequency control
