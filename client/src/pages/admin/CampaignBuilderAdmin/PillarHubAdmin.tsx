@@ -33,9 +33,12 @@ import {
   Target,
   Check,
   Monitor,
+  SlidersHorizontal,
+  X as XIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { TargetingPopup, AudienceFocus } from "./TargetingPopupAdmin";
+import { BulkEditPanel } from "./BulkEditPanelAdmin";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type PillarKey = "campaigns" | "adsets" | "creatives" | "ads" | "launch";
@@ -488,6 +491,9 @@ function PillarAdSets({
   onChange: (rows: AdSetRow[]) => void;
 }) {
   const [step, setStep] = useState(1);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const focused = adSets.find((a) => a.id === focusId) ?? adSets[0];
   const idx = adSets.findIndex((a) => a.id === focused?.id);
   const hasCredentials = !!(settings?.accessToken && settings?.adAccountId);
@@ -636,28 +642,101 @@ function PillarAdSets({
     <div className="ph-split">
       {/* List */}
       <div className="ph-list">
-        <div className="ph-list-head">
+        <div className="ph-list-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <span className="ph-list-label">{adSets.length} Ad Sets</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {multiSelectMode && bulkSelectedIds.size >= 2 && (
+              <button
+                onClick={() => setBulkEditOpen(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                  background: 'rgba(0,190,239,0.15)', border: '1px solid rgba(0,190,239,0.4)',
+                  color: '#00BEEF', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                <SlidersHorizontal size={10} />
+                Bulk Edit ({bulkSelectedIds.size})
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setMultiSelectMode(m => !m);
+                setBulkSelectedIds(new Set());
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                background: multiSelectMode ? 'rgba(0,190,239,0.15)' : 'rgba(255,255,255,0.05)',
+                border: multiSelectMode ? '1px solid rgba(0,190,239,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                color: multiSelectMode ? '#00BEEF' : 'rgba(255,255,255,0.4)',
+                cursor: 'pointer',
+              }}
+            >
+              {multiSelectMode ? <XIcon size={10} /> : <SlidersHorizontal size={10} />}
+              {multiSelectMode ? 'Cancel' : 'Multi'}
+            </button>
+          </div>
         </div>
         {adSets.map((a) => {
           const errs = adSetIssues(a);
+          const isChecked = bulkSelectedIds.has(a.id);
           return (
-            <button
+            <div
               key={a.id}
-              className={`ph-list-card ${a.id === focusId ? "ph-list-card--on" : ""} ${errs.length ? "ph-list-card--err" : ""}`}
-              onClick={() => { onFocus(a.id); setStep(1); }}
+              style={{ display: 'flex', alignItems: 'stretch' }}
             >
-              <div className="ph-list-card-name">{a.name || "Untitled ad set"}</div>
-              <div className="ph-list-card-meta">in {a.campaignName || "—"}</div>
-              <div className="ph-list-card-budget">
-                {a.budget ? `$${a.budget}` : "—"}
-                {errs.length > 0 ? (
-                  <span className="ph-badge ph-badge--err">{errs.length}</span>
-                ) : (
-                  <CheckCircle2 size={12} style={{ color: "var(--pl-green)" }} />
-                )}
-              </div>
-            </button>
+              {multiSelectMode && (
+                <button
+                  onClick={() => {
+                    setBulkSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                      return next;
+                    });
+                  }}
+                  style={{
+                    width: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div style={{
+                    width: 14, height: 14, borderRadius: 3, border: isChecked ? '1px solid #00BEEF' : '1px solid rgba(255,255,255,0.25)',
+                    background: isChecked ? '#00BEEF' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {isChecked && <Check size={9} color="#141349" />}
+                  </div>
+                </button>
+              )}
+              <button
+                className={`ph-list-card ${a.id === focusId ? "ph-list-card--on" : ""} ${errs.length ? "ph-list-card--err" : ""} ${isChecked ? "ph-list-card--checked" : ""}`}
+                style={{ flex: 1 }}
+                onClick={() => {
+                  if (multiSelectMode) {
+                    setBulkSelectedIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(a.id)) next.delete(a.id); else next.add(a.id);
+                      return next;
+                    });
+                  } else {
+                    onFocus(a.id); setStep(1);
+                  }
+                }}
+              >
+                <div className="ph-list-card-name">{a.name || "Untitled ad set"}</div>
+                <div className="ph-list-card-meta">in {a.campaignName || "—"}</div>
+                <div className="ph-list-card-budget">
+                  {a.budget ? `$${a.budget}` : "—"}
+                  {errs.length > 0 ? (
+                    <span className="ph-badge ph-badge--err">{errs.length}</span>
+                  ) : (
+                    <CheckCircle2 size={12} style={{ color: "var(--pl-green)" }} />
+                  )}
+                </div>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -1261,11 +1340,20 @@ function PillarAdSets({
           </div>
         </div>
       )}
+      {/* ── Bulk Edit Panel ─────────────────────────────────────────────────────── */}
+      {bulkEditOpen && (
+        <BulkEditPanel
+          selectedRows={adSets.filter(a => bulkSelectedIds.has(a.id))}
+          allRows={adSets}
+          onChange={onChange}
+          onClose={() => { setBulkEditOpen(false); setMultiSelectMode(false); setBulkSelectedIds(new Set()); }}
+          settings={settings}
+        />
+      )}
     </div>
   );
 }
-
-// ── Creatives pillar ──────────────────────────────────────────────────────────
+// ── Creatives pillar ────────────────────────────────────────────────────────
 function PillarCreatives({
   creatives,
   carouselCreatives,

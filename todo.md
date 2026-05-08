@@ -448,3 +448,15 @@
 - [x] Platform step: dynamic placement checkboxes based on selected platforms
 - [x] Platform step: combine FB Feed + IG Feed → Feed, FB Stories + IG Stories → Stories, FB Reels + IG Reels → Reels
 - [x] Platform step: Advantage+ vs Manual toggle
+
+## Bulk Edit — Ad Sets
+
+- [x] Build shared BulkEditPanel component (slide-in drawer) with fields: budget type/amount, start/end datetime, optimization goal, conversion event, locations (add/replace), custom/LAL targeted audiences (add/replace), excluded audiences (add/replace)
+- [x] BulkEditPanel: each field has an "enable" toggle so only checked fields get applied
+- [x] BulkEditPanel: locations support "Add to existing" vs "Replace all" mode
+- [x] BulkEditPanel: audiences support "Add to existing" vs "Replace all" mode
+- [x] Spreadsheet view: add "Bulk Edit" button to toolbar (enabled when 2+ rows selected)
+- [x] Spreadsheet view: clicking Bulk Edit opens the BulkEditPanel drawer
+- [x] Pillar view: add multi-select mode toggle to ad set list (checkbox per card)
+- [x] Pillar view: show "Bulk Edit X ad sets" button when 2+ are checked
+- [x] Pillar view: clicking Bulk Edit opens the BulkEditPanel drawer

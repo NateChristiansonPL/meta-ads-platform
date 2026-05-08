@@ -35,6 +35,7 @@ import { trpc } from '@/lib/trpc';
 import { BuildSettings } from './campaignStoreAdmin';
 import { ReachEstimatePanel, AudienceOverlapPanel } from './BuilderReachOverlapPanelAdmin';
 import { buildBuilderTargetingSpec } from './builderMetaMappingAdmin';
+import { BulkEditPanel } from './BulkEditPanelAdmin';
 
 interface Props {
   rows: AdSetRow[];
@@ -759,6 +760,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
   // ── Pre-Launch QA rail ─────────────────────────────────────────────────────
   const [qaOpen, setQaOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
 
   // Close panels on outside click
   useEffect(() => {
@@ -906,6 +908,16 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
               <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{overlapHistory.length}</span>
             )}
           </button>
+          {/* Bulk Edit button */}
+          {selectedRows.size >= 2 && (
+            <button
+              onClick={() => setBulkEditOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border bg-primary/10 border-primary/30 text-primary hover:bg-primary/20">
+              <SlidersHorizontal size={12} />
+              Bulk Edit
+              <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{selectedRows.size}</span>
+            </button>
+          )}
           {/* Pre-Launch QA toggle */}
           <button
             onClick={() => setQaOpen(o => !o)}
@@ -2166,6 +2178,16 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
             </div>
           </div>
         </div>
+      )}
+      {/* ── Bulk Edit Panel ────────────────────────────────────────────────────── */}
+      {bulkEditOpen && (
+        <BulkEditPanel
+          selectedRows={selectedAdSets}
+          allRows={rows}
+          onChange={onChange}
+          onClose={() => setBulkEditOpen(false)}
+          settings={settings}
+        />
       )}
     </div>
   );
