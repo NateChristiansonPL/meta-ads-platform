@@ -412,3 +412,12 @@
 - [x] Targeting popup: change from left-0 to right-0 so right edge aligns with right edge of Targeting column
 - [x] Placements popup: change from left-0 to right-0 so right edge aligns with right edge of Placements column
 - [x] Placements popup: expand horizontally (wider 560px, 3-column grid layout) so all options are visible without scrolling
+
+## Admin Campaign Builder — Pillar View Targeting Wire-up
+
+- [x] Pillar view: wire Location targeting (reuse TargetingPopup Location tab logic)
+- [x] Pillar view: wire Interests + Behaviors targeting (reuse TargetingPopup Interests tab logic)
+- [x] Pillar view: wire Narrow Targeting (AND) section in pillar audience panel
+- [x] Pillar view: wire Custom/LAL Targeted Audiences section (reuse TargetingPopup Custom tab logic)
+- [x] Pillar view: wire Excluded Audiences section (reuse TargetingPopup Custom tab excluded logic)
+- [x] Pillar view: all targeting changes sync back to the same adSet state used by the spreadsheet view

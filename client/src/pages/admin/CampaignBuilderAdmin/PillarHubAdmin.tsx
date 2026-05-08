@@ -13,6 +13,7 @@ import {
   AdSetRow,
   CampaignRow,
   CreativeRow,
+  BuildSettings,
 } from "./campaignStoreAdmin";
 import {
   CheckCircle2,
@@ -26,7 +27,10 @@ import {
   MapPin,
   Calendar,
   DollarSign,
+  Target,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { TargetingPopup, AudienceFocus } from "./TargetingPopupAdmin";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type PillarKey = "campaigns" | "adsets" | "creatives" | "ads" | "launch";
@@ -202,6 +206,7 @@ export default function PillarHubAdmin({
           <PillarAdSets
             adSets={state.adSets}
             campaigns={state.campaigns}
+            settings={state.settings}
             focusId={focusAdSetId}
             onFocus={setFocusAdSetId}
             onChange={(rows) => onStateChange("adSets", rows)}
@@ -465,12 +470,14 @@ function PillarCampaigns({
 function PillarAdSets({
   adSets,
   campaigns,
+  settings,
   focusId,
   onFocus,
   onChange,
 }: {
   adSets: AdSetRow[];
   campaigns: CampaignRow[];
+  settings: BuildSettings;
   focusId: string;
   onFocus: (id: string) => void;
   onChange: (rows: AdSetRow[]) => void;
@@ -478,12 +485,54 @@ function PillarAdSets({
   const [step, setStep] = useState(1);
   const focused = adSets.find((a) => a.id === focusId) ?? adSets[0];
   const idx = adSets.findIndex((a) => a.id === focused?.id);
+  const hasCredentials = !!(settings?.accessToken && settings?.adAccountId);
+
+  // ── Search state (mirrors AdSetsTableAdmin) ──────────────────────────────
+  const [audienceFocus, setAudienceFocus] = useState<AudienceFocus>('location');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationRowId, setLocationRowId] = useState<string | null>(null);
+  const [detailedQuery, setDetailedQuery] = useState('');
+  const [detailedRowId, setDetailedRowId] = useState<string | null>(null);
+  const [detailedType, setDetailedType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
+  const [narrowQuery, setNarrowQuery] = useState('');
+  const [narrowRowId, setNarrowRowId] = useState<string | null>(null);
+  const [narrowType, setNarrowType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
+  const [audienceSearch, setAudienceSearch] = useState('');
+  const [bulkLocModal, setBulkLocModal] = useState<{ rowId: string } | null>(null);
+  const [bulkLocText, setBulkLocText] = useState('');
+
+  // ── tRPC queries (mirrors AdSetsTableAdmin) ──────────────────────────────
+  const { data: locationResults, isFetching: searchingLocations } = trpc.adminMeta.searchGeoLocations.useQuery(
+    { accessToken: settings?.accessToken ?? '', query: locationQuery, location_types: ['city', 'region', 'country', 'zip'] },
+    { enabled: hasCredentials && locationQuery.length >= 2, staleTime: 60 * 1000 }
+  );
+  const { data: detailedResults, isFetching: searchingDetailed } = trpc.adminMeta.searchTargeting.useQuery(
+    { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', query: detailedQuery, type: detailedType },
+    { enabled: hasCredentials && detailedQuery.length >= 2, staleTime: 60 * 1000 }
+  );
+  const { data: narrowResults, isFetching: searchingNarrow } = trpc.adminMeta.searchTargeting.useQuery(
+    { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', query: narrowQuery, type: narrowType },
+    { enabled: hasCredentials && narrowQuery.length >= 2, staleTime: 60 * 1000 }
+  );
+  const { data: customAudiencesData, isLoading: loadingAudiences } = trpc.adminMeta.getCustomAudiences.useQuery(
+    { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', search: audienceSearch || undefined },
+    { enabled: hasCredentials && audienceSearch.trim().length > 0, staleTime: 2 * 60 * 1000 }
+  );
+  const customAudiences = customAudiencesData?.audiences ?? [];
 
   const updateFocused = useCallback(
     (patch: Partial<AdSetRow>) => {
       onChange(adSets.map((a) => (a.id === focused?.id ? { ...a, ...patch } : a)));
     },
     [adSets, focused, onChange]
+  );
+
+  // Generic update by id (required by TargetingPopup)
+  const updateById = useCallback(
+    (id: string, patch: Partial<AdSetRow>) => {
+      onChange(adSets.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+    },
+    [adSets, onChange]
   );
 
   const STEPS = ["Locations", "Audience", "Schedule", "Budget"];
@@ -583,16 +632,45 @@ function PillarAdSets({
                   <h4>Where do they live?</h4>
                 </div>
                 <div className="ph-fld-group-body">
-                  <div className="ph-fld">
-                    <label className="ph-lbl">Locations</label>
-                    <input
-                      className="ph-input"
-                      value={focused.geoLocations}
-                      onChange={(e) => updateFocused({ geoLocations: e.target.value })}
-                      placeholder="City, state, country, or ZIP…"
+                  {focused && (
+                    <TargetingPopup
+                      inline
+                      tmRow={focused}
+                      audienceFocus="location"
+                      setAudienceFocus={setAudienceFocus}
+                      hasCredentials={hasCredentials}
+                      locationQuery={locationQuery}
+                      locationRowId={locationRowId}
+                      setLocationQuery={setLocationQuery}
+                      setLocationRowId={setLocationRowId}
+                      locationResults={locationResults}
+                      searchingLocations={searchingLocations}
+                      detailedQuery={detailedQuery}
+                      detailedRowId={detailedRowId}
+                      setDetailedQuery={setDetailedQuery}
+                      setDetailedRowId={setDetailedRowId}
+                      detailedType={detailedType}
+                      setDetailedType={setDetailedType}
+                      detailedResults={detailedResults}
+                      searchingDetailed={searchingDetailed}
+                      narrowQuery={narrowQuery}
+                      narrowRowId={narrowRowId}
+                      setNarrowQuery={setNarrowQuery}
+                      setNarrowRowId={setNarrowRowId}
+                      narrowType={narrowType}
+                      setNarrowType={setNarrowType}
+                      narrowResults={narrowResults}
+                      searchingNarrow={searchingNarrow}
+                      audienceSearch={audienceSearch}
+                      setAudienceSearch={setAudienceSearch}
+                      customAudiences={customAudiences}
+                      loadingAudiences={loadingAudiences}
+                      update={updateById}
+                      onClose={() => {}}
+                      setBulkLocModal={setBulkLocModal}
+                      setBulkLocText={setBulkLocText}
                     />
-                    <div className="ph-help">Paste a list — one per line — or use the spreadsheet view for advanced geo targeting.</div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -604,6 +682,7 @@ function PillarAdSets({
                   <h4>Who are we reaching?</h4>
                 </div>
                 <div className="ph-fld-group-body">
+                  {/* Age / Gender row */}
                   <div className="ph-fld-row">
                     <div className="ph-fld">
                       <label className="ph-lbl">Age Min</label>
@@ -642,25 +721,87 @@ function PillarAdSets({
                       </div>
                     </div>
                   </div>
+
+                  {/* Targeting summary chips */}
                   <div className="ph-fld">
-                    <label className="ph-lbl">Interests & Behaviors <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>(optional)</span></label>
-                    <input
-                      className="ph-input"
-                      value={focused.detailedInterests}
-                      onChange={(e) => updateFocused({ detailedInterests: e.target.value })}
-                      placeholder="e.g. Tennis, Golf, Fitness"
-                    />
-                    <div className="ph-help">Leave blank to start broad — Meta's algorithm will narrow on its own.</div>
+                    <label className="ph-lbl" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Target size={11} style={{ color: 'var(--pl-cyan)' }} />
+                      Targeting
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                      {focused.geoLocations?.split('\n').filter(Boolean).map((loc, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(0,190,239,0.1)', border: '1px solid rgba(0,190,239,0.25)', borderRadius: 999, fontSize: 10, color: '#00BEEF' }}>
+                          📍 {loc}
+                        </span>
+                      ))}
+                      {focused.detailedInterests?.split('\n').filter(Boolean).map((i2, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(0,190,239,0.08)', border: '1px solid rgba(0,190,239,0.2)', borderRadius: 999, fontSize: 10, color: '#00BEEF' }}>
+                          🎯 {i2}
+                        </span>
+                      ))}
+                      {focused.narrowInterests?.split('\n').filter(Boolean).map((i2, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 999, fontSize: 10, color: '#f59e0b' }}>
+                          AND {i2}
+                        </span>
+                      ))}
+                      {focused.targetedAudiences?.split('\n').filter(Boolean).map((a, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(0,190,239,0.08)', border: '1px solid rgba(0,190,239,0.2)', borderRadius: 999, fontSize: 10, color: '#00BEEF' }}>
+                          👥 {a}
+                        </span>
+                      ))}
+                      {focused.excludedAudiences?.split('\n').filter(Boolean).map((a, i) => (
+                        <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 999, fontSize: 10, color: '#f87171' }}>
+                          ❌ {a}
+                        </span>
+                      ))}
+                      {!focused.geoLocations && !focused.detailedInterests && !focused.targetedAudiences && (
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>No targeting set yet — use the panel below</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="ph-fld">
-                    <label className="ph-lbl">Excluded Audiences</label>
-                    <input
-                      className="ph-input"
-                      value={focused.excludedAudiences}
-                      onChange={(e) => updateFocused({ excludedAudiences: e.target.value })}
-                      placeholder="e.g. Retargeting - Sitewide"
-                    />
-                  </div>
+
+                  {/* Full TargetingPopup — rendered inline (not as a popup) */}
+                  {focused && (
+                    <div>
+                      <TargetingPopup
+                        inline
+                        tmRow={focused}
+                        audienceFocus={audienceFocus}
+                        setAudienceFocus={setAudienceFocus}
+                        hasCredentials={hasCredentials}
+                        locationQuery={locationQuery}
+                        locationRowId={locationRowId}
+                        setLocationQuery={setLocationQuery}
+                        setLocationRowId={setLocationRowId}
+                        locationResults={locationResults}
+                        searchingLocations={searchingLocations}
+                        detailedQuery={detailedQuery}
+                        detailedRowId={detailedRowId}
+                        setDetailedQuery={setDetailedQuery}
+                        setDetailedRowId={setDetailedRowId}
+                        detailedType={detailedType}
+                        setDetailedType={setDetailedType}
+                        detailedResults={detailedResults}
+                        searchingDetailed={searchingDetailed}
+                        narrowQuery={narrowQuery}
+                        narrowRowId={narrowRowId}
+                        setNarrowQuery={setNarrowQuery}
+                        setNarrowRowId={setNarrowRowId}
+                        narrowType={narrowType}
+                        setNarrowType={setNarrowType}
+                        narrowResults={narrowResults}
+                        searchingNarrow={searchingNarrow}
+                        audienceSearch={audienceSearch}
+                        setAudienceSearch={setAudienceSearch}
+                        customAudiences={customAudiences}
+                        loadingAudiences={loadingAudiences}
+                        update={updateById}
+                        onClose={() => {/* inline — no close needed */}}
+                        setBulkLocModal={setBulkLocModal}
+                        setBulkLocText={setBulkLocText}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
