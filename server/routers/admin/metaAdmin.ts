@@ -1080,10 +1080,13 @@ export const metaAdminRouter = router({
 
       if (startTime) payload.start_time = startTime;
 
-      // Issue 6: OUTCOME_TRAFFIC only supports 1-day click attribution window.
-      // Override whatever the client sent — never send 7d click or 1d view for traffic.
+      // Issue 6: OUTCOME_TRAFFIC uses 7-day click + 1-day view attribution window.
+      // Override whatever the client sent to ensure the correct spec is always applied.
       if (objective === 'OUTCOME_TRAFFIC') {
-        payload.attribution_spec = [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
+        payload.attribution_spec = [
+          { event_type: 'CLICK_THROUGH', window_days: 7 },
+          { event_type: 'VIEW_THROUGH', window_days: 1 },
+        ];
       } else if (attributionSpec) {
         payload.attribution_spec = attributionSpec;
       }
