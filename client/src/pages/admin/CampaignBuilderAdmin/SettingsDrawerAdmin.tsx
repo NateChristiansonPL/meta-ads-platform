@@ -4,7 +4,7 @@ import {
   X, ChevronDown, Search, CheckCircle2, Loader2, AlertCircle,
   Building2, CreditCard, FileText, Instagram, Zap, XCircle,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BuildSettings } from './campaignStoreAdmin';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
@@ -18,7 +18,14 @@ interface Props {
 export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
   // ── Token list ──────────────────────────────────────────────────────────────
   const { data: tokensData, isLoading: loadingTokens } = trpc.tokens.listActive.useQuery();
-  const activeTokens = tokensData ?? [];
+  // Deduplicate by businessManagerId — keep the first entry per BM to avoid duplicate entries
+  const activeTokens = useMemo(() => {
+    const seen = new Map<string, NonNullable<typeof tokensData>[0]>();
+    for (const t of (tokensData ?? [])) {
+      if (!seen.has(t.businessManagerId)) seen.set(t.businessManagerId, t);
+    }
+    return Array.from(seen.values());
+  }, [tokensData]);
 
   // ── Ad accounts (loaded when tokenId changes) ───────────────────────────────
   const [adAccountSearch, setAdAccountSearch] = useState('');

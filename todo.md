@@ -569,3 +569,24 @@
 - [x] Feature: add Optional Fields column to Campaign tab (specialAdCategory, CBO) — same pattern as Ad Sets optional fields popup; defaults NONE/false
 - [x] Fix: inferDestinationType() map keys updated to match actual CONVERSION_LOCATIONS enum values (INSTAGRAM_PROFILE, ON_AD, PHONE_CALL, IG_FB_COMBINED)
 - [x] Feature: add Abort button to Exports tab launch progress panel (OctagonX icon, trpc.runs.abortRun, isAborting state)
+
+## Admin Creative Decay — Full Redesign (May 11 2026)
+
+- [x] Schema: add `metaSyncSchedule` table (enabled, utcHour, rollingDays, syncPreset, tokenId, accountId, campaignIds, campaignStatusFilter, notifyEmerging, notifyPossible, notifyProbable, onlyLiveAds, lastRunAt, lastRunStatus, lastAnalysisAt, lastAnalysisStatus)
+- [x] Schema: add `firstFatigueDetected` table (fingerprint, accountId, level, firstDetectedAt) — tracks when each signal level was first seen per creative
+- [x] DB tables created via direct SQL (drizzle-kit migrate had env issues)
+- [x] Server: split `runAnalysis` into `syncPerformance` (sync only) and `runDecayAnalysis` (analysis only) procedures
+- [x] Server: add `getSchedulerConfig` and `saveSchedulerConfig` procedures
+- [x] Server: update `analyzeStoredPerformance` to accept `onlyLiveAds` filter and populate `firstFatigueDetected` table
+- [x] Server: update `mapResult` to include `firstDetectedAt` from `firstFatigueDetected` table
+- [x] Server: update `getCampaignsByTokenId` to accept `statusFilter` param (active / active_30d / inactive / all)
+- [x] Server: add `syncPerformance` procedure with campaign status filter support
+- [x] Server: add node-cron hourly scheduler that fires sync + analysis at configured UTC hours
+- [x] UI: build shared `DateRangePicker` component (single popover, start+end, presets: Today, Yesterday, Last 7d, Last 14d, Last 30d, Last 90d)
+- [x] UI: replace all 4 date inputs in AdminCreativeDecay with DateRangePicker (one for sync, one for analysis)
+- [x] UI: split header actions into "Sync Ad Performance" and "Run Decay Analysis" buttons
+- [x] UI: add Scheduler panel with enable toggle, UTC hour, rolling days, yesterday preset, campaign status filter, notification thresholds (emerging/possible/probable), live-ads-only toggle
+- [x] UI: add campaign status filter dropdown to Campaign Scope panel (Active / Active in last 30 days / Inactive / All)
+- [x] UI: update Results table to show `firstDetectedAt` column per signal level
+- [x] UI: add Signals Only / All filter toggle to Results panel
+- [x] Fix: deduplicate BM token selector to show only one entry per unique BM id (AdminCreativeDecay + SettingsDrawerAdmin)

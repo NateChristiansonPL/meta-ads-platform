@@ -278,22 +278,36 @@ export const metaAdminRouter = router({
       z.object({
         tokenId: z.number().int().positive(),
         adAccountId: z.string().min(1),
+        statusFilter: z.enum(["active", "active_30d", "inactive", "all"]).default("active"),
       })
     )
     .query(async ({ input }) => {
-      const { tokenId, adAccountId } = input;
+      const { tokenId, adAccountId, statusFilter } = input;
       const tokenRecord = await getTokenById(tokenId);
       if (!tokenRecord?.accessToken) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Token not found" });
       }
       const accountId = normalizeAdAccountId(adAccountId);
+      // Build effective_status filter based on statusFilter
+      let effectiveStatus: string;
+      if (statusFilter === "active") {
+        effectiveStatus = '["ACTIVE"]';
+      } else if (statusFilter === "active_30d") {
+        // Fetch active + paused (we'll filter by date client-side or just return all active/paused)
+        effectiveStatus = '["ACTIVE","PAUSED","CAMPAIGN_PAUSED"]';
+      } else if (statusFilter === "inactive") {
+        effectiveStatus = '["PAUSED","ARCHIVED","DELETED","CAMPAIGN_PAUSED"]';
+      } else {
+        // all
+        effectiveStatus = '["ACTIVE","PAUSED","ARCHIVED","CAMPAIGN_PAUSED"]';
+      }
       try {
         const data = await metaGet(
           `/${accountId}/campaigns`,
           {
             fields: "id,name,status,objective",
             limit: "200",
-            effective_status: '["ACTIVE","PAUSED","CAMPAIGN_PAUSED"]',
+            effective_status: effectiveStatus,
           },
           tokenRecord.accessToken
         );

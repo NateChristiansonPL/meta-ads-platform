@@ -5,7 +5,8 @@ import { and, between, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, router } from "../../_core/trpc";
 import { getDb, getTokenById } from "../../db";
-import { adPerformance, adSourceDetails, creativeFatigueResults, metaSyncHistory } from "../../../drizzle/schema";
+import { adPerformance, adSourceDetails, creativeFatigueResults, metaSyncHistory, metaSyncSchedule, firstFatigueDetected } from "../../../drizzle/schema";
+import { notifyOwner } from "../../_core/notification";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -284,12 +285,22 @@ function classify(score: number, totalEvents: number, cpeDegrade: number, ctrDro
   return { label: "none", status: "HEALTHY" as const, level: null };
 }
 
-async function analyzeStoredPerformance(input: { accountId: string; campaignIds: string[]; dateFrom: string; dateTo: string }) {
+async function analyzeStoredPerformance(input: { accountId: string; campaignIds: string[]; dateFrom: string; dateTo: string; onlyLiveAds?: boolean }) {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Database is not configured." });
   const filters = [eq(adPerformance.accountId, cleanAccountId(input.accountId)), between(adPerformance.date, input.dateFrom, input.dateTo)];
   if (input.campaignIds.length) filters.push(inArray(adPerformance.campaignId, input.campaignIds));
-  const rows = await db.select().from(adPerformance).where(and(...filters));
+  let rows = await db.select().from(adPerformance).where(and(...filters));
+
+  // If onlyLiveAds, filter to ad IDs that have data on the most recent date in the range
+  if (input.onlyLiveAds) {
+    const allDates = Array.from(new Set(rows.map(r => r.date))).sort();
+    const latestDate = allDates[allDates.length - 1];
+    if (latestDate) {
+      const liveAdIds = new Set(rows.filter(r => r.date === latestDate).map(r => r.adId));
+      rows = rows.filter(r => liveAdIds.has(r.adId));
+    }
+  }
   const groups = new Map<string, VisionRow[]>();
   for (const row of rows) {
     const key = row.contentFingerprint || (row.creativeId ? `creative:${row.creativeId}` : null);
@@ -386,12 +397,46 @@ async function analyzeStoredPerformance(input: { accountId: string; campaignIds:
     };
     await db.insert(creativeFatigueResults).values(result);
     inserted.push(result);
+
+    // Track first-detected dates for fatigue signal levels
+    if (label.level) {
+      const accountIdClean = cleanAccountId(input.accountId);
+      await db.insert(firstFatigueDetected).values({
+        accountId: accountIdClean,
+        contentFingerprint: fingerprint,
+        level: label.level,
+        representativeName: adNames[0] ?? fingerprint,
+      }).onDuplicateKeyUpdate({ set: { representativeName: adNames[0] ?? fingerprint } });
+    }
   }
-  return { analysisRunId, records: inserted.sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore)).map((row, index) => mapResult({ ...row, id: index + 1 })) };
+
+  // Load first-detected dates for all fingerprints in this run
+  const fingerprintList = inserted.map(r => r.contentFingerprint).filter(Boolean) as string[];
+  const firstDetectedMap = new Map<string, Map<string, Date>>();
+  if (fingerprintList.length) {
+    const fdRows = await db.select().from(firstFatigueDetected)
+      .where(and(
+        eq(firstFatigueDetected.accountId, cleanAccountId(input.accountId)),
+        inArray(firstFatigueDetected.contentFingerprint, fingerprintList)
+      ));
+    for (const fd of fdRows) {
+      if (!firstDetectedMap.has(fd.contentFingerprint)) firstDetectedMap.set(fd.contentFingerprint, new Map());
+      firstDetectedMap.get(fd.contentFingerprint)!.set(fd.level, fd.firstDetectedAt);
+    }
+  }
+
+  return { analysisRunId, records: inserted.sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore)).map((row, index) => mapResult({ ...row, id: index + 1 }, firstDetectedMap)) };
 }
 
 type FatigueResultLike = typeof creativeFatigueResults.$inferSelect | (typeof creativeFatigueResults.$inferInsert & { id?: number });
-function mapResult(row: FatigueResultLike) {
+function mapResult(row: FatigueResultLike, firstDetectedMap?: Map<string, Map<string, Date>>) {
+  const fp = row.contentFingerprint ?? String(row.id);
+  const levelMap = firstDetectedMap?.get(fp);
+  const firstDetectedAt: Record<string, string | null> = {
+    emerging: levelMap?.get('emerging')?.toISOString() ?? null,
+    possible: levelMap?.get('possible')?.toISOString() ?? null,
+    probable: levelMap?.get('probable')?.toISOString() ?? null,
+  };
   const score = num(row.fatigueScore);
   const label = row.fatigueLabel === "probable fatigue" ? "Probable Fatigue" : row.fatigueLabel === "possible fatigue" ? "Possible Fatigue" : row.fatigueLabel === "emerging fatigue" ? "Emerging Fatigue" : row.fatigueStatus === "IMPROVING" ? "Improving" : row.fatigueStatus === "BLOCKED" ? "Weak Signal" : "No Fatigue Signal";
   return {
@@ -423,10 +468,85 @@ function mapResult(row: FatigueResultLike) {
       reliability: num(row.reliability),
       totalEvents: num(row.totalEvents),
     },
+    firstDetectedAt,
   };
 }
 
+// ── Scheduler helpers ────────────────────────────────────────────────────────
+
+async function getSchedulerConfig() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(metaSyncSchedule).where(eq(metaSyncSchedule.id, 1)).limit(1);
+  return rows[0] ?? null;
+}
+
 export const creativeDecayAdminRouter = router({
+  // ── Split: sync only ────────────────────────────────────────────────────────
+  syncPerformance: adminProcedure.input(z.object({
+    tokenId: z.number().int().positive(),
+    adAccountId: z.string().min(1),
+    campaignIds: z.array(z.string()).default([]),
+    campaignStatusFilter: z.enum(["active", "active_30d", "inactive", "all"]).default("active"),
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })).mutation(async ({ input }) => {
+    const token = await getTokenById(input.tokenId);
+    if (!token?.accessToken) throw new TRPCError({ code: "NOT_FOUND", message: "Token not found." });
+    const result = await syncMetaPerformance({
+      accessToken: token.accessToken,
+      accountId: input.adAccountId,
+      campaignIds: input.campaignIds,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+    });
+    return result;
+  }),
+
+  // ── Split: analysis only ────────────────────────────────────────────────────
+  runDecayAnalysis: adminProcedure.input(z.object({
+    adAccountId: z.string().min(1),
+    campaignIds: z.array(z.string()).default([]),
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    onlyLiveAds: z.boolean().default(false),
+    // Notification thresholds — if set, sends owner notification for matching signals
+    notifyEmerging: z.boolean().default(false),
+    notifyPossible: z.boolean().default(false),
+    notifyProbable: z.boolean().default(false),
+  })).mutation(async ({ input }) => {
+    const analysis = await analyzeStoredPerformance({
+      accountId: input.adAccountId,
+      campaignIds: input.campaignIds,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      onlyLiveAds: input.onlyLiveAds,
+    });
+
+    // Send owner notifications for triggered signals
+    const triggered = analysis.records.filter(r => {
+      const level = r.fatigueStatus === "URGENT" ? "probable" : r.fatigueStatus === "REFRESH" ? "possible" : r.fatigueStatus === "MONITOR" ? "emerging" : null;
+      if (!level) return false;
+      return (level === "probable" && input.notifyProbable) ||
+             (level === "possible" && input.notifyPossible) ||
+             (level === "emerging" && input.notifyEmerging);
+    });
+    if (triggered.length > 0) {
+      const lines = triggered.map(r => {
+        const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
+        const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
+        return `- ${r.creativeName} (${level} fatigue, score ${r.fatigueScore.toFixed(0)})${firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""}`;
+      }).join("\n");
+      await notifyOwner({
+        title: `Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+        content: `The following creatives triggered fatigue signals in the ${input.dateFrom} to ${input.dateTo} analysis window:\n\n${lines}`,
+      });
+    }
+
+    return analysis;
+  }),
+
+  // ── Legacy combined (kept for backward compat) ──────────────────────────────
   runAnalysis: adminProcedure.input(z.object({
     tokenId: z.number().int().positive(),
     adAccountId: z.string().min(1),
@@ -450,7 +570,21 @@ export const creativeDecayAdminRouter = router({
     const latest = await db.select({ analysisRunId: creativeFatigueResults.analysisRunId }).from(creativeFatigueResults).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(creativeFatigueResults.analyzedAt)).limit(1);
     if (!latest[0]?.analysisRunId) return { analysisRunId: null, records: [] };
     const rows = await db.select().from(creativeFatigueResults).where(eq(creativeFatigueResults.analysisRunId, latest[0].analysisRunId)).orderBy(desc(creativeFatigueResults.fatigueScore));
-    return { analysisRunId: latest[0].analysisRunId, records: rows.map(mapResult) };
+    // Load first-detected dates for these results
+    const fpList = rows.map(r => r.contentFingerprint).filter(Boolean) as string[];
+    const firstDetectedMap = new Map<string, Map<string, Date>>();
+    if (fpList.length && input?.accountId) {
+      const fdRows = await db.select().from(firstFatigueDetected)
+        .where(and(
+          eq(firstFatigueDetected.accountId, cleanAccountId(input.accountId)),
+          inArray(firstFatigueDetected.contentFingerprint, fpList)
+        ));
+      for (const fd of fdRows) {
+        if (!firstDetectedMap.has(fd.contentFingerprint)) firstDetectedMap.set(fd.contentFingerprint, new Map());
+        firstDetectedMap.get(fd.contentFingerprint)!.set(fd.level, fd.firstDetectedAt);
+      }
+    }
+    return { analysisRunId: latest[0].analysisRunId, records: rows.map(r => mapResult(r, firstDetectedMap)) };
   }),
 
   getHistory: adminProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(10) }).optional()).query(async ({ input }) => {
@@ -459,4 +593,135 @@ export const creativeDecayAdminRouter = router({
     const history = await db.select().from(metaSyncHistory).orderBy(desc(metaSyncHistory.createdAt)).limit(input?.limit ?? 10);
     return { history };
   }),
+
+  // ── Scheduler config ────────────────────────────────────────────────────────
+  getSchedulerConfig: adminProcedure.query(async () => {
+    const config = await getSchedulerConfig();
+    return config ?? {
+      syncEnabled: false, syncUtcHour: 6, syncRollingDays: 14, syncPreset: "rolling",
+      vaultTokenId: null, accountId: "", campaignIds: null, campaignStatusFilter: "active" as const,
+      analysisEnabled: false, analysisUtcHour: 7, analysisRollingDays: 14,
+      notifyEmerging: false, notifyPossible: true, notifyProbable: true,
+      onlyLiveAds: false, lastRunAt: null, lastRunStatus: null, lastAnalysisAt: null, lastAnalysisStatus: null,
+    };
+  }),
+
+  saveSchedulerConfig: adminProcedure.input(z.object({
+    syncEnabled: z.boolean(),
+    syncUtcHour: z.number().int().min(0).max(23),
+    syncRollingDays: z.number().int().min(1).max(90),
+    syncPreset: z.enum(["rolling", "yesterday"]),
+    vaultTokenId: z.number().int().positive().nullable(),
+    accountId: z.string(),
+    campaignIds: z.string().nullable(), // comma-separated
+    campaignStatusFilter: z.enum(["active", "active_30d", "inactive", "all"]),
+    analysisEnabled: z.boolean(),
+    analysisUtcHour: z.number().int().min(0).max(23),
+    analysisRollingDays: z.number().int().min(1).max(90),
+    notifyEmerging: z.boolean(),
+    notifyPossible: z.boolean(),
+    notifyProbable: z.boolean(),
+    onlyLiveAds: z.boolean(),
+  })).mutation(async ({ input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Database not configured." });
+    await db.insert(metaSyncSchedule).values({ id: 1, ...input }).onDuplicateKeyUpdate({ set: input });
+    return { ok: true };
+  }),
 });
+
+// ── Cron scheduler ────────────────────────────────────────────────────────────
+// Registers a server-side cron that fires every hour and checks if sync/analysis
+// should run based on the saved scheduler config.
+export async function startCreativeDecayCron() {
+  const { default: cron } = await import("node-cron");
+  // Run every hour at minute 0
+  cron.schedule("0 * * * *", async () => {
+    try {
+      const config = await getSchedulerConfig();
+      if (!config) return;
+      const nowUtcHour = new Date().getUTCHours();
+
+      // ── Sync ──
+      if (config.syncEnabled && config.vaultTokenId && config.accountId) {
+        if (nowUtcHour === config.syncUtcHour) {
+          const token = await getTokenById(config.vaultTokenId);
+          if (token?.accessToken) {
+            const today = new Date();
+            let dateFrom: string;
+            let dateTo: string;
+            if (config.syncPreset === "yesterday") {
+              const yesterday = new Date(today);
+              yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+              dateFrom = dateTo = yesterday.toISOString().slice(0, 10);
+            } else {
+              const from = new Date(today);
+              from.setUTCDate(from.getUTCDate() - (config.syncRollingDays ?? 14));
+              dateFrom = from.toISOString().slice(0, 10);
+              dateTo = today.toISOString().slice(0, 10);
+            }
+            const campaignIds = config.campaignIds ? config.campaignIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+            try {
+              await syncMetaPerformance({ accessToken: token.accessToken, accountId: config.accountId, campaignIds, dateFrom, dateTo });
+              const db = await getDb();
+              if (db) await db.update(metaSyncSchedule).set({ lastRunAt: new Date(), lastRunStatus: "success" }).where(eq(metaSyncSchedule.id, 1));
+            } catch (e) {
+              const db = await getDb();
+              if (db) await db.update(metaSyncSchedule).set({ lastRunAt: new Date(), lastRunStatus: "error" }).where(eq(metaSyncSchedule.id, 1));
+              console.error("[CreativeDecay Cron] Sync failed:", e);
+            }
+          }
+        }
+      }
+
+      // ── Analysis ──
+      if (config.analysisEnabled && config.accountId) {
+        if (nowUtcHour === config.analysisUtcHour) {
+          const today = new Date();
+          const from = new Date(today);
+          from.setUTCDate(from.getUTCDate() - (config.analysisRollingDays ?? 14));
+          const dateFrom = from.toISOString().slice(0, 10);
+          const dateTo = today.toISOString().slice(0, 10);
+          const campaignIds = config.campaignIds ? config.campaignIds.split(",").map(s => s.trim()).filter(Boolean) : [];
+          try {
+            const analysis = await analyzeStoredPerformance({
+              accountId: config.accountId,
+              campaignIds,
+              dateFrom,
+              dateTo,
+              onlyLiveAds: config.onlyLiveAds,
+            });
+            // Send notifications
+            const triggered = analysis.records.filter(r => {
+              const level = r.fatigueStatus === "URGENT" ? "probable" : r.fatigueStatus === "REFRESH" ? "possible" : r.fatigueStatus === "MONITOR" ? "emerging" : null;
+              if (!level) return false;
+              return (level === "probable" && config.notifyProbable) ||
+                     (level === "possible" && config.notifyPossible) ||
+                     (level === "emerging" && config.notifyEmerging);
+            });
+            if (triggered.length > 0) {
+              const lines = triggered.map(r => {
+                const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
+                const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
+                return `- ${r.creativeName} (${level} fatigue, score ${r.fatigueScore.toFixed(0)})${firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""}`;
+              }).join("\n");
+              await notifyOwner({
+                title: `[Scheduled] Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+                content: `Automated daily analysis (${dateFrom} to ${dateTo}) detected the following fatigue signals:\n\n${lines}`,
+              });
+            }
+            const db = await getDb();
+            if (db) await db.update(metaSyncSchedule).set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "success" }).where(eq(metaSyncSchedule.id, 1));
+          } catch (e) {
+            const db = await getDb();
+            if (db) await db.update(metaSyncSchedule).set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "error" }).where(eq(metaSyncSchedule.id, 1));
+            console.error("[CreativeDecay Cron] Analysis failed:", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[CreativeDecay Cron] Unexpected error:", e);
+    }
+  });
+  console.log("[CreativeDecay Cron] Hourly scheduler started.");
+}

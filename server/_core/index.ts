@@ -9,6 +9,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { startCreativeDecayCron } from "../routers/admin/creativeDecayAdmin";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,3 +67,4 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+startCreativeDecayCron().catch(e => console.error("[CreativeDecay Cron] Failed to start:", e));

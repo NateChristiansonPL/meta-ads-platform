@@ -76,23 +76,58 @@ export type InsertTokenVaultEntry = typeof tokenVault.$inferInsert;
 
 export const metaSyncSchedule = mysqlTable("meta_sync_schedule", {
   id: int("id").primaryKey().default(1),
-  enabled: boolean("enabled").default(false).notNull(),
-  utcHour: int("utc_hour").default(6).notNull(),
-  rollingDays: int("rolling_days").default(14).notNull(),
+  // Sync scheduler
+  syncEnabled: boolean("sync_enabled").default(false).notNull(),
+  syncUtcHour: int("sync_utc_hour").default(6).notNull(),
+  syncRollingDays: int("sync_rolling_days").default(14).notNull(),
+  syncPreset: varchar("sync_preset", { length: 32 }).default("rolling").notNull(), // 'yesterday' | 'rolling'
   vaultTokenId: int("vault_token_id"),
   accountId: varchar("account_id", { length: 64 }).default("").notNull(),
   campaignIds: text("campaign_ids"),
+  campaignStatusFilter: mysqlEnum("campaign_status_filter", ["active", "active_30d", "inactive", "all"]).default("active").notNull(),
+  // Analysis scheduler
+  analysisEnabled: boolean("analysis_enabled").default(false).notNull(),
+  analysisUtcHour: int("analysis_utc_hour").default(7).notNull(),
+  analysisRollingDays: int("analysis_rolling_days").default(14).notNull(),
+  // Notification thresholds
+  notifyEmerging: boolean("notify_emerging").default(false).notNull(),
+  notifyPossible: boolean("notify_possible").default(true).notNull(),
+  notifyProbable: boolean("notify_probable").default(true).notNull(),
+  // Filters
+  onlyLiveAds: boolean("only_live_ads").default(false).notNull(),
+  // Legacy fields kept for compatibility
+  enabled: boolean("enabled").default(false).notNull(),
+  utcHour: int("utc_hour").default(6).notNull(),
+  rollingDays: int("rolling_days").default(14).notNull(),
   targetTable: varchar("target_table", { length: 64 }).default("ad_performance").notNull(),
   lastRunAt: timestamp("last_run_at"),
   lastRunStatus: mysqlEnum("last_run_status", ["success", "partial", "error"]),
+  lastAnalysisAt: timestamp("last_analysis_at"),
+  lastAnalysisStatus: mysqlEnum("last_analysis_status", ["success", "partial", "error"]),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
+
+// Tracks when each fatigue signal level was FIRST detected for a creative fingerprint.
+// Used to show "first detected on" dates in the results table.
+export const firstFatigueDetected = mysqlTable("first_fatigue_detected", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  accountId: varchar("account_id", { length: 64 }).notNull(),
+  contentFingerprint: varchar("content_fingerprint", { length: 128 }).notNull(),
+  level: mysqlEnum("level", ["emerging", "possible", "probable"]).notNull(),
+  firstDetectedAt: timestamp("first_detected_at").defaultNow().notNull(),
+  representativeName: text("representative_name"),
+}, (table) => ({
+  uniqueSignal: uniqueIndex("ffd_account_fp_level_unique").on(table.accountId, table.contentFingerprint, table.level),
+  accountIdx: index("ffd_account_idx").on(table.accountId),
+}));
 
 export const metaSyncHistory = mysqlTable("meta_sync_history", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
   mode: mysqlEnum("mode", ["manual", "scheduled", "csv", "breakdown"]).notNull(),
   accountId: varchar("account_id", { length: 64 }),
   campaignFilter: text("campaign_filter"),
+  campaignStatusFilter: mysqlEnum("history_campaign_status_filter", ["active", "active_30d", "inactive", "all"]),
+  syncType: mysqlEnum("sync_type", ["sync", "analysis", "combined"]).default("combined"),
   dateFrom: date("date_from", { mode: "string" }),
   dateTo: date("date_to", { mode: "string" }),
   rowsUpserted: int("rows_upserted").default(0).notNull(),
