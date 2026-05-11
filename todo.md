@@ -499,3 +499,8 @@
 
 - [x] Show QA error/warning counts inline on each pillar strip card (Campaigns, Ad Sets, Creatives, Ads, Launch) using runQAChecks
 - [x] Widen collapsed QA sidebar tab in spreadsheet view (from 28px to 44px)
+
+## Campaign Builder — Project Assignment
+
+- [x] Add Campaign Builder (campaign-creation-admin) to SKILL_PROJECT_CONFIG with defaultProjectId Zb7DRexqB45QqDTQU2VV5Y
+- [x] Add project label "Meta Ads Campaign and Ad Builder" for Zb7DRexqB45QqDTQU2VV5Y to PROJECT_LABELS

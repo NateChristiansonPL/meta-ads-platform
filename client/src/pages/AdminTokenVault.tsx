@@ -6,16 +6,18 @@ import { toast } from "sonner";
 
 // ── Skill → Project mapping config ────────────────────────────────────────────
 const SKILL_PROJECT_CONFIG = [
-  { skillId: "weekly-optimization",    skillName: "Weekly Optimization",     color: "#00BEEF", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
-  { skillId: "performance-insights",   skillName: "Performance Insights",    color: "#F7901E", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
-  { skillId: "creative-lifecycle",     skillName: "Creative Lifecycle",      color: "#00B37A", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
-  { skillId: "audience-overlap",       skillName: "Audience Overlap",        color: "#a78bfa", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
-  { skillId: "structural-audit",       skillName: "Structural Audit",        color: "#ED135F", defaultProjectId: "MKTYEMAkqiP2LpTLjUQbfX" },
+  { skillId: "weekly-optimization",      skillName: "Weekly Optimization",      color: "#00BEEF", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "performance-insights",     skillName: "Performance Insights",     color: "#F7901E", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "creative-lifecycle",       skillName: "Creative Lifecycle",       color: "#00B37A", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "audience-overlap",         skillName: "Audience Overlap",         color: "#a78bfa", defaultProjectId: "juQv4FJjcFEmRRYNSe9VPF" },
+  { skillId: "structural-audit",         skillName: "Structural Audit",         color: "#ED135F", defaultProjectId: "MKTYEMAkqiP2LpTLjUQbfX" },
+  { skillId: "campaign-creation-admin",  skillName: "Campaign Builder (Admin)", color: "#F7C948", defaultProjectId: "Zb7DRexqB45QqDTQU2VV5Y" },
 ];
 
 const PROJECT_LABELS: Record<string, string> = {
   "juQv4FJjcFEmRRYNSe9VPF": "Meta Ads Performance Optimization",
   "MKTYEMAkqiP2LpTLjUQbfX": "Meta Ads Andromeda Audit",
+  "Zb7DRexqB45QqDTQU2VV5Y": "Meta Ads Campaign and Ad Builder",
 };
 
 // ── Types ──────────────────────────────────────────────────────────────────────
