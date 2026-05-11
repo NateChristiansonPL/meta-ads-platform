@@ -486,3 +486,11 @@
 
 - [x] Audience step (Step 2): disable Location tab (lockedTab="interests" so only Interests/Custom are active)
 - [x] Audience step (Step 2): Bulk Paste button hidden automatically (only renders when audienceFocus === 'location', which is now blocked)
+
+## Pillar View — Pre-Launch QA
+
+- [x] Extract QA check logic from spreadsheet view into a shared QAChecks utility
+- [x] Add QA panel to Pillar View Launch step (same checks: missing names, budgets, locations, optimization goals, conversion events, placements, creative mapping)
+- [x] QA panel: show pass/fail per ad set with expandable detail rows
+- [x] QA panel: show overall readiness score / summary banner
+- [x] QA panel: clicking a failed item navigates directly to the relevant ad set + step

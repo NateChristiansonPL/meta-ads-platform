@@ -7,7 +7,9 @@
  * Reads from / writes to the same CampaignBuilderState as the spreadsheet view.
  * Scoped entirely within the admin builder — no global CSS pollution.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { runQAChecks } from "./qaChecksAdmin";
+import type { QAIssue } from "./qaChecksAdmin";
 import {
   CampaignBuilderState,
   AdSetRow,
@@ -89,6 +91,7 @@ export default function PillarHubAdmin({
   const [focusAdSetId, setFocusAdSetId] = useState<string>(
     state.adSets[0]?.id ?? ""
   );
+  const [focusAdSetStep, setFocusAdSetStep] = useState<number>(1);
   const [focusCampaignId, setFocusCampaignId] = useState<string>(
     state.campaigns[0]?.id ?? ""
   );
@@ -216,6 +219,7 @@ export default function PillarHubAdmin({
             campaigns={state.campaigns}
             settings={state.settings}
             focusId={focusAdSetId}
+            initialStep={focusAdSetStep}
             onFocus={setFocusAdSetId}
             onChange={(rows) => onStateChange("adSets", rows)}
           />
@@ -237,6 +241,11 @@ export default function PillarHubAdmin({
           <PillarLaunch
             state={state}
             onGoToExport={onGoToExport}
+            onNavigateToFix={(adSetId, step) => {
+              setFocusAdSetId(adSetId);
+              setFocusAdSetStep(step);
+              setPillar("adsets");
+            }}
           />
         )}
       </div>
@@ -480,6 +489,7 @@ function PillarAdSets({
   campaigns,
   settings,
   focusId,
+  initialStep,
   onFocus,
   onChange,
 }: {
@@ -487,10 +497,14 @@ function PillarAdSets({
   campaigns: CampaignRow[];
   settings: BuildSettings;
   focusId: string;
+  initialStep?: number;
   onFocus: (id: string) => void;
   onChange: (rows: AdSetRow[]) => void;
 }) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(initialStep ?? 1);
+  useEffect(() => {
+    if (initialStep && initialStep >= 1 && initialStep <= 4) setStep(initialStep);
+  }, [focusId, initialStep]);
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -1462,28 +1476,50 @@ type AdRowLike = { id: string; adName: string; adSetName: string; campaignName: 
 function buildAds(_: unknown): AdRowLike[] { return []; }
 
 // ── Launch pillar ─────────────────────────────────────────────────────────────
+const STEP_LABELS: Record<number, string> = { 1: "Locations", 2: "Audience", 3: "Delivery", 4: "Platform" };
+
 function PillarLaunch({
   state,
   onGoToExport,
+  onNavigateToFix,
 }: {
   state: CampaignBuilderState;
   onGoToExport: () => void;
+  onNavigateToFix: (adSetId: string, step: number) => void;
 }) {
   const campaignCount = state.campaigns.filter((c) => c.name).length;
   const adSetCount = state.adSets.filter((a) => a.name).length;
   const creativeCount = state.creatives.filter((c) => c.concept).length + state.carouselCreatives.length;
   const adCount = state.ads.filter((a) => a.adName).length;
-  const settingsReady = !!state.settings.tokenId && !!state.settings.adAccountId;
 
-  const checks: [string, boolean][] = [
-    [`${campaignCount} campaign${campaignCount !== 1 ? "s" : ""} defined`, campaignCount > 0],
-    [`${adSetCount} ad set${adSetCount !== 1 ? "s" : ""} defined`, adSetCount > 0],
-    [`${creativeCount} creative${creativeCount !== 1 ? "s" : ""} in library`, creativeCount > 0],
-    [`${adCount} ad${adCount !== 1 ? "s" : ""} assembled`, adCount > 0],
-    ["Ad account configured", settingsReady],
-  ];
+  const qa = runQAChecks({
+    adSets: state.adSets,
+    campaigns: state.campaigns,
+    creatives: state.creatives,
+    ads: state.ads,
+    settings: state.settings,
+  });
 
-  const allPass = checks.every(([, ok]) => ok);
+  const globalIssues = qa.issues.filter((i) => !i.rowId);
+  const adSetIds = Array.from(new Set(qa.issues.filter((i) => i.rowId).map((i) => i.rowId!)));
+
+  const noErrors = qa.errorCount === 0;
+
+  function issueColor(type: QAIssue["type"]) {
+    if (type === "error") return "var(--pl-pink)";
+    if (type === "warning") return "var(--pl-orange)";
+    return "rgba(250,250,250,0.45)";
+  }
+  function issueBadgeClass(type: QAIssue["type"]) {
+    if (type === "error") return "ph-badge--err";
+    if (type === "warning") return "ph-badge--amber";
+    return "ph-badge--muted";
+  }
+  function IssueIcon({ type }: { type: QAIssue["type"] }) {
+    if (type === "error") return <AlertTriangle size={13} style={{ color: "var(--pl-pink)", flexShrink: 0 }} />;
+    if (type === "warning") return <AlertTriangle size={13} style={{ color: "var(--pl-orange)", flexShrink: 0 }} />;
+    return <CheckCircle2 size={13} style={{ color: "rgba(250,250,250,0.35)", flexShrink: 0 }} />;
+  }
 
   return (
     <div className="ph-simple-content">
@@ -1507,43 +1543,79 @@ function PillarLaunch({
         ))}
       </div>
 
-      {/* Checks */}
+      {/* QA Summary bar */}
       <div className="ph-checks">
         <div className="ph-checks-head">
-          <span>Pre-flight Checks</span>
-          <span className={`ph-badge ${allPass ? "ph-badge--green" : "ph-badge--err"}`}>
-            {checks.filter(([, ok]) => ok).length} / {checks.length} passed
-          </span>
+          <span>Pre-Launch QA</span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {qa.errorCount > 0 && <span className="ph-badge ph-badge--err">{qa.errorCount} error{qa.errorCount !== 1 ? "s" : ""}</span>}
+            {qa.warningCount > 0 && <span className="ph-badge ph-badge--amber">{qa.warningCount} warning{qa.warningCount !== 1 ? "s" : ""}</span>}
+            {qa.infoCount > 0 && <span className="ph-badge ph-badge--muted">{qa.infoCount} info</span>}
+            {qa.allPassed && <span className="ph-badge ph-badge--green">All passed</span>}
+          </div>
         </div>
-        {checks.map(([t, ok], i) => (
-          <div key={i} className="ph-check-row">
-            {ok ? (
-              <CheckCircle2 size={14} style={{ color: "var(--pl-green)", flexShrink: 0 }} />
-            ) : (
-              <AlertTriangle size={14} style={{ color: "var(--pl-pink)", flexShrink: 0 }} />
-            )}
-            <span style={{ flex: 1, fontSize: 12 }}>{t}</span>
+
+        {/* Global issues */}
+        {globalIssues.map((issue, i) => (
+          <div key={`g-${i}`} className="ph-check-row">
+            <IssueIcon type={issue.type} />
+            <span style={{ flex: 1, fontSize: 12, color: issueColor(issue.type) }}>{issue.message}</span>
           </div>
         ))}
+
+        {/* Per-ad-set issues */}
+        {adSetIds.map((rowId) => {
+          const rowIssues = qa.issues.filter((i) => i.rowId === rowId);
+          const rowName = rowIssues[0]?.rowName ?? rowId;
+          return (
+            <div key={rowId} className="ph-qa-adset-group">
+              <div className="ph-qa-adset-label">{rowName}</div>
+              {rowIssues.map((issue, j) => (
+                <div key={j} className="ph-check-row" style={{ paddingLeft: 28 }}>
+                  <IssueIcon type={issue.type} />
+                  <span style={{ flex: 1, fontSize: 11.5, color: issueColor(issue.type) }}>{issue.message}</span>
+                  {issue.step && (
+                    <button
+                      className="ph-btn ph-btn--sm"
+                      style={{ fontSize: 10, padding: "3px 8px" }}
+                      onClick={() => onNavigateToFix(rowId, issue.step!)}
+                    >
+                      Fix → {STEP_LABELS[issue.step]}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+
+        {/* All clear */}
+        {qa.allPassed && globalIssues.length === 0 && adSetIds.length === 0 && (
+          <div className="ph-check-row">
+            <CheckCircle2 size={14} style={{ color: "var(--pl-green)", flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: "var(--pl-green)" }}>All checks passed — no issues found</span>
+          </div>
+        )}
       </div>
 
       {/* CTA */}
-      <div className={`ph-launch-cta ${allPass ? "ph-launch-cta--ready" : "ph-launch-cta--warn"}`}>
+      <div className={`ph-launch-cta ${noErrors ? "ph-launch-cta--ready" : "ph-launch-cta--warn"}`}>
         <div className="ph-launch-msg">
-          {allPass ? (
+          {noErrors ? (
             <>
               <CheckCircle2 size={16} style={{ color: "var(--pl-green)" }} />
-              <span>All checks passed — ready to launch</span>
+              <span>{qa.warningCount > 0 ? `${qa.warningCount} warning${qa.warningCount !== 1 ? "s" : ""} — ready to launch` : "All checks passed — ready to launch"}</span>
             </>
           ) : (
             <>
               <AlertTriangle size={16} style={{ color: "var(--pl-pink)" }} />
-              <span>Fix the issues above before launching</span>
+              <span>Fix {qa.errorCount} error{qa.errorCount !== 1 ? "s" : ""} before launching</span>
             </>
           )}
         </div>
         <button
           className="ph-btn ph-btn--primary"
+          disabled={!noErrors}
           onClick={onGoToExport}
         >
           <Rocket size={14} /> Go to Export &amp; Launch
@@ -1893,6 +1965,16 @@ select.ph-input option { background: #141349; color: rgba(250,250,250,0.9); }
   border-top: 1px solid var(--ph-border-2);
 }
 .ph-check-row:first-of-type { border-top: none; }
+.ph-qa-adset-group { border-top: 1px solid var(--ph-border-2); }
+.ph-qa-adset-label {
+  padding: 7px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ph-muted);
+  background: var(--ph-bg-2);
+}
 
 .ph-launch-cta {
   display: flex; align-items: center; justify-content: space-between;
