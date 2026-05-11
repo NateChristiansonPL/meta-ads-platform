@@ -135,6 +135,10 @@ export function useLaunchBuild(
               spendCapCents: campaign.spendCap ? Math.round(parseFloat(campaign.spendCap) * 100) : undefined,
               // Issue 2: always pass cbo so server can set is_adset_budget_sharing_enabled correctly
               cbo: campaign.cbo === true,
+              // specialAdCategory: NONE → [] (empty array), any other value → [value]
+              specialAdCategories: campaign.specialAdCategory && campaign.specialAdCategory !== 'NONE'
+                ? [campaign.specialAdCategory]
+                : [],
             });
             campaignIdMap[campaign.name] = result.campaignId;
             if (stateCampaignIndex >= 0) updatedCampaigns[stateCampaignIndex] = { ...updatedCampaigns[stateCampaignIndex], campaignId: result.campaignId };

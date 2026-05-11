@@ -955,10 +955,12 @@ export const metaAdminRouter = router({
         endTime: z.string().optional(),
         // Issue 2: cbo flag → is_adset_budget_sharing_enabled must always be explicit
         cbo: z.boolean().optional(),
+        // specialAdCategories: array of special ad category strings; empty array = no special category
+        specialAdCategories: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ input }) => {
-      const { accessToken, adAccountId, name, objective, status, spendCapCents, startTime, endTime, cbo } = input;
+      const { accessToken, adAccountId, name, objective, status, spendCapCents, startTime, endTime, cbo, specialAdCategories } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
       // Duplicate check
@@ -987,7 +989,8 @@ export const metaAdminRouter = router({
         objective,
         status,
         // Issue 1: special_ad_categories must always be an array, never a string
-        special_ad_categories: [],
+        // Use provided categories if any, otherwise empty array (= no special category)
+        special_ad_categories: specialAdCategories && specialAdCategories.length > 0 ? specialAdCategories : [],
         // Issue 2: is_adset_budget_sharing_enabled must be explicitly set based on cbo flag.
         // Meta requires this field to be present when CBO is off; omitting it causes an API error.
         is_adset_budget_sharing_enabled: cbo === true,
@@ -1030,6 +1033,14 @@ export const metaAdminRouter = router({
         instagramProfileId: z.string().optional(),
         // Issue 4/5: objective is needed to gate promoted_object and attribution_spec correctly
         objective: z.string().optional(),
+        // Bid strategy fields
+        bidStrategy: z.string().optional(),   // e.g. LOWEST_COST_WITHOUT_CAP, COST_CAP, LOWEST_COST_WITH_BID_CAP, LOWEST_COST_WITH_MIN_ROAS
+        bidAmount: z.number().optional(),     // cents (for COST_CAP and LOWEST_COST_WITH_BID_CAP)
+        roasFloor: z.number().optional(),     // decimal ROAS floor (for LOWEST_COST_WITH_MIN_ROAS)
+        // destination_type: inferred from conversionLocation on the client, passed explicitly here
+        destinationType: z.string().optional(),
+        // pacing_type: 'standard' or 'day_parting' (auto-set based on adScheduling presence)
+        pacingType: z.array(z.string()).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1038,7 +1049,7 @@ export const metaAdminRouter = router({
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
         conversionLocation, pixelId, customEventType, leadGenFormId, facebookPageId, instagramProfileId,
-        objective,
+        objective, bidStrategy, bidAmount, roasFloor, destinationType, pacingType,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -1092,6 +1103,23 @@ export const metaAdminRouter = router({
       }
 
       if (adScheduling?.length) payload.adset_schedule = adScheduling;
+
+      // pacing_type: must be 'day_parting' when a schedule is set, otherwise 'standard'
+      if (pacingType?.length) payload.pacing_type = pacingType;
+
+      // destination_type: inferred from conversionLocation
+      if (destinationType) payload.destination_type = destinationType;
+
+      // bid_strategy: always send explicitly (defaults to LOWEST_COST_WITHOUT_CAP = Highest Volume)
+      payload.bid_strategy = bidStrategy || 'LOWEST_COST_WITHOUT_CAP';
+      // bid_amount: required for COST_CAP and LOWEST_COST_WITH_BID_CAP (in cents)
+      if (bidAmount && (bidStrategy === 'COST_CAP' || bidStrategy === 'LOWEST_COST_WITH_BID_CAP')) {
+        payload.bid_amount = bidAmount;
+      }
+      // roas_average_floor: required for LOWEST_COST_WITH_MIN_ROAS
+      if (roasFloor && bidStrategy === 'LOWEST_COST_WITH_MIN_ROAS') {
+        payload.roas_average_floor = roasFloor;
+      }
       if (frequencyControl?.enabled) {
         const times = Number(frequencyControl.times || 1);
         const days = Number(frequencyControl.days || 7);

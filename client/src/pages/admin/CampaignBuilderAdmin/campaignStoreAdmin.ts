@@ -161,6 +161,11 @@ export interface AdSetRow {
   adScheduling?: string;
   attributionModel?: string;
   leadGenFormId?: string;
+  // Bid strategy (optional — defaults to LOWEST_COST_WITHOUT_CAP / Highest Volume)
+  bidStrategy?: 'LOWEST_COST_WITHOUT_CAP' | 'COST_CAP' | 'LOWEST_COST_WITH_BID_CAP' | 'LOWEST_COST_WITH_MIN_ROAS';
+  bidCap?: string;       // cents (for LOWEST_COST_WITH_BID_CAP) — entered as dollars in UI
+  costCap?: string;      // cents (for COST_CAP) — entered as dollars in UI
+  roasFloor?: string;    // decimal ROAS floor e.g. "2.5" (for LOWEST_COST_WITH_MIN_ROAS)
   // write-back
   adSetId: string;
   campaignId?: string;
@@ -744,6 +749,7 @@ export const TREE_FIELDS: { key: keyof AdSetRow; label: string; description: str
   { key: 'adScheduling',     label: 'Day Parting',        description: 'Day-parting schedule' },
   { key: 'attributionWindow',label: 'Attribution Window', description: 'Click/view attribution' },
   { key: 'attributionModel', label: 'Attribution Model',  description: 'Standard or Incremental (conversions only)' },
+  { key: 'bidStrategy',      label: 'Bid Strategy',       description: 'Override default Highest Volume bidding' },
 ];
 
 export const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

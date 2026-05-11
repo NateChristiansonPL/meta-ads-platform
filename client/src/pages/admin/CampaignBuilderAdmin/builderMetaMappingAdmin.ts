@@ -261,18 +261,61 @@ export function buildAttributionSpec(attributionWindow?: string): Record<string,
   return specs.length ? specs : undefined;
 }
 
+/**
+ * Infer destination_type from conversion location per Meta API rules.
+ * Source: Meta Graph API docs — ad set destination_type field.
+ */
+export function inferDestinationType(conversionLocation?: string): string | undefined {
+  const loc = (conversionLocation || '').toUpperCase();
+  const map: Record<string, string> = {
+    WEBSITE:          'WEBSITE',
+    APP:              'APP',
+    MESSENGER:        'MESSENGER',
+    INSTAGRAM_DIRECT: 'INSTAGRAM_PROFILE',
+    WHATSAPP:         'WHATSAPP',
+    INSTANT_FORM:     'ON_AD',
+    FACEBOOK_PAGE:    'FACEBOOK_PAGE',
+    ON_AD:            'ON_AD',
+    SHOP:             'SHOP',
+    CALL:             'PHONE_CALL',
+  };
+  return map[loc];
+}
+
 export function buildAdSetApiExtras(row: AdSetRow): Record<string, unknown> {
   const extras: Record<string, unknown> = {};
   const attributionSpec = buildAttributionSpec(row.attributionWindow);
   if (attributionSpec) extras.attributionSpec = attributionSpec;
   if (row.frequencyControl?.enabled) extras.frequencyControl = row.frequencyControl;
   const adScheduling = parseJsonArray(row.adScheduling);
-  if (adScheduling?.length) extras.adScheduling = adScheduling;
+  if (adScheduling?.length) {
+    extras.adScheduling = adScheduling;
+    // pacing_type must be 'day_parting' when a schedule is set, otherwise 'standard'
+    extras.pacingType = ['day_parting'];
+  } else {
+    extras.pacingType = ['standard'];
+  }
   if (clean(row.leadGenFormId)) extras.leadGenFormId = clean(row.leadGenFormId);
   if (clean(row.facebookPageId)) extras.facebookPageId = clean(row.facebookPageId);
   if (clean(row.instagramProfileId)) extras.instagramProfileId = clean(row.instagramProfileId);
   if (clean(row.engagementGoal)) extras.engagementGoal = clean(row.engagementGoal);
   if (clean(row.attributionModel)) extras.attributionModel = clean(row.attributionModel);
+
+  // destination_type: inferred from conversionLocation — no UI field needed
+  const destType = inferDestinationType(row.conversionLocation);
+  if (destType) extras.destinationType = destType;
+
+  // Bid strategy: defaults to LOWEST_COST_WITHOUT_CAP (Highest Volume) if not set
+  const bidStrategy = row.bidStrategy || 'LOWEST_COST_WITHOUT_CAP';
+  extras.bidStrategy = bidStrategy;
+  if (bidStrategy === 'COST_CAP' && row.costCap) {
+    extras.bidAmount = Math.round(parseFloat(row.costCap) * 100); // dollars → cents
+  } else if (bidStrategy === 'LOWEST_COST_WITH_BID_CAP' && row.bidCap) {
+    extras.bidAmount = Math.round(parseFloat(row.bidCap) * 100); // dollars → cents
+  } else if (bidStrategy === 'LOWEST_COST_WITH_MIN_ROAS' && row.roasFloor) {
+    extras.roasFloor = parseFloat(row.roasFloor);
+  }
+
   return extras;
 }
 

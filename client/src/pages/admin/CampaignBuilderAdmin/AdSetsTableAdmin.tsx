@@ -295,6 +295,57 @@ function OptionalFieldsPopup({
           {optFields.has('adScheduling') && (
             <DayPartingGrid value={row.adScheduling ?? ''} onChange={v => update(row.id, { adScheduling: v })} />
           )}
+          {optFields.has('bidStrategy') && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Bid Strategy</label>
+              <select
+                value={row.bidStrategy ?? 'LOWEST_COST_WITHOUT_CAP'}
+                onChange={e => update(row.id, { bidStrategy: e.target.value as AdSetRow['bidStrategy'], bidCap: '', costCap: '', roasFloor: '' })}
+                className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white"
+              >
+                <option value="LOWEST_COST_WITHOUT_CAP">Highest Volume (default — no cap)</option>
+                <option value="COST_CAP">Cost Cap</option>
+                <option value="LOWEST_COST_WITH_BID_CAP">Bid Cap</option>
+                <option value="LOWEST_COST_WITH_MIN_ROAS">Minimum ROAS</option>
+              </select>
+              {(row.bidStrategy === 'COST_CAP') && (
+                <div>
+                  <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Cost Cap ($ per result)</label>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={row.costCap ?? ''}
+                    onChange={e => update(row.id, { costCap: e.target.value })}
+                    placeholder="e.g. 15.00"
+                    className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white"
+                  />
+                </div>
+              )}
+              {(row.bidStrategy === 'LOWEST_COST_WITH_BID_CAP') && (
+                <div>
+                  <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Bid Cap ($ per result)</label>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={row.bidCap ?? ''}
+                    onChange={e => update(row.id, { bidCap: e.target.value })}
+                    placeholder="e.g. 10.00"
+                    className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white"
+                  />
+                </div>
+              )}
+              {(row.bidStrategy === 'LOWEST_COST_WITH_MIN_ROAS') && (
+                <div>
+                  <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Minimum ROAS (e.g. 2.5)</label>
+                  <input
+                    type="number" min="0" step="0.1"
+                    value={row.roasFloor ?? ''}
+                    onChange={e => update(row.id, { roasFloor: e.target.value })}
+                    placeholder="e.g. 2.5"
+                    className="w-full px-2 py-1.5 text-[11px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-white"
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-end px-4 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>

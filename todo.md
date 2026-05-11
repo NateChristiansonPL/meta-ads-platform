@@ -554,3 +554,13 @@
 - [x] Fix Issue 6: OUTCOME_TRAFFIC attribution_spec must be 1-day click only (not 7d click + 1d view)
 - [x] Fix Issue 7: asset_feed_spec bodies/titles/descriptions must deduplicate — same text across labels must use one entry with all labels, not one entry per label
 - [x] Update pl-meta-builder skill with all 7 fixes documented
+
+## Campaign Builder — Objective-Gated Fields & Missing Settings (May 11 2026)
+- [x] Fix: wire specialAdCategory from CampaignRow through useLaunchBuildAdmin → createCampaign (field exists in UI but was never sent to API)
+- [x] Fix: make CBO, specialAdCategory, and is_adset_budget_sharing_enabled optional fields in Campaign tab with correct defaults (CBO=false, specialAdCategory=NONE, adSetBudgetSharing=false)
+- [x] Feature: add bidStrategy field to AdSetRow + AdSetsTableAdmin (dropdown: Highest Volume default / Cost per Result Goal / Bid Cap / Highest Value / ROAS Goal) — gated by objective + performance goal
+- [x] Feature: add bidCap, costCap, roasFloor conditional inputs to AdSetsTableAdmin (shown based on bidStrategy selection)
+- [x] Feature: wire bidStrategy + bidCap/costCap/roasFloor through buildAdSetApiExtras → metaAdmin.ts createAdSet
+- [x] Feature: add destination_type inference function in builderMetaMappingAdmin (derived from objective + conversionLocation + optimizationGoal)
+- [x] Feature: wire destination_type through buildAdSetApiExtras → metaAdmin.ts createAdSet
+- [x] Feature: add pacing_type to createAdSet payload (day_parting when adset_schedule is set, standard otherwise)
