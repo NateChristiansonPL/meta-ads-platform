@@ -136,57 +136,100 @@ function stripUndefinedDeep<T>(value: T): T {
   return value;
 }
 
-function buildDegreesOfFreedomSpec(): Record<string, unknown> {
+/**
+ * Build the degrees_of_freedom_spec for a given ad type.
+ * Each format has a specific required set of OPT_OUT fields per the
+ * creative_payload_branch_logic.md reference in pl-meta-builder.
+ */
+function buildDegreesOfFreedomSpec(adType: 'static' | 'video' | 'carousel' | 'source_post' = 'static'): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
-  return {
-    creative_features_spec: {
-      standard_enhancements: off,
-      image_templates: off,
-      text_optimizations: off,
-      inline_comment: off,
-      text_generation: off,
-      image_brightness_and_contrast: off,
-      image_animation: off,
-      image_uncrop: off,
-      image_touchups: off,
-      image_background_gen: off,
-      image_expand: off,
-      profile_card: off,
-      relevant_comments: off,
-      add_catalog_items: off,
-      enhance_cta: off,
-      media_type_automation: off,
-      automatic_translation: off,
-      music: off,
-      overlay: off,
-    },
+  // Base fields shared across image, video, and carousel
+  const base: Record<string, unknown> = {
+    adapt_to_placement:           off,
+    add_text_overlay:             off,
+    creative_stickers:            off,
+    description_automation:       off,
+    enhance_cta:                  off,
+    generate_cta:                 off,
+    image_background_gen:         off,
+    image_brightness_and_contrast: off,
+    image_templates:              off,
+    image_touchups:               off,
+    image_uncrop:                 off,
+    inline_comment:               off,
+    media_type_automation:        off,
+    pac_relaxation:               off,
+    product_extensions:           off,
+    reveal_details_over_time:     off,
+    text_optimizations:           off,
+    text_translation:             off,
+    video_auto_crop:              off,
   };
+  if (adType === 'video') {
+    // Video adds video_filtering on top of base
+    return { creative_features_spec: { ...base, video_filtering: off } };
+  }
+  if (adType === 'carousel') {
+    // Carousel adds profile_end_card, carousel_highlight_card, video_highlights
+    return {
+      creative_features_spec: {
+        ...base,
+        profile_end_card:        off,
+        carousel_highlight_card: off,
+        video_highlights:        off,
+      },
+    };
+  }
+  // image / source_post: base fields only
+  return { creative_features_spec: base };
 }
 
-function buildPlacementCustomizationRules(): Record<string, unknown>[] {
+/**
+ * Build the 5-label placement customization rules per pl-meta-builder spec.
+ * Labels: lbl_fb_story, lbl_fb_reels, lbl_ig_story, lbl_ig_reels, lbl_default
+ * @param mediaType 'image' | 'video' — determines whether to use image_label or video_label
+ */
+function buildPlacementCustomizationRules(mediaType: 'image' | 'video' = 'image'): Record<string, unknown>[] {
+  const mediaKey = mediaType === 'video' ? 'video_label' : 'image_label';
   return [
     {
-      customization_spec: {
-        publisher_platforms: ["facebook", "instagram"],
-        facebook_positions: ["feed", "profile_feed", "marketplace", "search"],
-        instagram_positions: ["stream", "explore", "explore_home", "profile_feed"],
-      },
-      image_label: { name: "feed" },
-      video_label: { name: "feed" },
-      link_url_label: { name: "feed" },
-      body_label: { name: "feed" },
+      customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["story"] },
+      [mediaKey]:     { name: "lbl_fb_story" },
+      body_label:     { name: "lbl_fb_story" },
+      title_label:    { name: "lbl_fb_story" },
+      link_url_label: { name: "lbl_fb_story" },
+      priority: 1,
     },
     {
-      customization_spec: {
-        publisher_platforms: ["facebook", "instagram", "messenger"],
-        facebook_positions: ["story", "facebook_reels"],
-        instagram_positions: ["story", "reels"],
-        messenger_positions: ["messenger_stories"],
-      },
-      image_label: { name: "stories_reels" },
-      video_label: { name: "stories_reels" },
-      link_url_label: { name: "stories_reels" },
-      body_label: { name: "stories_reels" },
+      customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["facebook_reels"] },
+      [mediaKey]:     { name: "lbl_fb_reels" },
+      body_label:     { name: "lbl_fb_reels" },
+      title_label:    { name: "lbl_fb_reels" },
+      link_url_label: { name: "lbl_fb_reels" },
+      priority: 2,
+    },
+    {
+      customization_spec: { publisher_platforms: ["instagram"], instagram_positions: ["story"] },
+      [mediaKey]:     { name: "lbl_ig_story" },
+      body_label:     { name: "lbl_ig_story" },
+      title_label:    { name: "lbl_ig_story" },
+      link_url_label: { name: "lbl_ig_story" },
+      priority: 3,
+    },
+    {
+      customization_spec: { publisher_platforms: ["instagram"], instagram_positions: ["reels"] },
+      [mediaKey]:     { name: "lbl_ig_reels" },
+      body_label:     { name: "lbl_ig_reels" },
+      title_label:    { name: "lbl_ig_reels" },
+      link_url_label: { name: "lbl_ig_reels" },
+      priority: 4,
+    },
+    {
+      customization_spec: {},
+      [mediaKey]:     { name: "lbl_default" },
+      title_label:    { name: "lbl_default" },
+      link_url_label: { name: "lbl_default" },
+      priority: 5,
     },
   ];
 }
@@ -1141,8 +1184,12 @@ export const metaAdminRouter = router({
         ? appendParams(storiesWebsiteUrl, urlParameters)
         : baseUrl;
 
-      // ── Degrees of freedom spec (all enhancements OFF) ─────────────────────
-      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec();
+      // ── Degrees of freedom spec (format-specific OPT_OUT fields) ───────────
+      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec(
+        sourcePostId ? 'source_post' : adType
+      );
+      // ── contextual_multi_ads: always OPT_OUT (required by Meta spec) ─────────
+      const contextualMultiAds = { enroll_status: "OPT_OUT" };
 
       // ── Pixel tracking ─────────────────────────────────────────────────────
       const trackingSpec = pixelId
@@ -1153,17 +1200,20 @@ export const metaAdminRouter = router({
 
       // ── If source post ID is provided, use existing post ───────────────────
       if (sourcePostId) {
+        // ── Source post (dark post / social proof) ─────────────────────────
         creativeSpec = {
           object_story_id: sourcePostId,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
       } else if (adType === "carousel" && cards && cards.length > 0) {
-        // ── Carousel: object_story_spec ────────────────────────────────────
+        // ── Carousel: always object_story_spec (no asset_feed_spec branch) ──
         const childAttachments = cards.map((card) => {
           const att: Record<string, unknown> = {
             link: appendParams(card.linkUrl, urlParameters),
             image_hash: card.assetId,
+            multi_share_end_card: false,
           };
           if (card.headline) att.name = normalize(card.headline);
           if (card.description) att.description = normalize(card.description);
@@ -1176,17 +1226,26 @@ export const metaAdminRouter = router({
           return att;
         });
 
+        const carouselLinkData: Record<string, unknown> = {
+          link: baseUrl,
+          message: normalize(primaryTexts[0]),
+          multi_share_end_card: false,
+          multi_share_optimized: false,
+          child_attachments: childAttachments,
+          call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
+        };
+        if (displayUrl) carouselLinkData.display_url = displayUrl;
+
+        const carouselObjectStorySpec: Record<string, unknown> = {
+          page_id: pageId,
+          link_data: carouselLinkData,
+        };
+        if (instagramActorId) carouselObjectStorySpec.instagram_user_id = instagramActorId;
+
         creativeSpec = {
-          object_story_spec: {
-            page_id: pageId,
-            link_data: {
-              link: baseUrl,
-              message: normalize(primaryTexts[0]),
-              child_attachments: childAttachments,
-              call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
-            },
-          },
+          object_story_spec: carouselObjectStorySpec,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
       } else if (adType === "video" && singleVideoId && !storiesAssetId) {
@@ -1204,125 +1263,145 @@ export const metaAdminRouter = router({
         if (headlines[0]) videoData.title = normalize(headlines[0]);
         if (urlParameters) videoData.url_tags = urlParameters;
 
+        const singleVideoObjectStorySpec: Record<string, unknown> = {
+          page_id: pageId,
+          video_data: videoData,
+        };
+        if (instagramActorId) singleVideoObjectStorySpec.instagram_user_id = instagramActorId;
+
         creativeSpec = {
-          object_story_spec: stripUndefinedDeep({
-            page_id: pageId,
-            video_data: videoData,
-          }),
+          object_story_spec: stripUndefinedDeep(singleVideoObjectStorySpec),
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
-      } else {
-        // ── Static or placement-customized video: asset_feed_spec ──────────
-        const isPlacementCustomized = !!(feedAssetId && storiesAssetId);
+      } else if ((adType === "static" || adType === "video") && feedAssetId && storiesAssetId) {
+        // ── Placement-customized image or video: asset_feed_spec (5-label scheme) ──
+        const mediaType = adType === 'video' ? 'video' : 'image';
+        const isVideo = adType === 'video';
 
-        // Build asset feed spec
+        // 5-label ad_labels
+        const adLabels = [
+          { name: "lbl_default" },
+          { name: "lbl_fb_story" },
+          { name: "lbl_fb_reels" },
+          { name: "lbl_ig_story" },
+          { name: "lbl_ig_reels" },
+        ];
+
+        // Assets: feed → lbl_default; stories/reels → the 4 story/reels labels
+        const storyReelsLabels = [
+          { name: "lbl_fb_story" },
+          { name: "lbl_fb_reels" },
+          { name: "lbl_ig_story" },
+          { name: "lbl_ig_reels" },
+        ];
+
         const assetFeedSpec: Record<string, unknown> = {
-          ad_formats: isPlacementCustomized
-            ? ["SINGLE_IMAGE", "SINGLE_VIDEO"]
-            : adType === "video"
-            ? ["SINGLE_VIDEO"]
-            : ["SINGLE_IMAGE"],
+          ad_formats: ["AUTOMATIC_FORMAT"],
+          optimization_type: "PLACEMENT",
           call_to_action_types: [callToAction],
-          link_urls: (() => {
-            if (isPlacementCustomized && feedUrl !== storiesUrl) {
-              return [
-                {
-                  website_url: feedUrl,
-                  display_url: displayUrl,
-                  adlabels: [{ name: "feed" }],
-                },
-                {
-                  website_url: storiesUrl,
-                  display_url: displayUrl,
-                  adlabels: [{ name: "stories_reels" }],
-                },
-              ];
-            }
-            return [{ website_url: feedUrl, display_url: displayUrl }];
-          })(),
-          titles: headlines.map((h) => ({ text: normalize(h) })),
-          bodies: (() => {
-            if (isPlacementCustomized && (feedPrimaryText || storiesPrimaryText)) {
-              return [
-                { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "feed" }] },
-                { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: [{ name: "stories_reels" }] },
-              ];
-            }
-            return primaryTexts.map((p) => ({ text: normalize(p) }));
-          })(),
-          url_tags: urlParameters,
+          ad_labels: adLabels,
         };
 
+        if (isVideo) {
+          assetFeedSpec.videos = [
+            { video_id: feedAssetId, adlabels: [{ name: "lbl_default" }], ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) },
+            { video_id: storiesAssetId, adlabels: storyReelsLabels, ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) },
+          ];
+        } else {
+          assetFeedSpec.images = [
+            { hash: feedAssetId, adlabels: [{ name: "lbl_default" }] },
+            { hash: storiesAssetId, adlabels: storyReelsLabels },
+          ];
+        }
+
+        // Bodies (primary text)
+        const feedBody = normalize(feedPrimaryText || primaryTexts[0]);
+        const storyBody = normalize(storiesPrimaryText || primaryTexts[0]);
+        assetFeedSpec.bodies = [
+          { text: feedBody, adlabels: [{ name: "lbl_default" }] },
+          { text: storyBody, adlabels: storyReelsLabels },
+        ];
+
+        // Titles (headline)
+        assetFeedSpec.titles = headlines.map((h) => ({ text: normalize(h) }));
+
+        // Descriptions
         if (descriptions && descriptions.length > 0) {
-          assetFeedSpec.descriptions = descriptions.map((d) => ({
-            text: normalize(d),
-          }));
+          assetFeedSpec.descriptions = [
+            { text: normalize(descriptions[0]), adlabels: [{ name: "lbl_default" }] },
+            { text: normalize(descriptions[0]), adlabels: storyReelsLabels },
+          ];
         }
 
-        if (adType === "static" || adType === "video") {
-          if (isPlacementCustomized) {
-            const images: Record<string, unknown>[] = [];
-            const videos: Record<string, unknown>[] = [];
-
-            if (adType === "static") {
-              if (feedAssetId)
-                images.push({
-                  hash: feedAssetId,
-                  adlabels: [{ name: "feed" }],
-                });
-              if (storiesAssetId)
-                images.push({
-                  hash: storiesAssetId,
-                  adlabels: [{ name: "stories_reels" }],
-                });
-              assetFeedSpec.images = images;
-            } else {
-              if (feedAssetId)
-                videos.push({
-                  video_id: feedAssetId,
-                  adlabels: [{ name: "feed" }],
-                  thumbnail_url: thumbnailUrl,
-                });
-              if (storiesAssetId)
-                videos.push({
-                  video_id: storiesAssetId,
-                  adlabels: [{ name: "stories_reels" }],
-                  thumbnail_url: thumbnailUrl,
-                });
-              assetFeedSpec.videos = videos;
-            }
-
-            // Ad labels for placement customization
-            assetFeedSpec.ad_labels = [
-              { name: "feed" },
-              { name: "stories_reels" },
-            ];
-            assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules();
-          } else {
-            // Single asset
-            if (adType === "static" && feedAssetId) {
-              assetFeedSpec.images = [{ hash: feedAssetId }];
-            } else if (adType === "video" && feedAssetId) {
-              assetFeedSpec.videos = [
-                {
-                  video_id: feedAssetId,
-                  thumbnail_url: thumbnailUrl,
-                },
-              ];
-            }
-          }
+        // Link URLs — single shared URL or per-placement override
+        const allLabels = [
+          { name: "lbl_default" },
+          { name: "lbl_fb_story" },
+          { name: "lbl_fb_reels" },
+          { name: "lbl_ig_story" },
+          { name: "lbl_ig_reels" },
+        ];
+        if (feedUrl !== storiesUrl) {
+          assetFeedSpec.link_urls = [
+            { website_url: feedUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: [{ name: "lbl_default" }] },
+            { website_url: storiesUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: storyReelsLabels },
+          ];
+        } else {
+          assetFeedSpec.link_urls = [
+            { website_url: feedUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: allLabels },
+          ];
         }
+
+        if (urlParameters) assetFeedSpec.url_tags = urlParameters;
+
+        assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules(mediaType);
 
         creativeSpec = stripUndefinedDeep({
           asset_feed_spec: assetFeedSpec,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
+          multi_advertiser_eligibility: "INELIGIBLE",
+          ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {}),
+        });
+      } else {
+        // ── Standard image or video (single asset, no placement customization): object_story_spec ──
+        const objectStorySpec: Record<string, unknown> = { page_id: pageId };
+        if (instagramActorId) objectStorySpec.instagram_user_id = instagramActorId;
+
+        if (adType === 'video' && feedAssetId) {
+          const videoData: Record<string, unknown> = {
+            video_id: feedAssetId,
+            message: normalize(primaryTexts[0]),
+            call_to_action: { type: callToAction, value: { link: feedUrl } },
+            link: feedUrl,
+          };
+          if (thumbnailUrl) videoData.image_url = thumbnailUrl;
+          if (headlines[0]) videoData.title = normalize(headlines[0]);
+          if (urlParameters) videoData.url_tags = urlParameters;
+          objectStorySpec.video_data = videoData;
+        } else {
+          // Standard image: link_data with image_hash
+          const linkData: Record<string, unknown> = {
+            link: feedUrl,
+            message: normalize(primaryTexts[0]),
+            call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: feedUrl, lead_gen_form_id: leadGenFormId }) },
+          };
+          if (feedAssetId) linkData.image_hash = feedAssetId;
+          if (headlines[0]) linkData.name = normalize(headlines[0]);
+          if (descriptions?.[0]) linkData.description = normalize(descriptions[0]);
+          if (displayUrl) linkData.display_url = displayUrl;
+          if (urlParameters) linkData.url_tags = urlParameters;
+          objectStorySpec.link_data = linkData;
+        }
+
+        creativeSpec = stripUndefinedDeep({
+          object_story_spec: objectStorySpec,
+          degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         });
-
-        if (instagramActorId) {
-          creativeSpec.instagram_actor_id = instagramActorId;
-        }
       }
 
       // ── Create ad creative ─────────────────────────────────────────────────
@@ -1453,7 +1532,10 @@ export const metaAdminRouter = router({
       const feedUrl = feedWebsiteUrl ? appendParams(feedWebsiteUrl, urlParameters) : baseUrl;
       const storiesUrl = storiesWebsiteUrl ? appendParams(storiesWebsiteUrl, urlParameters) : baseUrl;
 
-      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec();
+      const degreesOfFreedomSpec = buildDegreesOfFreedomSpec(
+        sourcePostId ? 'source_post' : adType
+      );
+      const contextualMultiAds = { enroll_status: "OPT_OUT" };
 
       let updatedSpec: Record<string, unknown> = {};
 
@@ -1461,98 +1543,147 @@ export const metaAdminRouter = router({
         updatedSpec = {
           object_story_id: sourcePostId,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
       } else if (adType === "carousel" && cards && cards.length > 0) {
+        const childAttachments = cards.map((card) => {
+          const att: Record<string, unknown> = {
+            link: appendParams(card.linkUrl, urlParameters),
+            image_hash: card.assetId,
+            multi_share_end_card: false,
+          };
+          if (card.headline) att.name = normalize(card.headline);
+          if (card.description) att.description = normalize(card.description);
+          if (card.callToAction) {
+            att.call_to_action = {
+              type: card.callToAction,
+              value: { link: appendParams(card.linkUrl, urlParameters) },
+            };
+          }
+          return att;
+        });
+        const carouselLinkData: Record<string, unknown> = {
+          link: baseUrl,
+          message: normalize(primaryTexts[0]),
+          multi_share_end_card: false,
+          multi_share_optimized: false,
+          child_attachments: childAttachments,
+          call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
+        };
+        if (displayUrl) carouselLinkData.display_url = displayUrl;
+        const carouselObjectStorySpec: Record<string, unknown> = { page_id: pageId, link_data: carouselLinkData };
+        if (instagramActorId) carouselObjectStorySpec.instagram_user_id = instagramActorId;
         updatedSpec = {
-          object_story_spec: {
-            page_id: pageId,
-            link_data: {
-              link: baseUrl,
-              message: normalize(primaryTexts[0]),
-              child_attachments: cards.map((card) => ({
-                link: appendParams(card.linkUrl, urlParameters),
-                image_hash: card.assetId,
-                name: card.headline ? normalize(card.headline) : undefined,
-                description: card.description ? normalize(card.description) : undefined,
-                call_to_action: card.callToAction
-                  ? { type: card.callToAction, value: { link: appendParams(card.linkUrl, urlParameters) } }
-                  : undefined,
-              })),
-              call_to_action: { type: callToAction, value: { link: baseUrl } },
-            },
-          },
+          object_story_spec: carouselObjectStorySpec,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
       } else if (adType === "video" && singleVideoId && !storiesAssetId) {
+        const videoData: Record<string, unknown> = {
+          video_id: singleVideoId,
+          message: normalize(primaryTexts[0]),
+          call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
+          link: baseUrl,
+        };
+        if (thumbnailUrl) videoData.image_url = thumbnailUrl;
+        if (headlines[0]) videoData.title = normalize(headlines[0]);
+        if (urlParameters) videoData.url_tags = urlParameters;
+        const singleVideoSpec: Record<string, unknown> = { page_id: pageId, video_data: videoData };
+        if (instagramActorId) singleVideoSpec.instagram_user_id = instagramActorId;
         updatedSpec = {
-          object_story_spec: {
-            page_id: pageId,
-            video_data: {
-              video_id: singleVideoId,
-              message: normalize(primaryTexts[0]),
-              call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
-              link: baseUrl,
-              image_url: thumbnailUrl,
-              title: headlines[0] ? normalize(headlines[0]) : undefined,
-              url_tags: urlParameters,
-            },
-          },
+          object_story_spec: stripUndefinedDeep(singleVideoSpec),
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
         };
-      } else {
-        const isPlacementCustomized = !!(feedAssetId && storiesAssetId);
+      } else if ((adType === "static" || adType === "video") && feedAssetId && storiesAssetId) {
+        // Placement-customized: 5-label asset_feed_spec
+        const mediaType = adType === 'video' ? 'video' : 'image';
+        const isVideo = adType === 'video';
+        const storyReelsLabels = [
+          { name: "lbl_fb_story" }, { name: "lbl_fb_reels" },
+          { name: "lbl_ig_story" }, { name: "lbl_ig_reels" },
+        ];
+        const allLabels = [{ name: "lbl_default" }, ...storyReelsLabels];
         const assetFeedSpec: Record<string, unknown> = {
-          ad_formats: isPlacementCustomized ? ["SINGLE_IMAGE", "SINGLE_VIDEO"] : adType === "video" ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+          ad_formats: ["AUTOMATIC_FORMAT"],
+          optimization_type: "PLACEMENT",
           call_to_action_types: [callToAction],
-          link_urls: isPlacementCustomized && feedUrl !== storiesUrl
-            ? [
-                { website_url: feedUrl, display_url: displayUrl, adlabels: [{ name: "feed" }] },
-                { website_url: storiesUrl, display_url: displayUrl, adlabels: [{ name: "stories_reels" }] },
-              ]
-            : [{ website_url: feedUrl, display_url: displayUrl }],
+          ad_labels: allLabels,
           titles: headlines.map((h) => ({ text: normalize(h) })),
-          bodies: (() => {
-            if (isPlacementCustomized && (feedPrimaryText || storiesPrimaryText)) {
-              return [
-                { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "feed" }] },
-                { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: [{ name: "stories_reels" }] },
-              ];
-            }
-            return primaryTexts.map((p) => ({ text: normalize(p) }));
-          })(),
-          url_tags: urlParameters,
+          bodies: [
+            { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "lbl_default" }] },
+            { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: storyReelsLabels },
+          ],
+          link_urls: feedUrl !== storiesUrl
+            ? [
+                { website_url: feedUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: [{ name: "lbl_default" }] },
+                { website_url: storiesUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: storyReelsLabels },
+              ]
+            : [{ website_url: feedUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: allLabels }],
+          asset_customization_rules: buildPlacementCustomizationRules(mediaType),
         };
+        if (urlParameters) assetFeedSpec.url_tags = urlParameters;
         if (descriptions && descriptions.length > 0) {
-          assetFeedSpec.descriptions = descriptions.map((d) => ({ text: normalize(d) }));
+          assetFeedSpec.descriptions = [
+            { text: normalize(descriptions[0]), adlabels: [{ name: "lbl_default" }] },
+            { text: normalize(descriptions[0]), adlabels: storyReelsLabels },
+          ];
         }
-        if (adType === "static") {
-          assetFeedSpec.images = isPlacementCustomized
-            ? [
-                { hash: feedAssetId, adlabels: [{ name: "feed" }] },
-                { hash: storiesAssetId, adlabels: [{ name: "stories_reels" }] },
-              ]
-            : [{ hash: feedAssetId }];
+        if (isVideo) {
+          assetFeedSpec.videos = [
+            { video_id: feedAssetId, adlabels: [{ name: "lbl_default" }], ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) },
+            { video_id: storiesAssetId, adlabels: storyReelsLabels, ...(thumbnailUrl ? { thumbnail_url: thumbnailUrl } : {}) },
+          ];
         } else {
-          assetFeedSpec.videos = isPlacementCustomized
-            ? [
-                { video_id: feedAssetId, adlabels: [{ name: "feed" }], thumbnail_url: thumbnailUrl },
-                { video_id: storiesAssetId, adlabels: [{ name: "stories_reels" }], thumbnail_url: thumbnailUrl },
-              ]
-            : [{ video_id: feedAssetId, thumbnail_url: thumbnailUrl }];
+          assetFeedSpec.images = [
+            { hash: feedAssetId, adlabels: [{ name: "lbl_default" }] },
+            { hash: storiesAssetId, adlabels: storyReelsLabels },
+          ];
         }
-        if (isPlacementCustomized) {
-          assetFeedSpec.ad_labels = [{ name: "feed" }, { name: "stories_reels" }];
-          assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules();
-        }
-        updatedSpec = {
+        updatedSpec = stripUndefinedDeep({
           asset_feed_spec: assetFeedSpec,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
-        };
-        if (instagramActorId) updatedSpec.instagram_actor_id = instagramActorId;
+          ...(instagramActorId ? { instagram_actor_id: instagramActorId } : {}),
+        });
+      } else {
+        // Standard single-asset: object_story_spec
+        const objectStorySpec: Record<string, unknown> = { page_id: pageId };
+        if (instagramActorId) objectStorySpec.instagram_user_id = instagramActorId;
+        if (adType === 'video' && feedAssetId) {
+          const videoData: Record<string, unknown> = {
+            video_id: feedAssetId,
+            message: normalize(primaryTexts[0]),
+            call_to_action: { type: callToAction, value: { link: feedUrl } },
+            link: feedUrl,
+          };
+          if (thumbnailUrl) videoData.image_url = thumbnailUrl;
+          if (headlines[0]) videoData.title = normalize(headlines[0]);
+          if (urlParameters) videoData.url_tags = urlParameters;
+          objectStorySpec.video_data = videoData;
+        } else {
+          const linkData: Record<string, unknown> = {
+            link: feedUrl,
+            message: normalize(primaryTexts[0]),
+            call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: feedUrl, lead_gen_form_id: leadGenFormId }) },
+          };
+          if (feedAssetId) linkData.image_hash = feedAssetId;
+          if (headlines[0]) linkData.name = normalize(headlines[0]);
+          if (descriptions?.[0]) linkData.description = normalize(descriptions[0]);
+          if (displayUrl) linkData.display_url = displayUrl;
+          if (urlParameters) linkData.url_tags = urlParameters;
+          objectStorySpec.link_data = linkData;
+        }
+        updatedSpec = stripUndefinedDeep({
+          object_story_spec: objectStorySpec,
+          degrees_of_freedom_spec: degreesOfFreedomSpec,
+          contextual_multi_ads: contextualMultiAds,
+          multi_advertiser_eligibility: "INELIGIBLE",
+        });
       }
 
        // 3. POST update to existing creative ID (in-place, no new ID)

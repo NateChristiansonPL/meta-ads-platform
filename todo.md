@@ -504,3 +504,18 @@
 
 - [x] Add Campaign Builder (campaign-creation-admin) to SKILL_PROJECT_CONFIG with defaultProjectId Zb7DRexqB45QqDTQU2VV5Y
 - [x] Add project label "Meta Ads Campaign and Ad Builder" for Zb7DRexqB45QqDTQU2VV5Y to PROJECT_LABELS
+
+## Campaign Builder — Meta API Alignment Audit & Fixes
+
+- [x] Fix: Add Threads UI warning (not yet supported by Meta Ads API, silently dropped)
+- [x] Fix: Add objective-gated placement guard for FB Reels Overlay
+- [x] Fix: Add `contextual_multi_ads: {"enroll_status":"OPT_OUT"}` to every ad creative payload
+- [x] Fix: Expand image `degrees_of_freedom_spec` to full required OPT_OUT field set
+- [x] Fix: Add `video_filtering` to video `degrees_of_freedom_spec`
+- [x] Fix: Add carousel-specific `degrees_of_freedom_spec` with `profile_end_card`, `carousel_highlight_card`, `video_highlights`
+- [x] Fix: Add `instagram_user_id` to carousel `object_story_spec`
+- [x] Fix: Add `multi_share_end_card: false` and `multi_share_optimized: false` to carousel `link_data`
+- [x] Fix: Update placement-customized `asset_feed_spec` to 5-label scheme per skill spec
+- [x] Fix: Add `ad_formats: ["AUTOMATIC_FORMAT"]` and `optimization_type: "PLACEMENT"` to placement-customized `asset_feed_spec`
+- [x] Fix: Standard image (no placement assets) must use `object_story_spec` not `asset_feed_spec`
+- [x] Fix: Apply all above fixes to `updateAdCreative` procedure as well

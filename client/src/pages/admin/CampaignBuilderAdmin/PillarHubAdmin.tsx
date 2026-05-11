@@ -1237,44 +1237,71 @@ function PillarAdSets({
                           combinedGroups.push({ label: 'Explore Home', keys: ['instagram_explore_home'] });
                           combinedGroups.push({ label: 'IG Search', keys: ['instagram_search'] });
                         }
+                        // Threads: shown but disabled — Meta Ads API does not yet expose a stable targeting key for Threads
                         if (hasTH) combinedGroups.push({ label: 'Threads Feed', keys: ['threads_feed'] });
                         if (hasAN) {
                           combinedGroups.push({ label: 'AN Native', keys: ['audience_network_native'] });
                           combinedGroups.push({ label: 'AN Banner', keys: ['audience_network_banner'] });
                         }
+                        const parentCampaign = campaigns.find(c => c.id === focused.campaignId);
+                        const objective = parentCampaign?.objective ?? '';
+                        const reelsOverlayCompatible = ['OUTCOME_AWARENESS','OUTCOME_ENGAGEMENT','OUTCOME_TRAFFIC','OUTCOME_SALES'].includes(objective);
+                        const threadsSelected = focused.placements.includes('threads_feed');
+                        const reelsOverlaySelected = focused.placements.includes('facebook_reels_overlay');
                         return (
-                          <div className="ph-fld">
-                            <label className="ph-lbl">Placements</label>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {combinedGroups.map(group => {
-                                const isOn = group.keys.some(k => focused.placements.includes(k));
-                                return (
-                                  <button
-                                    key={group.label}
-                                    className={isOn ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                                    onClick={() => {
-                                      if (isOn) {
-                                        updateFocused({ placements: focused.placements.filter(p => !group.keys.includes(p)) });
-                                      } else {
-                                        updateFocused({ placements: [...focused.placements, ...group.keys.filter(k => !focused.placements.includes(k))] });
-                                      }
-                                    }}
-                                  >
-                                    {isOn && <Check size={9} />}
-                                    {group.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="ph-help">
-                              {focused.placements.length > 0
-                                ? `${focused.placements.length} placement${focused.placements.length !== 1 ? 's' : ''} selected`
-                                : 'Select at least one placement'}
-                            </div>
-                          </div>
-                        );
-                      })()}
+                              <div className="ph-fld">
+                                <label className="ph-lbl">Placements</label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {combinedGroups.map(group => {
+                                    const isOn = group.keys.some(k => focused.placements.includes(k));
+                                    const isThreads = group.keys.includes('threads_feed');
+                                    const isReelsOverlay = group.keys.includes('facebook_reels_overlay');
+                                    const isDisabled = isReelsOverlay && !reelsOverlayCompatible;
+                                    return (
+                                      <button
+                                        key={group.label}
+                                        className={isOn && !isDisabled ? "ph-seg-btn ph-seg-btn--on" : "ph-seg-btn"}
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 4,
+                                          opacity: isDisabled ? 0.4 : 1,
+                                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                        }}
+                                        title={isThreads ? 'Threads is not yet supported by the Meta Ads API — this placement will not be sent' : isDisabled ? `Reels Overlay requires an Awareness, Engagement, Traffic, or Sales objective` : undefined}
+                                        onClick={() => {
+                                          if (isDisabled) return;
+                                          if (isOn) {
+                                            updateFocused({ placements: focused.placements.filter(p => !group.keys.includes(p)) });
+                                          } else {
+                                            updateFocused({ placements: [...focused.placements, ...group.keys.filter(k => !focused.placements.includes(k))] });
+                                          }
+                                        }}
+                                      >
+                                        {isOn && !isDisabled && <Check size={9} />}
+                                        {group.label}
+                                        {isThreads && <span style={{ fontSize: 8, opacity: 0.6, marginLeft: 2 }}>API N/A</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {threadsSelected && (
+                                  <div className="ph-help" style={{ color: 'var(--pl-amber, #f59e0b)', marginTop: 4 }}>
+                                    ⚠ Threads is selected but is not yet supported by the Meta Ads API. It will be excluded from the build.
+                                  </div>
+                                )}
+                                {reelsOverlaySelected && !reelsOverlayCompatible && (
+                                  <div className="ph-help" style={{ color: 'var(--pl-amber, #f59e0b)', marginTop: 4 }}>
+                                    ⚠ Reels Overlay is not compatible with the {objective.replace('OUTCOME_','')} objective and has been disabled.
+                                  </div>
+                                )}
+                                <div className="ph-help">
+                                  {focused.placements.filter(p => p !== 'threads_feed').length > 0
+                                    ? `${focused.placements.filter(p => p !== 'threads_feed').length} placement${focused.placements.filter(p => p !== 'threads_feed').length !== 1 ? 's' : ''} selected`
+                                    : 'Select at least one placement'}
+                                </div>
+                              </div>
+                            );
+                      })()
+                      }
                     </>
                   )}
                 </div>
