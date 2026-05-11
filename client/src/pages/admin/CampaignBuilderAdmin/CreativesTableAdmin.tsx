@@ -772,6 +772,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               <Th w={220} limit={125}>Primary Text</Th>
               <Th w={160} limit={30}>Description</Th>
               <Th w={120}>CTA</Th>
+              <Th w={160}>Display Link</Th>
               <Th w={200}>Link to UTM</Th>
               <Th w={64}></Th>
             </tr>
@@ -996,11 +997,19 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     </div>
                   </td>
 
+                  {/* Display Link */}
+                  <td className="p-0 border-r border-border">
+                    <input data-cell={`${i}-9`} value={row.displayUrl || ''}
+                      onChange={e => set(i, 'displayUrl', e.target.value)}
+                      onKeyDown={e => onKeyDown(e, i, 9)}
+                      placeholder="example.com" className="cell-input w-full font-mono text-[10px]" />
+                  </td>
+
                   {/* UTM Params */}
                   <td className="p-0 border-r border-border">
-                    <input data-cell={`${i}-9`} value={row.urlParams}
+                    <input data-cell={`${i}-10`} value={row.urlParams}
                       onChange={e => set(i, 'urlParams', e.target.value)}
-                      onKeyDown={e => onKeyDown(e, i, 9)}
+                      onKeyDown={e => onKeyDown(e, i, 10)}
                       placeholder="utm_source=meta&utm_medium=paid_social" className="cell-input w-full font-mono text-[10px]" />
                   </td>
 
@@ -1148,6 +1157,11 @@ function CarouselTable({ rows, onChange, settings }: { rows: CreativeRow[]; onCh
                     className="cell-input w-full appearance-none cursor-pointer">
                     {CTA_OPTIONS.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="text-[9px] text-muted-foreground block mb-0.5">Display Link</label>
+                  <input value={row.displayUrl || ''} onChange={e => set(i, 'displayUrl', e.target.value)}
+                    placeholder="example.com" className="cell-input w-full font-mono text-[10px]" />
                 </div>
                 <div>
                   <label className="text-[9px] text-muted-foreground block mb-0.5">Link to UTM</label>

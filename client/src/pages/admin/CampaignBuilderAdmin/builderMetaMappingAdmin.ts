@@ -191,8 +191,12 @@ function applyPlacements(row: AdSetRow, spec: MetaTargetingSpec): void {
 }
 
 function parseAudiences(value?: string): Record<string, string>[] | undefined {
-  const ids = splitTokens(value).filter(id => /^\d+$/.test(id));
-  return ids.length ? ids.map(id => ({ id })) : undefined;
+  // Entries may be stored as plain numeric IDs OR as "id|name" pairs (new format from UI).
+  // Extract the ID portion from both formats.
+  const ids = splitTokens(value)
+    .map(entry => entry.includes('|') ? entry.split('|')[0] : entry)
+    .filter(id => /^\d+$/.test(id.trim()));
+  return ids.length ? ids.map(id => ({ id: id.trim() })) : undefined;
 }
 
 function parseLocales(value?: string): number[] | undefined {
@@ -271,7 +275,13 @@ export function buildAdSetApiExtras(row: AdSetRow): Record<string, unknown> {
 }
 
 function placementAssetFor(creative: CreativeRow, dimensions: string[]): PlacementAsset | undefined {
-  return creative.placementAssets?.find(pa => dimensions.includes(pa.dimension) && clean(pa.assetUrl));
+  // Normalize dimension strings for comparison (e.g. '9:16', '9x16', '916' all treated as 9:16)
+  const normalize = (d: string) => d.replace(/[^0-9]/g, ':').replace(/^(\d+)[^0-9]+(\d+)$/, '$1:$2');
+  const normalizedDims = dimensions.map(normalize);
+  return creative.placementAssets?.find(pa => {
+    const paDim = normalize(pa.dimension || '');
+    return normalizedDims.includes(paDim) && clean(pa.assetUrl);
+  });
 }
 
 export function buildAdCreativeApiInput(
@@ -332,6 +342,7 @@ export function buildAdCreativeApiInput(
     callToAction,
     websiteUrl,
     urlParameters,
+    displayUrl: clean(creative.displayUrl) || undefined,
     sourcePostId: clean(ad.sourcePostId) || clean(creative.postId) || undefined,
     leadGenFormId: clean(ad.leadGenFormId) || clean(creative.leadGenFormId) || undefined,
   };

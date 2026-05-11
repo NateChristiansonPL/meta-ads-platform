@@ -181,6 +181,7 @@ export interface CreativeRow {
   cta: string;
   websiteUrl: string;
   urlParams: string;
+  displayUrl: string;       // display link shown in ad (e.g. "example.com") — passed as display_url
   postId: string;
   pixelId: string;
   carouselCards: CarouselCard[];
@@ -586,6 +587,7 @@ export function newCreative(overrides: Partial<CreativeRow> = {}): CreativeRow {
     cta: 'LEARN_MORE',
     websiteUrl: '',
     urlParams: '',
+    displayUrl: '',
     postId: '',
     pixelId: '',
     carouselCards: [],

@@ -519,3 +519,16 @@
 - [x] Fix: Add `ad_formats: ["AUTOMATIC_FORMAT"]` and `optimization_type: "PLACEMENT"` to placement-customized `asset_feed_spec`
 - [x] Fix: Standard image (no placement assets) must use `object_story_spec` not `asset_feed_spec`
 - [x] Fix: Apply all above fixes to `updateAdCreative` procedure as well
+
+## Campaign Builder — Launch Bug Fixes (May 11 2026)
+
+- [x] Fix: carousel degrees_of_freedom_spec — remove invalid keys profile_end_card, carousel_highlight_card, video_highlights (use base set only)
+- [x] Fix: carousel link_data — remove display_url (not accepted by Meta API in object_story_spec carousel)
+- [x] Fix: pixel tracking_specs — attach for ALL objectives including OUTCOME_TRAFFIC (was gated on conversionLocation, now gated on pixelId only)
+- [x] Fix: UTMs — pass urlParameters as url_tags only; do NOT append to websiteUrl/feedUrl/storiesUrl via appendParams
+- [x] Fix: 9:16 placement customization — placementAssetFor() now normalises dimension strings (9:16, 9x16, 916 all match)
+- [x] Fix: custom audience exclusion — AdSetsTableAdmin now stores id|name format; parseAudiences() extracts numeric ID from both formats
+- [x] Fix: video description — add description field to video_data in object_story_spec (single video and standard video branches, both createAd and updateAdCreative)
+- [x] Feature: add displayUrl (display link) column to CreativeRow, CreativesTableAdmin, and wire to all creative branches
+- [x] Fix: update pl-campaign-creation SKILL.md with all above changes documented
+- [ ] Fix: asset_feed_spec fallback — on Meta error 2490433, retry createAd with object_story_spec using feed-dimension asset (deferred — needs error code handling in useLaunchBuildAdmin.ts)

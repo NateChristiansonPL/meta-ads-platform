@@ -1687,11 +1687,14 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                         {customAudiences.length > 0 && (
                                           <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
                                             {customAudiences.map((aud: { id: string; name: string; approximateCount?: number; subtype?: string }) => {
-                                              const isSel = (row.targetedAudiences || '').includes(aud.name);
+                                              // Store aud.id (numeric Meta ID) so the API mapper can send correct IDs
+                                              const isSel = (row.targetedAudiences || '').split('\n').filter(Boolean).some(entry => entry.split('|')[0] === aud.id);
                                               return (
                                                 <button key={aud.id} onClick={() => {
                                                   const cur = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
-                                                  update(row.id, { targetedAudiences: isSel ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                                                  // Store as "id|name" so we can display the name in chips but pass the ID to Meta
+                                                  const entry = `${aud.id}|${aud.name}`;
+                                                  update(row.id, { targetedAudiences: isSel ? cur.filter(a => a.split('|')[0] !== aud.id).join('\n') : [...cur, entry].join('\n') });
                                                 }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
                                                   isSel ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2 text-foreground')}>
                                                   <span>{aud.name}</span>
@@ -1703,12 +1706,15 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                         )}
                                         {row.targetedAudiences && (
                                           <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {row.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                                            {row.targetedAudiences.split('\n').filter(Boolean).map((entry, i) => {
+                                              const [, displayName] = entry.includes('|') ? entry.split('|') : [entry, entry];
+                                              return (
                                               <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[10px] text-primary">
-                                                {a}
+                                                {displayName}
                                                 <button onClick={() => update(row.id, { targetedAudiences: row.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
                                               </span>
-                                            ))}
+                                              );
+                                            })}
                                           </div>
                                         )}
                                       </>
@@ -1728,11 +1734,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                         {customAudiences.length > 0 && (
                                           <div className="max-h-40 overflow-y-auto border border-border rounded-lg bg-surface-2/30 divide-y divide-border/30">
                                             {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                                              const isExcl = (row.excludedAudiences || '').includes(aud.name);
+                                              // Store aud.id (numeric Meta ID) so the API mapper can send correct IDs
+                                              const isExcl = (row.excludedAudiences || '').split('\n').filter(Boolean).some(entry => entry.split('|')[0] === aud.id);
                                               return (
                                                 <button key={aud.id} onClick={() => {
                                                   const cur = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
-                                                  update(row.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                                                  const entry = `${aud.id}|${aud.name}`;
+                                                  update(row.id, { excludedAudiences: isExcl ? cur.filter(a => a.split('|')[0] !== aud.id).join('\n') : [...cur, entry].join('\n') });
                                                 }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
                                                   isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-surface-2 text-foreground')}>
                                                   <span>{aud.name}</span>
@@ -1744,12 +1752,15 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                         )}
                                         {row.excludedAudiences && (
                                           <div className="flex flex-wrap gap-1 mt-1.5">
-                                            {row.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
+                                            {row.excludedAudiences.split('\n').filter(Boolean).map((entry, i) => {
+                                              const [, displayName] = entry.includes('|') ? entry.split('|') : [entry, entry];
+                                              return (
                                               <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
-                                                {a}
+                                                {displayName}
                                                 <button onClick={() => update(row.id, { excludedAudiences: row.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
                                               </span>
-                                            ))}
+                                              );
+                                            })}
                                           </div>
                                         )}
                                       </>

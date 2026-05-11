@@ -170,15 +170,10 @@ function buildDegreesOfFreedomSpec(adType: 'static' | 'video' | 'carousel' | 'so
     return { creative_features_spec: { ...base, video_filtering: off } };
   }
   if (adType === 'carousel') {
-    // Carousel adds profile_end_card, carousel_highlight_card, video_highlights
-    return {
-      creative_features_spec: {
-        ...base,
-        profile_end_card:        off,
-        carousel_highlight_card: off,
-        video_highlights:        off,
-      },
-    };
+    // Carousel uses the shared base set only.
+    // profile_end_card, carousel_highlight_card, and video_highlights were removed
+    // from the accepted set by the Meta API and must NOT be sent.
+    return { creative_features_spec: base };
   }
   // image / source_post: base fields only
   return { creative_features_spec: base };
@@ -1086,8 +1081,11 @@ export const metaAdminRouter = router({
       }
 
       const promotedObject: Record<string, unknown> = {};
-      if (pixelId && conversionLocation) {
+      // pixel_id must be attached to promoted_object for ALL objectives that have a pixel,
+      // not just conversion objectives. Traffic objective requires pixel_id for tracking.
+      if (pixelId) {
         promotedObject.pixel_id = pixelId;
+        // custom_event_type only applies when there is a specific conversion event
         if (customEventType) promotedObject.custom_event_type = customEventType;
       }
       if (leadGenFormId) promotedObject.lead_gen_form_id = leadGenFormId;
@@ -1170,19 +1168,19 @@ export const metaAdminRouter = router({
           .replace(/\u2013|\u2014/g, "-")
           .replace(/\u2026/g, "...");
 
-      // ── Build URL with parameters ──────────────────────────────────────────
+      // ── URL building — UTMs go into url_tags ONLY, never appended to the URL ──
+      // Meta has a dedicated url_tags field for UTM parameters. Appending them to
+      // the website URL causes double-encoding and breaks reporting attribution.
+      const baseUrl = websiteUrl;
+      const feedUrl = feedWebsiteUrl ?? baseUrl;
+      const storiesUrl = storiesWebsiteUrl ?? baseUrl;
+
+      // appendParams is still used for carousel card links (per-card URL overrides)
+      // but NOT for the top-level website URL.
       const appendParams = (url: string, params?: string) => {
         if (!params) return url;
         return url.includes("?") ? `${url}&${params}` : `${url}?${params}`;
       };
-
-      const baseUrl = appendParams(websiteUrl, urlParameters);
-      const feedUrl = feedWebsiteUrl
-        ? appendParams(feedWebsiteUrl, urlParameters)
-        : baseUrl;
-      const storiesUrl = storiesWebsiteUrl
-        ? appendParams(storiesWebsiteUrl, urlParameters)
-        : baseUrl;
 
       // ── Degrees of freedom spec (format-specific OPT_OUT fields) ───────────
       const degreesOfFreedomSpec = buildDegreesOfFreedomSpec(
@@ -1234,7 +1232,8 @@ export const metaAdminRouter = router({
           child_attachments: childAttachments,
           call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
         };
-        if (displayUrl) carouselLinkData.display_url = displayUrl;
+        // Note: display_url is NOT supported in carousel object_story_spec link_data.
+        // It is only valid in asset_feed_spec link_urls entries.
 
         const carouselObjectStorySpec: Record<string, unknown> = {
           page_id: pageId,
@@ -1261,6 +1260,8 @@ export const metaAdminRouter = router({
         };
         if (thumbnailUrl) videoData.image_url = thumbnailUrl;
         if (headlines[0]) videoData.title = normalize(headlines[0]);
+        // description field for video ads (shown below the video in feed)
+        if (descriptions?.[0]) videoData.description = normalize(descriptions[0]);
         if (urlParameters) videoData.url_tags = urlParameters;
 
         const singleVideoObjectStorySpec: Record<string, unknown> = {
@@ -1379,6 +1380,8 @@ export const metaAdminRouter = router({
           };
           if (thumbnailUrl) videoData.image_url = thumbnailUrl;
           if (headlines[0]) videoData.title = normalize(headlines[0]);
+          // description field for video ads (shown below the video in feed)
+          if (descriptions?.[0]) videoData.description = normalize(descriptions[0]);
           if (urlParameters) videoData.url_tags = urlParameters;
           objectStorySpec.video_data = videoData;
         } else {
@@ -1528,9 +1531,10 @@ export const metaAdminRouter = router({
         websiteUrl, feedWebsiteUrl, storiesWebsiteUrl, feedPrimaryText, storiesPrimaryText, leadGenFormId, urlParameters, displayUrl, sourcePostId,
       } = input;
 
-      const baseUrl = appendParams(websiteUrl, urlParameters);
-      const feedUrl = feedWebsiteUrl ? appendParams(feedWebsiteUrl, urlParameters) : baseUrl;
-      const storiesUrl = storiesWebsiteUrl ? appendParams(storiesWebsiteUrl, urlParameters) : baseUrl;
+      // UTMs go into url_tags ONLY — do NOT append to the URL itself.
+      const baseUrl = websiteUrl;
+      const feedUrl = feedWebsiteUrl ?? baseUrl;
+      const storiesUrl = storiesWebsiteUrl ?? baseUrl;
 
       const degreesOfFreedomSpec = buildDegreesOfFreedomSpec(
         sourcePostId ? 'source_post' : adType
@@ -1571,7 +1575,7 @@ export const metaAdminRouter = router({
           child_attachments: childAttachments,
           call_to_action: { type: callToAction, value: stripUndefinedDeep({ link: baseUrl, lead_gen_form_id: leadGenFormId }) },
         };
-        if (displayUrl) carouselLinkData.display_url = displayUrl;
+        // display_url is NOT supported in carousel object_story_spec link_data.
         const carouselObjectStorySpec: Record<string, unknown> = { page_id: pageId, link_data: carouselLinkData };
         if (instagramActorId) carouselObjectStorySpec.instagram_user_id = instagramActorId;
         updatedSpec = {
@@ -1589,6 +1593,7 @@ export const metaAdminRouter = router({
         };
         if (thumbnailUrl) videoData.image_url = thumbnailUrl;
         if (headlines[0]) videoData.title = normalize(headlines[0]);
+        if (descriptions?.[0]) videoData.description = normalize(descriptions[0]);
         if (urlParameters) videoData.url_tags = urlParameters;
         const singleVideoSpec: Record<string, unknown> = { page_id: pageId, video_data: videoData };
         if (instagramActorId) singleVideoSpec.instagram_user_id = instagramActorId;
@@ -1663,6 +1668,7 @@ export const metaAdminRouter = router({
           };
           if (thumbnailUrl) videoData.image_url = thumbnailUrl;
           if (headlines[0]) videoData.title = normalize(headlines[0]);
+          if (descriptions?.[0]) videoData.description = normalize(descriptions[0]);
           if (urlParameters) videoData.url_tags = urlParameters;
           objectStorySpec.video_data = videoData;
         } else {
