@@ -494,3 +494,8 @@
 - [x] QA panel: show pass/fail per ad set with expandable detail rows
 - [x] QA panel: show overall readiness score / summary banner
 - [x] QA panel: clicking a failed item navigates directly to the relevant ad set + step
+
+## Pillar View — QA Inline on Pillar Cards & Spreadsheet Sidebar
+
+- [x] Show QA error/warning counts inline on each pillar strip card (Campaigns, Ad Sets, Creatives, Ads, Launch) using runQAChecks
+- [x] Widen collapsed QA sidebar tab in spreadsheet view (from 28px to 44px)

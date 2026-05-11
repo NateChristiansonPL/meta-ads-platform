@@ -114,6 +114,30 @@ export default function PillarHubAdmin({
     state.carouselCreatives.length;
   const adCount = state.ads.filter((a) => a.adName).length;
 
+  // Run full QA to get per-pillar issue counts
+  const qa = runQAChecks({
+    adSets: state.adSets,
+    campaigns: state.campaigns,
+    creatives: state.creatives,
+    ads: state.ads,
+    settings: state.settings,
+  });
+
+  // Count errors+warnings scoped to each pillar
+  const qaForPillar = (key: PillarKey) => {
+    const relevant = qa.issues.filter((i) => {
+      if (key === "campaigns") return !i.rowId && (i.message.includes("campaign") || i.message.includes("Campaign"));
+      if (key === "adsets") return !!i.rowId || (!i.rowId && (i.message.includes("ad set") || i.message.includes("Ad set")));
+      if (key === "ads") return !i.rowId && (i.message.includes("ad") || i.message.includes("Ad")) && !i.message.includes("ad set") && !i.message.includes("Ad set");
+      if (key === "launch") return true;
+      return false;
+    });
+    return {
+      errors: relevant.filter(i => i.type === "error").length,
+      warnings: relevant.filter(i => i.type === "warning").length,
+    };
+  };
+
   const campaignErrors = state.campaigns.filter(
     (c) => campaignIssues(c).length > 0
   ).length;
@@ -132,6 +156,8 @@ export default function PillarHubAdmin({
     progress: number;
     done: boolean;
     issues: number;
+    qaErrors: number;
+    qaWarnings: number;
   }[] = [
     {
       key: "campaigns",
@@ -144,6 +170,8 @@ export default function PillarHubAdmin({
       progress: campaignCount > 0 && campaignErrors === 0 ? 1.0 : campaignCount > 0 ? 0.5 : 0,
       done: campaignCount > 0 && campaignErrors === 0,
       issues: campaignErrors,
+      qaErrors: qaForPillar("campaigns").errors,
+      qaWarnings: qaForPillar("campaigns").warnings,
     },
     {
       key: "adsets",
@@ -156,6 +184,8 @@ export default function PillarHubAdmin({
       progress: state.adSets.length > 0 ? adSetCount / Math.max(state.adSets.length, 1) : 0,
       done: adSetCount > 0 && adSetErrors === 0 && state.adSets.length > 0,
       issues: adSetErrors,
+      qaErrors: qaForPillar("adsets").errors,
+      qaWarnings: qaForPillar("adsets").warnings,
     },
     {
       key: "creatives",
@@ -168,6 +198,8 @@ export default function PillarHubAdmin({
       progress: creativeCount > 0 ? 1.0 : 0,
       done: creativeCount > 0,
       issues: 0,
+      qaErrors: 0,
+      qaWarnings: 0,
     },
     {
       key: "ads",
@@ -180,6 +212,8 @@ export default function PillarHubAdmin({
       progress: state.ads.length > 0 ? adCount / Math.max(state.ads.length, 1) : 0,
       done: adCount > 0 && adCount === state.ads.length,
       issues: 0,
+      qaErrors: qaForPillar("ads").errors,
+      qaWarnings: qaForPillar("ads").warnings,
     },
     {
       key: "launch",
@@ -187,11 +221,13 @@ export default function PillarHubAdmin({
       title: "Launch",
       friendlyTitle: "Launch",
       sub: "Final review & push",
-      stat: "—",
-      lbl: "not ready",
-      progress: 0,
-      done: false,
-      issues: 0,
+      stat: qa.errorCount > 0 ? `${qa.errorCount}` : qa.warningCount > 0 ? `${qa.warningCount}` : "✓",
+      lbl: qa.errorCount > 0 ? `error${qa.errorCount !== 1 ? "s" : ""}` : qa.warningCount > 0 ? `warning${qa.warningCount !== 1 ? "s" : ""}` : "all clear",
+      progress: qa.errorCount === 0 && qa.warningCount === 0 ? 1.0 : qa.errorCount === 0 ? 0.7 : 0,
+      done: qa.errorCount === 0 && qa.warningCount === 0,
+      issues: qa.errorCount + qa.warningCount,
+      qaErrors: qa.errorCount,
+      qaWarnings: qa.warningCount,
     },
   ];
 
@@ -294,7 +330,26 @@ function PillarStrip({
             />
           </div>
           <div className="ph-pillar-issues">
-            {p.issues > 0 ? (
+            {(p as any).qaErrors > 0 ? (
+              <>
+                <AlertTriangle size={11} style={{ color: "#f87171" }} />
+                <span style={{ color: "#f87171", fontWeight: 600 }}>
+                  {(p as any).qaErrors} error{(p as any).qaErrors !== 1 ? "s" : ""}
+                </span>
+                {(p as any).qaWarnings > 0 && (
+                  <span style={{ color: "#fbbf24", fontWeight: 600, marginLeft: 4 }}>
+                    +{(p as any).qaWarnings}w
+                  </span>
+                )}
+              </>
+            ) : (p as any).qaWarnings > 0 ? (
+              <>
+                <AlertTriangle size={11} style={{ color: "#fbbf24" }} />
+                <span style={{ color: "#fbbf24", fontWeight: 600 }}>
+                  {(p as any).qaWarnings} warning{(p as any).qaWarnings !== 1 ? "s" : ""}
+                </span>
+              </>
+            ) : p.issues > 0 ? (
               <>
                 <AlertTriangle size={11} style={{ color: "var(--pl-pink)" }} />
                 <span style={{ color: "var(--pl-pink)", fontWeight: 600 }}>
@@ -326,6 +381,8 @@ type PillarDef = {
   progress: number;
   done: boolean;
   issues: number;
+  qaErrors: number;
+  qaWarnings: number;
 };
 function buildPillars(_: unknown): PillarDef[] { return []; }
 

@@ -2004,7 +2004,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
           onClick={() => setQaOpen(true)}
           className="flex flex-col items-center justify-center shrink-0 border-l transition-colors hover:bg-white/5"
           style={{
-            width: 28,
+            width: 44,
             background: '#0e0d3a',
             borderColor: 'rgba(255,255,255,0.1)',
           }}
