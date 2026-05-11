@@ -256,6 +256,8 @@ export function buildAttributionSpec(attributionWindow?: string): Record<string,
   if (raw.includes('7') && raw.includes('click')) specs.push({ event_type: 'CLICK_THROUGH', window_days: 7 });
   if (raw.includes('1') && raw.includes('click')) specs.push({ event_type: 'CLICK_THROUGH', window_days: 1 });
   if (raw.includes('1') && raw.includes('view')) specs.push({ event_type: 'VIEW_THROUGH', window_days: 1 });
+  // Issue 3: correct enum is ENGAGED_VIDEO_VIEW, not ENGAGED_VIEW
+  if (raw.includes('engaged') || raw.includes('video view')) specs.push({ event_type: 'ENGAGED_VIDEO_VIEW', window_days: 1 });
   return specs.length ? specs : undefined;
 }
 

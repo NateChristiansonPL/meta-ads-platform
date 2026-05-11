@@ -133,6 +133,8 @@ export function useLaunchBuild(
               objective: campaign.objective,
               status: campaign.status,
               spendCapCents: campaign.spendCap ? Math.round(parseFloat(campaign.spendCap) * 100) : undefined,
+              // Issue 2: always pass cbo so server can set is_adset_budget_sharing_enabled correctly
+              cbo: campaign.cbo === true,
             });
             campaignIdMap[campaign.name] = result.campaignId;
             if (stateCampaignIndex >= 0) updatedCampaigns[stateCampaignIndex] = { ...updatedCampaigns[stateCampaignIndex], campaignId: result.campaignId };
@@ -177,6 +179,9 @@ export function useLaunchBuild(
           } else {
             const budgetCents = Math.round(parseFloat(adSet.budget || '0') * 100);
             const targeting = buildBuilderTargetingSpec(adSet);
+            // Resolve the parent campaign's objective so the server can gate
+            // promoted_object and attribution_spec correctly per Issues 4, 5, 6.
+            const parentCampaign = campaigns.find(c => c.name === adSet.campaignName);
             const result = await createAdSet.mutateAsync({
               accessToken,
               adAccountId,
@@ -192,9 +197,10 @@ export function useLaunchBuild(
               targeting,
               pixelId: pixelId || undefined,
               customEventType: adSet.conversionEvent || undefined,
-                conversionLocation: adSet.conversionLocation || undefined,
-                ...buildAdSetApiExtras(adSet),
-              });
+              conversionLocation: adSet.conversionLocation || undefined,
+              objective: parentCampaign?.objective || undefined,
+              ...buildAdSetApiExtras(adSet),
+            });
             adSetIdMap[adSet.name] = result.adSetId;
             if (stateAdSetIndex >= 0) updatedAdSets[stateAdSetIndex] = { ...updatedAdSets[stateAdSetIndex], adSetId: result.adSetId, campaignId };
           }

@@ -543,3 +543,14 @@
 - [x] Add Creative Decay item to ADMIN_ITEMS in AppShell.tsx
 - [x] DB tables already existed — marked migration 0015 as applied in drizzle tracking table
 - [x] Verify TypeScript compiles clean
+
+## Admin Campaign Builder — Post-Mortem Fixes (May 11 2026 Launch)
+
+- [x] Fix Issue 1: special_ad_categories must be a JSON array (["NONE"]), not a string "NONE"
+- [x] Fix Issue 2: is_adset_budget_sharing_enabled must be explicitly set to false when CBO is off
+- [x] Fix Issue 3: attribution_spec must use ENGAGED_VIDEO_VIEW not ENGAGED_VIEW
+- [x] Fix Issue 4: OUTCOME_SALES promoted_object must use pixel_id + custom_event_type: OTHER only — never custom_conversion_id
+- [x] Fix Issue 5: OUTCOME_TRAFFIC ad sets must omit promoted_object entirely
+- [x] Fix Issue 6: OUTCOME_TRAFFIC attribution_spec must be 1-day click only (not 7d click + 1d view)
+- [x] Fix Issue 7: asset_feed_spec bodies/titles/descriptions must deduplicate — same text across labels must use one entry with all labels, not one entry per label
+- [x] Update pl-meta-builder skill with all 7 fixes documented

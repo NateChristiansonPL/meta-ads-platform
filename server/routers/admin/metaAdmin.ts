@@ -953,10 +953,12 @@ export const metaAdminRouter = router({
         spendCapCents: z.number().optional(),
         startTime: z.string().optional(),
         endTime: z.string().optional(),
+        // Issue 2: cbo flag → is_adset_budget_sharing_enabled must always be explicit
+        cbo: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
-      const { accessToken, adAccountId, name, objective, status, spendCapCents, startTime, endTime } = input;
+      const { accessToken, adAccountId, name, objective, status, spendCapCents, startTime, endTime, cbo } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
       // Duplicate check
@@ -984,7 +986,11 @@ export const metaAdminRouter = router({
         name,
         objective,
         status,
+        // Issue 1: special_ad_categories must always be an array, never a string
         special_ad_categories: [],
+        // Issue 2: is_adset_budget_sharing_enabled must be explicitly set based on cbo flag.
+        // Meta requires this field to be present when CBO is off; omitting it causes an API error.
+        is_adset_budget_sharing_enabled: cbo === true,
       };
       if (spendCapCents) payload.spend_cap = spendCapCents;
       if (startTime) payload.start_time = startTime;
@@ -1022,6 +1028,8 @@ export const metaAdminRouter = router({
         leadGenFormId: z.string().optional(),
         facebookPageId: z.string().optional(),
         instagramProfileId: z.string().optional(),
+        // Issue 4/5: objective is needed to gate promoted_object and attribution_spec correctly
+        objective: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1030,6 +1038,7 @@ export const metaAdminRouter = router({
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
         conversionLocation, pixelId, customEventType, leadGenFormId, facebookPageId, instagramProfileId,
+        objective,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -1070,7 +1079,15 @@ export const metaAdminRouter = router({
       }
 
       if (startTime) payload.start_time = startTime;
-      if (attributionSpec) payload.attribution_spec = attributionSpec;
+
+      // Issue 6: OUTCOME_TRAFFIC only supports 1-day click attribution window.
+      // Override whatever the client sent — never send 7d click or 1d view for traffic.
+      if (objective === 'OUTCOME_TRAFFIC') {
+        payload.attribution_spec = [{ event_type: 'CLICK_THROUGH', window_days: 1 }];
+      } else if (attributionSpec) {
+        payload.attribution_spec = attributionSpec;
+      }
+
       if (adScheduling?.length) payload.adset_schedule = adScheduling;
       if (frequencyControl?.enabled) {
         const times = Number(frequencyControl.times || 1);
@@ -1080,18 +1097,35 @@ export const metaAdminRouter = router({
         }
       }
 
+      // Issues 4 & 5: promoted_object rules are objective-specific.
+      //
+      // OUTCOME_TRAFFIC: Meta does NOT accept promoted_object at the ad set level for traffic
+      //   campaigns optimizing toward LANDING_PAGE_VIEWS or LINK_CLICKS. The pixel is attached
+      //   via tracking_specs at the ad level instead. Omit promoted_object entirely.
+      //
+      // OUTCOME_SALES / OUTCOME_LEADS: use pixel_id + custom_event_type: OTHER only.
+      //   Never pass custom_conversion_id in promoted_object for outcome-based buying objectives.
+      //   The customEventId from the builder state is for reporting/optimization signal only.
+      //
+      // All other objectives (AWARENESS, ENGAGEMENT, etc.): include page_id / instagram_profile_id
+      //   when required; pixel_id only when a pixel is configured.
       const promotedObject: Record<string, unknown> = {};
-      // pixel_id must be attached to promoted_object for ALL objectives that have a pixel,
-      // not just conversion objectives. Traffic objective requires pixel_id for tracking.
-      if (pixelId) {
-        promotedObject.pixel_id = pixelId;
-        // custom_event_type only applies when there is a specific conversion event
-        if (customEventType) promotedObject.custom_event_type = customEventType;
+      if (objective !== 'OUTCOME_TRAFFIC') {
+        if (pixelId) {
+          promotedObject.pixel_id = pixelId;
+          // For OUTCOME_SALES/LEADS, always use custom_event_type: OTHER — never custom_conversion_id
+          if (objective === 'OUTCOME_SALES' || objective === 'OUTCOME_LEADS') {
+            promotedObject.custom_event_type = 'OTHER';
+          } else if (customEventType) {
+            promotedObject.custom_event_type = customEventType;
+          }
+        }
+        if (leadGenFormId) promotedObject.lead_gen_form_id = leadGenFormId;
+        if (facebookPageId) promotedObject.page_id = facebookPageId;
+        if (instagramProfileId) promotedObject.instagram_profile_id = instagramProfileId;
+        if (Object.keys(promotedObject).length) payload.promoted_object = promotedObject;
       }
-      if (leadGenFormId) promotedObject.lead_gen_form_id = leadGenFormId;
-      if (facebookPageId) promotedObject.page_id = facebookPageId;
-      if (instagramProfileId) promotedObject.instagram_profile_id = instagramProfileId;
-      if (Object.keys(promotedObject).length) payload.promoted_object = promotedObject;
+      // For OUTCOME_TRAFFIC: pixel is attached at the ad level via tracking_specs only.
 
       const data = await metaPost(`/${accountId}/adsets`, stripUndefinedDeep(payload), accessToken);
       return { adSetId: data.id };
@@ -1318,21 +1352,29 @@ export const metaAdminRouter = router({
         }
 
         // Bodies (primary text)
+        // Issue 7: Meta error 1815809 — duplicate text entries in asset_feed_spec are rejected.
+        // If feed and stories text are identical, use a single entry covering all labels.
         const feedBody = normalize(feedPrimaryText || primaryTexts[0]);
         const storyBody = normalize(storiesPrimaryText || primaryTexts[0]);
-        assetFeedSpec.bodies = [
-          { text: feedBody, adlabels: [{ name: "lbl_default" }] },
-          { text: storyBody, adlabels: storyReelsLabels },
-        ];
+        if (feedBody === storyBody) {
+          assetFeedSpec.bodies = [
+            { text: feedBody, adlabels: adLabels },
+          ];
+        } else {
+          assetFeedSpec.bodies = [
+            { text: feedBody, adlabels: [{ name: "lbl_default" }] },
+            { text: storyBody, adlabels: storyReelsLabels },
+          ];
+        }
 
         // Titles (headline)
         assetFeedSpec.titles = headlines.map((h) => ({ text: normalize(h) }));
 
-        // Descriptions
+        // Descriptions — same dedup rule: if text is the same for all placements, use one entry
         if (descriptions && descriptions.length > 0) {
+          const descText = normalize(descriptions[0]);
           assetFeedSpec.descriptions = [
-            { text: normalize(descriptions[0]), adlabels: [{ name: "lbl_default" }] },
-            { text: normalize(descriptions[0]), adlabels: storyReelsLabels },
+            { text: descText, adlabels: adLabels },
           ];
         }
 
@@ -1612,16 +1654,22 @@ export const metaAdminRouter = router({
           { name: "lbl_ig_story" }, { name: "lbl_ig_reels" },
         ];
         const allLabels = [{ name: "lbl_default" }, ...storyReelsLabels];
+        // Issue 7: deduplicate bodies/descriptions — identical text must use one entry with all labels
+        const feedBodyU = normalize(feedPrimaryText || primaryTexts[0]);
+        const storyBodyU = normalize(storiesPrimaryText || primaryTexts[0]);
+        const bodiesU = feedBodyU === storyBodyU
+          ? [{ text: feedBodyU, adlabels: allLabels }]
+          : [
+              { text: feedBodyU, adlabels: [{ name: "lbl_default" }] },
+              { text: storyBodyU, adlabels: storyReelsLabels },
+            ];
         const assetFeedSpec: Record<string, unknown> = {
           ad_formats: ["AUTOMATIC_FORMAT"],
           optimization_type: "PLACEMENT",
           call_to_action_types: [callToAction],
           ad_labels: allLabels,
           titles: headlines.map((h) => ({ text: normalize(h) })),
-          bodies: [
-            { text: normalize(feedPrimaryText || primaryTexts[0]), adlabels: [{ name: "lbl_default" }] },
-            { text: normalize(storiesPrimaryText || primaryTexts[0]), adlabels: storyReelsLabels },
-          ],
+          bodies: bodiesU,
           link_urls: feedUrl !== storiesUrl
             ? [
                 { website_url: feedUrl, ...(displayUrl ? { display_url: displayUrl } : {}), adlabels: [{ name: "lbl_default" }] },
@@ -1632,9 +1680,9 @@ export const metaAdminRouter = router({
         };
         if (urlParameters) assetFeedSpec.url_tags = urlParameters;
         if (descriptions && descriptions.length > 0) {
+          // Descriptions always use one entry with all labels (no per-placement override supported)
           assetFeedSpec.descriptions = [
-            { text: normalize(descriptions[0]), adlabels: [{ name: "lbl_default" }] },
-            { text: normalize(descriptions[0]), adlabels: storyReelsLabels },
+            { text: normalize(descriptions[0]), adlabels: allLabels },
           ];
         }
         if (isVideo) {
