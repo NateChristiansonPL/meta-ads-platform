@@ -7,6 +7,7 @@ import { metaRouter } from "./routers/meta";
 import { sessionsRouter } from "./routers/sessions";
 import { metaAdminRouter } from "./routers/admin/metaAdmin";
 import { sessionsAdminRouter } from "./routers/admin/sessionsAdmin";
+import { creativeDecayAdminRouter } from "./routers/admin/creativeDecayAdmin";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
@@ -122,6 +123,7 @@ export const appRouter = router({
   sessions: sessionsRouter,
   adminMeta: metaAdminRouter,
   adminSessions: sessionsAdminRouter,
+  adminCreativeDecay: creativeDecayAdminRouter,
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),

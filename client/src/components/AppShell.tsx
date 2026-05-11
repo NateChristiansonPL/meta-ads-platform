@@ -75,6 +75,7 @@ const ADMIN_ITEMS = [
   { label: "Team Members", icon: Users, path: "/admin/team-members" },
   { label: "Usage & Tallies", icon: BarChart2, path: "/admin/usage" },
   { label: "Campaign Builder (Admin)", icon: Wrench, path: "/admin/campaign-builder" },
+  { label: "Creative Decay (Admin)", icon: Zap, path: "/admin/creative-decay" },
 ];
 
 /** Returns the set of skillIds that have a currently running task for the logged-in user. */

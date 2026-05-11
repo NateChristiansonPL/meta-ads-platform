@@ -532,3 +532,14 @@
 - [x] Feature: add displayUrl (display link) column to CreativeRow, CreativesTableAdmin, and wire to all creative branches
 - [x] Fix: update pl-campaign-creation SKILL.md with all above changes documented
 - [ ] Fix: asset_feed_spec fallback — on Meta error 2490433, retry createAd with object_story_spec using feed-dimension asset (deferred — needs error code handling in useLaunchBuildAdmin.ts)
+
+## Admin Creative Decay Feature (from user zip, May 11 2026)
+
+- [x] Add 5 new DB tables to drizzle/schema.ts: metaSyncSchedule, metaSyncHistory, adSourceDetails, adPerformance, creativeFatigueResults
+- [x] Copy creativeDecayAdmin.ts router to server/routers/admin/
+- [x] Mount creativeDecayAdminRouter in server/routers.ts as adminCreativeDecay
+- [x] Copy AdminCreativeDecay.tsx to client/src/pages/admin/
+- [x] Add /admin/creative-decay route to App.tsx (admin-only)
+- [x] Add Creative Decay item to ADMIN_ITEMS in AppShell.tsx
+- [x] DB tables already existed — marked migration 0015 as applied in drizzle tracking table
+- [x] Verify TypeScript compiles clean
