@@ -481,3 +481,8 @@
 - [x] BulkEditPanel: pre-populate all fields from selection when all selected rows share the same value (budget, dates, goal, age, gender, placements, etc.)
 - [x] Spreadsheet view: add Select All checkbox in the table header row to select/deselect all ad sets at once
 - [x] Pillar view: add Select All button in the ad set list header when multi-select mode is active
+
+## Pillar View — Audience Step Fix
+
+- [x] Audience step (Step 2): disable Location tab (lockedTab="interests" so only Interests/Custom are active)
+- [x] Audience step (Step 2): Bulk Paste button hidden automatically (only renders when audienceFocus === 'location', which is now blocked)

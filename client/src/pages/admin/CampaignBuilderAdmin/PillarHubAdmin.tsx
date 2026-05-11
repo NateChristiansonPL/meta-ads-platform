@@ -912,8 +912,9 @@ function PillarAdSets({
                     <div style={{ position: 'relative', zIndex: 10 }}>
                       <TargetingPopup
                         inline
+                        lockedTab="interests"
                         tmRow={focused}
-                        audienceFocus={audienceFocus}
+                        audienceFocus={audienceFocus === 'location' ? 'interests' : audienceFocus}
                         setAudienceFocus={setAudienceFocus}
                         hasCredentials={hasCredentials}
                         locationQuery={locationQuery}
