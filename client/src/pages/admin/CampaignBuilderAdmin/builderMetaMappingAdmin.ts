@@ -268,16 +268,16 @@ export function buildAttributionSpec(attributionWindow?: string): Record<string,
 export function inferDestinationType(conversionLocation?: string): string | undefined {
   const loc = (conversionLocation || '').toUpperCase();
   const map: Record<string, string> = {
-    WEBSITE:          'WEBSITE',
-    APP:              'APP',
-    MESSENGER:        'MESSENGER',
-    INSTAGRAM_DIRECT: 'INSTAGRAM_PROFILE',
-    WHATSAPP:         'WHATSAPP',
-    INSTANT_FORM:     'ON_AD',
-    FACEBOOK_PAGE:    'FACEBOOK_PAGE',
-    ON_AD:            'ON_AD',
-    SHOP:             'SHOP',
-    CALL:             'PHONE_CALL',
+    WEBSITE:           'WEBSITE',
+    APP:               'APP',
+    MESSENGER:         'MESSENGER',
+    INSTAGRAM_PROFILE: 'INSTAGRAM_PROFILE',
+    WHATSAPP:          'WHATSAPP',
+    ON_AD:             'ON_AD',
+    FACEBOOK_PAGE:     'FACEBOOK_PAGE',
+    PHONE_CALL:        'PHONE_CALL',
+    SHOP:              'SHOP',
+    IG_FB_COMBINED:    'FACEBOOK',
   };
   return map[loc];
 }

@@ -13,7 +13,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CheckCircle2, XCircle, AlertCircle, AlertTriangle, Copy, Rocket,
-  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink
+  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink, OctagonX
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CampaignBuilderState, AdRow } from './campaignStoreAdmin';
@@ -249,6 +249,8 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     statusMessages: [],
   });
 
+  const [isAborting, setIsAborting] = useState(false);
+  const abortRunMutation = trpc.runs.abortRun.useMutation();
   const launchCampaignBuild = trpc.runs.launchCampaignBuild.useMutation();
   const getRunStatus = trpc.runs.getRunStatus.useQuery(
     { runId: manusLaunch.runId! },
@@ -283,6 +285,25 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
       setManusLaunch(prev => ({ ...prev, phase: 'running', statusMessages: msgs }));
     }
   }, [getRunStatus.data]);
+
+  const handleAbort = async () => {
+    if (!manusLaunch.runId) return;
+    setIsAborting(true);
+    try {
+      await abortRunMutation.mutateAsync({ runId: manusLaunch.runId });
+      setManusLaunch(prev => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: 'Aborted by user.',
+      }));
+      toast.info('Build aborted.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Abort failed: ${msg}`);
+    } finally {
+      setIsAborting(false);
+    }
+  };
 
   const handleManusLaunch = async () => {
     const { settings, buildMode } = state;
@@ -574,25 +595,38 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
             )}
           </div>
           <div className="flex flex-col items-end gap-1">
-            <button
-              onClick={handleManusLaunch}
-              disabled={!allPass || manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'}
-              title={!allPass ? 'Fix failing checks before launching' : 'Launch Build via pl-meta-builder'}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 border transition-all ${
-                allPass && manusLaunch.phase !== 'launching' && manusLaunch.phase !== 'running'
-                  ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 cursor-pointer shadow-lg shadow-primary/20'
-                  : 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
-              }`}
-            >
-              {manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Rocket className="w-4 h-4" />
-              }
-              {manusLaunch.phase === 'launching' ? 'Submitting…'
-                : manusLaunch.phase === 'running' ? 'Agent Running…'
-                : 'Launch Build'
-              }
-            </button>
+            <div className="flex items-center gap-2">
+              {(manusLaunch.phase === 'launching' || manusLaunch.phase === 'running') && manusLaunch.runId && (
+                <button
+                  onClick={handleAbort}
+                  disabled={isAborting}
+                  title="Abort the running Manus build"
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] font-700 border transition-all bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20 cursor-pointer disabled:opacity-50"
+                >
+                  {isAborting ? <Loader2 className="w-4 h-4 animate-spin" /> : <OctagonX className="w-4 h-4" />}
+                  {isAborting ? 'Aborting…' : 'Abort'}
+                </button>
+              )}
+              <button
+                onClick={handleManusLaunch}
+                disabled={!allPass || manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'}
+                title={!allPass ? 'Fix failing checks before launching' : 'Launch Build via pl-meta-builder'}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-700 border transition-all ${
+                  allPass && manusLaunch.phase !== 'launching' && manusLaunch.phase !== 'running'
+                    ? 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 cursor-pointer shadow-lg shadow-primary/20'
+                    : 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
+                }`}
+              >
+                {manusLaunch.phase === 'launching' || manusLaunch.phase === 'running'
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Rocket className="w-4 h-4" />
+                }
+                {manusLaunch.phase === 'launching' ? 'Submitting…'
+                  : manusLaunch.phase === 'running' ? 'Agent Running…'
+                  : 'Launch Build'
+                }
+              </button>
+            </div>
             {manusLaunch.phase === 'done' && (
               <span className="text-[11px] text-emerald-400">Build complete!</span>
             )}

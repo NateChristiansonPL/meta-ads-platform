@@ -564,3 +564,8 @@
 - [x] Feature: add destination_type inference function in builderMetaMappingAdmin (derived from objective + conversionLocation + optimizationGoal)
 - [x] Feature: wire destination_type through buildAdSetApiExtras → metaAdmin.ts createAdSet
 - [x] Feature: add pacing_type to createAdSet payload (day_parting when adset_schedule is set, standard otherwise)
+
+## Campaign Builder — UI Changes (May 11 2026 batch 2)
+- [x] Feature: add Optional Fields column to Campaign tab (specialAdCategory, CBO) — same pattern as Ad Sets optional fields popup; defaults NONE/false
+- [x] Fix: inferDestinationType() map keys updated to match actual CONVERSION_LOCATIONS enum values (INSTAGRAM_PROFILE, ON_AD, PHONE_CALL, IG_FB_COMBINED)
+- [x] Feature: add Abort button to Exports tab launch progress panel (OctagonX icon, trpc.runs.abortRun, isAborting state)
