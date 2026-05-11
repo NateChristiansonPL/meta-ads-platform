@@ -1105,16 +1105,19 @@ export const metaAdminRouter = router({
 
       if (startTime) payload.start_time = startTime;
 
-      // Issue 6: OUTCOME_TRAFFIC uses 7-day click + 1-day view attribution window.
-      // Override whatever the client sent to ensure the correct spec is always applied.
-      if (objective === 'OUTCOME_TRAFFIC') {
+      // Fix 5: attribution_spec rules by objective.
+      // OUTCOME_TRAFFIC: Meta rejects ALL attribution_spec values with error 1885501
+      //   (validated across LANDING_PAGE_VIEWS, LINK_CLICKS, IMPRESSIONS, REACH on v19+v21).
+      //   Omit the key entirely — do NOT send null, undefined, or an empty array.
+      // All other objectives: always send the canonical 3-event spec.
+      if (objective !== 'OUTCOME_TRAFFIC') {
         payload.attribution_spec = [
-          { event_type: 'CLICK_THROUGH', window_days: 7 },
-          { event_type: 'VIEW_THROUGH', window_days: 1 },
+          { event_type: 'CLICK_THROUGH',       window_days: 7 },
+          { event_type: 'ENGAGED_VIDEO_VIEW',  window_days: 1 },
+          { event_type: 'VIEW_THROUGH',        window_days: 1 },
         ];
-      } else if (attributionSpec) {
-        payload.attribution_spec = attributionSpec;
       }
+      // For OUTCOME_TRAFFIC: attribution_spec key is omitted entirely.
 
       if (adScheduling?.length) payload.adset_schedule = adScheduling;
 
@@ -1446,8 +1449,14 @@ export const metaAdminRouter = router({
 
         assetFeedSpec.asset_customization_rules = buildPlacementCustomizationRules(mediaType);
 
+        // Fix 8: Meta requires an object_story_spec anchor alongside asset_feed_spec
+        // for placement-customized creatives. Without it the API returns error 100 / 1885390.
+        // The anchor must contain ONLY page_id (and instagram_user_id when present).
+        const assetFeedAnchor: Record<string, unknown> = { page_id: pageId };
+        if (instagramActorId) assetFeedAnchor.instagram_user_id = instagramActorId;
         creativeSpec = stripUndefinedDeep({
           asset_feed_spec: assetFeedSpec,
+          object_story_spec: assetFeedAnchor,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
           contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",
@@ -1741,8 +1750,12 @@ export const metaAdminRouter = router({
             { hash: storiesAssetId, adlabels: storyReelsLabels },
           ];
         }
+        // Fix 8: anchor required alongside asset_feed_spec
+        const updateAnchor: Record<string, unknown> = { page_id: pageId };
+        if (instagramActorId) updateAnchor.instagram_user_id = instagramActorId;
         updatedSpec = stripUndefinedDeep({
           asset_feed_spec: assetFeedSpec,
+          object_story_spec: updateAnchor,
           degrees_of_freedom_spec: degreesOfFreedomSpec,
           contextual_multi_ads: contextualMultiAds,
           multi_advertiser_eligibility: "INELIGIBLE",

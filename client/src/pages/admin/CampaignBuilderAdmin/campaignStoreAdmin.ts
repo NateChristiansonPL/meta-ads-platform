@@ -166,6 +166,8 @@ export interface AdSetRow {
   bidCap?: string;       // cents (for LOWEST_COST_WITH_BID_CAP) — entered as dollars in UI
   costCap?: string;      // cents (for COST_CAP) — entered as dollars in UI
   roasFloor?: string;    // decimal ROAS floor e.g. "2.5" (for LOWEST_COST_WITH_MIN_ROAS)
+  // Advantage+ Audience: when true, omit targeting_automation so Meta can expand targeting
+  advantageAudience?: boolean;
   // write-back
   adSetId: string;
   campaignId?: string;

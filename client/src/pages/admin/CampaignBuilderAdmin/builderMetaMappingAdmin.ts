@@ -242,6 +242,14 @@ export function buildBuilderTargetingSpec(row: AdSetRow): MetaTargetingSpec {
   const locales = parseLocales(row.language);
   if (locales?.length) spec.locales = locales;
 
+  // Fix 4: Disable Advantage+ Audience expansion for manual-targeting ad sets.
+  // Omitting targeting_automation causes Meta to silently enrol the ad set in
+  // Advantage+ Audience, overriding the manual interest/demographic targeting.
+  // Only omit this field if the ad set is explicitly configured for Advantage+ Audience.
+  if (!row.advantageAudience) {
+    spec.targeting_automation = { advantage_audience: 0 };
+  }
+
   return spec;
 }
 

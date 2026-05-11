@@ -597,3 +597,18 @@
 - [x] UI: build `FatigueTrendChart` component (Recharts ComposedChart, dual-axis: fatigue score area + CTR area + frequency dashed line, reference lines at 30/50/70, custom tooltip)
 - [x] UI: add expandable trend row to ResultsTable — LineChart icon button per row expands inline chart panel
 - [x] UI: expand/collapse toggle per row (ChevronDown when open, LineChart icon when closed), disabled when <2 data points
+
+## Campaign Builder Admin — Meta API Fixes (May 2026 doc)
+
+- [x] Fix 1: `special_ad_categories` — already correct (JSON array)
+- [x] Fix 2: `is_adset_budget_sharing_enabled` — already correct (derived from cbo)
+- [x] Fix 3: `bid_strategy` — already correct (always explicit, defaults to LOWEST_COST_WITHOUT_CAP)
+- [x] Fix 4: `targeting_automation: { advantage_audience: 0 }` — added to buildBuilderTargetingSpec for all non-Advantage+ ad sets; added `advantageAudience` field to AdSetRow
+- [x] Fix 5: `attribution_spec` — OUTCOME_TRAFFIC now omits key entirely; all other objectives use canonical 3-event spec (7d click + 1d engaged_video_view + 1d view_through)
+- [x] Fix 6: `promoted_object` — already correct (omitted for OUTCOME_TRAFFIC, pixel+OTHER for Sales/Leads)
+- [x] Fix 7: Custom audience id|name parsing — already correct in parseAudiences()
+- [x] Fix 8: `object_story_spec` anchor (page_id + instagram_user_id) added alongside asset_feed_spec in both createAd and updateAdCreative placement-customized branches
+- [x] Fix 9: Carousel display_url removed, multi_share_*: false — already correct
+- [x] Fix 10: `contextual_multi_ads: OPT_OUT` — already on every branch
+- [x] Fix 11: `degrees_of_freedom_spec` per format — already correct (video adds video_filtering, carousel excludes invalid fields)
+- [x] Fix 12: UTM params in url_tags only — already correct
