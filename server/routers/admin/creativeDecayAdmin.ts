@@ -425,7 +425,59 @@ async function analyzeStoredPerformance(input: { accountId: string; campaignIds:
     }
   }
 
-  return { analysisRunId, records: inserted.sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore)).map((row, index) => mapResult({ ...row, id: index + 1 }, firstDetectedMap)) };
+  // Build per-fingerprint daily trend series from the original groups
+  const trendByFingerprint = new Map<string, Array<{ date: string; ctr: number; frequency: number; impressions: number; fatigueScore: number }>>();
+  for (const [fingerprint, group] of Array.from(groups.entries())) {
+    const dates = Array.from(new Set(group.map((r: VisionRow) => r.date))).sort() as string[];
+    const series = dates.map((date) => {
+      const dayRows = group.filter((r: VisionRow) => r.date === date);
+      const dayImpressions = sum(dayRows, (r) => num(r.impressions));
+      const dayClicks = sum(dayRows, (r) => num(r.clicks));
+      const dayCtr = dayImpressions > 0 ? (dayClicks / dayImpressions) * 100 : 0;
+      const dayFreq = dayRows.length ? sum(dayRows, (r) => num(r.frequency)) / dayRows.length : 0;
+      // Compute a rolling fatigue score for this day using data up to this date
+      const rowsUpToDate = group.filter((r: VisionRow) => r.date <= date);
+      const datesUpTo = Array.from(new Set(rowsUpToDate.map((r: VisionRow) => r.date))).sort() as string[];
+      const halfUpTo = Math.max(1, Math.floor(datesUpTo.length / 2));
+      const earlyD = new Set(datesUpTo.slice(0, halfUpTo));
+      const recentD = new Set(datesUpTo.slice(halfUpTo));
+      const earlyR = rowsUpToDate.filter((r: VisionRow) => earlyD.has(r.date));
+      const recentR = rowsUpToDate.filter((r: VisionRow) => recentD.has(r.date));
+      const eCtr = weightedCtr(earlyR);
+      const rCtr = weightedCtr(recentR.length ? recentR : earlyR);
+      const ctrDropD = eCtr ? (eCtr - rCtr) / eCtr : 0;
+      const totalImpD = sum(rowsUpToDate, (r) => num(r.impressions));
+      const totalEvD = sum(rowsUpToDate, eventCount);
+      const eSpend = sum(earlyR, (r) => num(r.spend));
+      const rSpend = sum(recentR, (r) => num(r.spend));
+      const eEv = sum(earlyR, eventCount);
+      const rEv = sum(recentR, eventCount);
+      const eCpe = eEv ? eSpend / eEv : null;
+      const rCpe = rEv ? rSpend / rEv : null;
+      const cpeDeg = eCpe && rCpe ? (rCpe - eCpe) / Math.max(eCpe, 0.01) : 0;
+      const avgFreqD = rowsUpToDate.length ? sum(rowsUpToDate, (r) => num(r.frequency)) / rowsUpToDate.length : 0;
+      const freqFat = clamp((avgFreqD - 2.5) / 4.5, 0, 1);
+      const ewmaVals = ewma(datesUpTo.map((d) => weightedCtr(rowsUpToDate.filter((r: VisionRow) => r.date === d))));
+      const ewmaE = ewmaVals[Math.min(halfUpTo - 1, ewmaVals.length - 1)] ?? 0;
+      const ewmaL = ewmaVals[ewmaVals.length - 1] ?? 0;
+      const ewmaDropD = ewmaE ? (ewmaE - ewmaL) / ewmaE : 0;
+      const rel = totalImpD >= 100 ? clamp(Math.sqrt(totalImpD / 5000) * Math.min(1, datesUpTo.length / 7), 0.25, 1) : clamp(totalImpD / 100, 0, 0.3);
+      const cpeW = totalEvD >= 5 ? 0.35 : 0.15;
+      const ctrW = totalEvD >= 5 ? 0.30 : 0.45;
+      const rawSig = clamp(cpeDeg, 0, 1) * cpeW + clamp(ctrDropD, 0, 1) * ctrW + clamp(ewmaDropD, 0, 1) * 0.20 + freqFat * (totalEvD >= 5 ? 0.15 : 0.20);
+      const dayFatigueScore = clamp(rawSig * rel * 100, 0, 100);
+      return { date, ctr: parseFloat(dayCtr.toFixed(4)), frequency: parseFloat(dayFreq.toFixed(3)), impressions: Math.round(dayImpressions), fatigueScore: parseFloat(dayFatigueScore.toFixed(1)) };
+    });
+    trendByFingerprint.set(fingerprint, series);
+  }
+
+  return {
+    analysisRunId,
+    records: inserted.sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore)).map((row, index) => ({
+      ...mapResult({ ...row, id: index + 1 }, firstDetectedMap),
+      trendData: trendByFingerprint.get(row.contentFingerprint ?? "") ?? [],
+    })),
+  };
 }
 
 type FatigueResultLike = typeof creativeFatigueResults.$inferSelect | (typeof creativeFatigueResults.$inferInsert & { id?: number });

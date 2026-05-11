@@ -590,3 +590,10 @@
 - [x] UI: update Results table to show `firstDetectedAt` column per signal level
 - [x] UI: add Signals Only / All filter toggle to Results panel
 - [x] Fix: deduplicate BM token selector to show only one entry per unique BM id (AdminCreativeDecay + SettingsDrawerAdmin)
+
+## Admin Creative Decay — Fatigue Trend Chart (May 11 2026)
+
+- [x] Server: daily trend series (date, ctr, frequency, impressions, rolling fatigueScore) computed inline in analyzeStoredPerformance and returned per-fingerprint in `trendData` field
+- [x] UI: build `FatigueTrendChart` component (Recharts ComposedChart, dual-axis: fatigue score area + CTR area + frequency dashed line, reference lines at 30/50/70, custom tooltip)
+- [x] UI: add expandable trend row to ResultsTable — LineChart icon button per row expands inline chart panel
+- [x] UI: expand/collapse toggle per row (ChevronDown when open, LineChart icon when closed), disabled when <2 data points

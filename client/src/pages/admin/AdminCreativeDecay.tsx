@@ -1,10 +1,11 @@
 import AppShell from "@/components/AppShell";
 import { trpc } from "@/lib/trpc";
-import {
-  AlertTriangle, Bell, BellOff, Calendar, CheckCircle2, ChevronDown, ChevronRight,
-  Clock, Database, Filter, Loader2, RefreshCw, Search, Settings2, Shield,
+import { AlertTriangle, Bell, BellOff, Calendar, CheckCircle2, ChevronDown, ChevronRight,
+  Clock, Database, Filter, LineChart, Loader2, RefreshCw, Search, Settings2, Shield,
   Upload, Zap
 } from "lucide-react";
+import FatigueTrendChart from "@/components/FatigueTrendChart";
+import type { TrendPoint } from "@/components/FatigueTrendChart";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { DateRangePicker, dateRangeToStrings, stringsToDateRange } from "@/components/ui/DateRangePicker";
@@ -33,6 +34,7 @@ type ResultRow = {
   fatigueScore: number;
   evidence?: { avgCtr?: number; avgFrequency?: number; reliability?: number; totalEvents?: number };
   firstDetectedAt?: { emerging: string | null; possible: string | null; probable: string | null };
+  trendData?: TrendPoint[];
 };
 
 type CampaignStatusFilter = "active" | "active_30d" | "inactive" | "all";
@@ -570,6 +572,8 @@ function ResultsTable({
   resultsFilter: "all" | "live";
   onFilterChange: (v: "all" | "live") => void;
 }) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
   return (
     <section className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
       <div className="flex items-center justify-between p-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -605,6 +609,7 @@ function ResultsTable({
           <table className="w-full text-xs">
             <thead>
               <tr style={{ background: "rgba(255,255,255,0.035)", color: "rgba(255,255,255,0.45)" }}>
+                <Th> </Th>
                 <Th>Creative</Th>
                 <Th>Assessment</Th>
                 <Th>Score</Th>
@@ -618,23 +623,58 @@ function ResultsTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.72)" }}>
-                  <Td>
-                    <div className="font-semibold" style={{ color: "#FAFAFA" }}>{row.creativeName}</div>
-                    <div style={{ color: "rgba(255,255,255,0.34)" }}>{row.campaignName} · {row.adFormat}</div>
-                  </Td>
-                  <Td><StatusBadge row={row} /></Td>
-                  <Td>{row.fatigueScore.toFixed(1)}</Td>
-                  <Td><FirstDetectedCell row={row} /></Td>
-                  <Td>{money(row.totalSpend)}</Td>
-                  <Td>{row.totalImpressions.toLocaleString()}</Td>
-                  <Td>{pct(row.cdrPct)}</Td>
-                  <Td>{pct(row.relCdr)}</Td>
-                  <Td>{row.evidence?.avgFrequency?.toFixed(2) ?? "—"}</Td>
-                  <Td>{row.daysActive}</Td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const isExpanded = expandedId === row.id;
+                const hasTrend = row.trendData && row.trendData.length > 1;
+                return (
+                  <>
+                    <tr
+                      key={row.id}
+                      style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.72)" }}
+                    >
+                      {/* Expand toggle */}
+                      <Td>
+                        <button
+                          onClick={() => hasTrend ? setExpandedId(isExpanded ? null : row.id) : undefined}
+                          disabled={!hasTrend}
+                          title={hasTrend ? (isExpanded ? "Hide trend chart" : "Show trend chart") : "Not enough data points for trend"}
+                          className="flex items-center justify-center w-6 h-6 rounded transition-colors"
+                          style={{
+                            background: isExpanded ? "rgba(0,190,239,0.18)" : hasTrend ? "rgba(255,255,255,0.06)" : "transparent",
+                            color: isExpanded ? "#00BEEF" : hasTrend ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.15)",
+                            cursor: hasTrend ? "pointer" : "default",
+                          }}
+                        >
+                          {isExpanded ? <ChevronDown size={12} /> : <LineChart size={12} />}
+                        </button>
+                      </Td>
+                      <Td>
+                        <div className="font-semibold" style={{ color: "#FAFAFA" }}>{row.creativeName}</div>
+                        <div style={{ color: "rgba(255,255,255,0.34)" }}>{row.campaignName} · {row.adFormat}</div>
+                      </Td>
+                      <Td><StatusBadge row={row} /></Td>
+                      <Td>{row.fatigueScore.toFixed(1)}</Td>
+                      <Td><FirstDetectedCell row={row} /></Td>
+                      <Td>{money(row.totalSpend)}</Td>
+                      <Td>{row.totalImpressions.toLocaleString()}</Td>
+                      <Td>{pct(row.cdrPct)}</Td>
+                      <Td>{pct(row.relCdr)}</Td>
+                      <Td>{row.evidence?.avgFrequency?.toFixed(2) ?? "—"}</Td>
+                      <Td>{row.daysActive}</Td>
+                    </tr>
+                    {isExpanded && hasTrend && (
+                      <tr key={`trend-${row.id}`} style={{ borderTop: "none" }}>
+                        <td colSpan={11} style={{ background: "rgba(0,0,0,0.25)", padding: "0 16px 12px 16px" }}>
+                          <FatigueTrendChart
+                            data={row.trendData!}
+                            adName={row.creativeName}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>
