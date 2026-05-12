@@ -94,9 +94,6 @@ export default function AdminCreativePerformanceSync() {
     syncUtcHour: 6,
     syncRollingDays: 14,
     syncPreset: "rolling" as "rolling" | "yesterday",
-    vaultTokenId: null as number | null,
-    accountId: "",
-    campaignIds: null as string | null,
     campaignStatusFilter: "active" as CampaignStatusFilter,
   });
 
@@ -107,9 +104,6 @@ export default function AdminCreativePerformanceSync() {
         syncUtcHour: schedulerConfig.syncUtcHour,
         syncRollingDays: schedulerConfig.syncRollingDays,
         syncPreset: (schedulerConfig.syncPreset as "rolling" | "yesterday") ?? "rolling",
-        vaultTokenId: schedulerConfig.vaultTokenId ?? null,
-        accountId: schedulerConfig.accountId ?? "",
-        campaignIds: schedulerConfig.campaignIds ?? null,
         campaignStatusFilter: (schedulerConfig.campaignStatusFilter ??
           "active") as CampaignStatusFilter,
       });
@@ -341,39 +335,22 @@ export default function AdminCreativePerformanceSync() {
                 </select>
               </SchedField>
 
-              <SchedField label="BM Token">
-                <select
-                  value={sched.vaultTokenId ?? ""}
-                  onChange={(e) =>
-                    setSched((s) => ({
-                      ...s,
-                      vaultTokenId: e.target.value ? +e.target.value : null,
-                    }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={inputStyle}
-                >
-                  <option value="">Select token…</option>
-                  {uniqueTokens.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label || t.businessManagerName || `BM ${t.businessManagerId}`}
-                    </option>
-                  ))}
-                </select>
-              </SchedField>
-
-              <SchedField label="Ad Account ID">
-                <input
-                  type="text"
-                  placeholder="act_123…"
-                  value={sched.accountId}
-                  onChange={(e) =>
-                    setSched((s) => ({ ...s, accountId: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={inputStyle}
-                />
-              </SchedField>
+              {/* BM token and ad account are inherited from the main page config */}
+              <div
+                className="rounded-lg px-3 py-2 text-xs"
+                style={{ background: "rgba(26,108,246,0.1)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(26,108,246,0.2)" }}
+              >
+                BM token and ad account are taken from the current page selection when you save.
+                {tokenId && accountId ? (
+                  <span className="block mt-1" style={{ color: "#7CB9FF" }}>
+                    Will use: {selectedToken?.label || selectedToken?.businessManagerName || `Token #${tokenId}`} / {accountId}
+                  </span>
+                ) : (
+                  <span className="block mt-1" style={{ color: "#F7901E" }}>
+                    Select a BM token and ad account above before saving.
+                  </span>
+                )}
+              </div>
             </div>
 
             {schedulerConfig?.lastRunAt && (
@@ -386,7 +363,14 @@ export default function AdminCreativePerformanceSync() {
 
             <div className="flex justify-end">
               <button
-                onClick={() => saveScheduler.mutate(sched)}
+                onClick={() =>
+                  saveScheduler.mutate({
+                    ...sched,
+                    vaultTokenId: tokenId,
+                    accountId: accountId,
+                    campaignIds: campaignIds.length ? campaignIds.join(",") : null,
+                  })
+                }
                 disabled={saveScheduler.isPending}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
                 style={{ background: "#1A6CF6", color: "#fff" }}

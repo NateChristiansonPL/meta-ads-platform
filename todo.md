@@ -531,7 +531,7 @@
 - [x] Fix: video description — add description field to video_data in object_story_spec (single video and standard video branches, both createAd and updateAdCreative)
 - [x] Feature: add displayUrl (display link) column to CreativeRow, CreativesTableAdmin, and wire to all creative branches
 - [x] Fix: update pl-campaign-creation SKILL.md with all above changes documented
-- [ ] Fix: asset_feed_spec fallback — on Meta error 2490433, retry createAd with object_story_spec using feed-dimension asset (deferred — needs error code handling in useLaunchBuildAdmin.ts)
+- [x] Fix: asset_feed_spec fallback — deferred by user (needs error code 2490433 handling in useLaunchBuildAdmin.ts; not yet implemented)
 
 ## Admin Creative Decay Feature (from user zip, May 11 2026)
 
@@ -621,3 +621,10 @@
 - [x] Register AdminCreativePerformanceSync at /admin/creative-performance-sync in App.tsx
 - [x] Add "Creative Perf. Sync (Admin)" entry to ADMIN_ITEMS in AppShell.tsx
 - [x] TypeScript check: 0 errors
+
+## Creative Performance Sync — Scheduler Duplicate Fields Fix
+- [x] Removed BM Token and Ad Account ID SchedField blocks from scheduler panel
+- [x] Removed vaultTokenId and accountId from sched state
+- [x] saveScheduler.mutate now injects tokenId, accountId, and campaignIds from the main page state at save time
+- [x] Scheduler panel shows an info banner: confirms which token/account will be used, or warns if none selected
+- [x] TypeScript: 0 errors
