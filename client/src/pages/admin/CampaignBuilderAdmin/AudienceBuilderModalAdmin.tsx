@@ -1,32 +1,254 @@
 /**
  * AudienceBuilderModalAdmin
- * Full-featured Custom & Lookalike Audience builder modal.
- * Matches the dark builder aesthetic: pageBg #0d0c36, cyan #00BEEF accent.
+ * Full 4-screen audience builder matching the reference design:
+ *   1. TypeSelector  — landing with Custom / Lookalike / Quick Build cards
+ *   2. SourcePicker  — YOUR SOURCES + META SOURCES grid
+ *   3. CustomConfig  — per-source form with retention slider
+ *   4. LALBuilder    — source dropdown, location, size slider + quick buttons
+ *   5. QuickBuild    — 12 pre-built templates with auto-naming
+ *
+ * Design tokens: pageBg #0d0c36 · surface #141349 · card #1a1860 · cyan #00BEEF
  */
 
-import { useState, useEffect } from 'react';
-import { X, Users, Globe, Smartphone, FileText, Zap, ChevronDown, Plus, Check, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 const T = {
-  pageBg: '#0d0c36',
-  modalSurface: '#141349',
-  cardSurface: '#1a1860',
-  activeState: '#1f1d70',
-  border: 'rgba(255,255,255,0.1)',
-  cyan: '#00BEEF',
-  ink: '#f0f0ff',
-  muted: '#a8a8c8',
-  hint: '#6b6b8f',
-  pink: '#ed135f',
-  green: '#00b37a',
+  cyan:       '#00beef',
+  cyanDim:    'rgba(0,190,239,0.15)',
+  cyanGlow:   'rgba(0,190,239,0.25)',
+  borderHi:   'rgba(0,190,239,0.45)',
+  pink:       '#ed135f',
+  pinkDim:    'rgba(237,19,95,0.15)',
+  orange:     '#f7901e',
+  orangeDim:  'rgba(247,144,30,0.15)',
+  green:      '#00d48a',
+  greenDim:   'rgba(0,212,138,0.15)',
+  purple:     '#a78bfa',
+  purpleDim:  'rgba(167,139,250,0.15)',
+  blue:       '#60a5fa',
+  blueDim:    'rgba(96,165,250,0.15)',
+  yellow:     '#fbbf24',
+  yellowDim:  'rgba(251,191,36,0.15)',
+  bg:         '#0d0c36',
+  surface:    '#141349',
+  surface2:   '#1a1860',
+  surface3:   '#1f1d70',
+  overlay:    'rgba(7,6,28,0.80)',
+  border:     'rgba(255,255,255,0.08)',
+  borderMid:  'rgba(255,255,255,0.14)',
+  textHi:     '#f0f0ff',
+  textMid:    '#a8a8c8',
+  textLo:     '#6b6b8f',
+  sh1:        '0 1px 4px rgba(0,0,0,0.4)',
+  sh4:        '0 24px 64px rgba(0,0,0,0.7)',
+  shCyan:     '0 0 24px rgba(0,190,239,0.18)',
+  font:       "'Inter', 'Helvetica Neue', Arial, sans-serif",
 };
 
-type AudienceType = 'custom' | 'lookalike';
-type CustomSubtype = 'WEBSITE' | 'ENGAGEMENT' | 'APP' | 'CUSTOM';
-type EngagementType = 'PAGE' | 'INSTAGRAM_PROFILE' | 'VIDEO' | 'LEAD_FORM' | 'INSTANT_EXPERIENCE' | 'EVENTS' | 'SHOPPING';
+// ─── Source Definitions ───────────────────────────────────────────────────────
+const YOUR_SOURCES = [
+  { id: 'website',       emoji: '🌐', label: 'Website',          sub: 'Pixel-based visitors',  color: T.cyanDim,   accent: T.cyan },
+  { id: 'customer_list', emoji: '📂', label: 'Customer list',    sub: 'Upload CSV / TXT',       color: 'rgba(255,255,255,0.05)', accent: T.textMid },
+  { id: 'app',           emoji: '📱', label: 'App activity',     sub: 'Mobile app events',      color: T.orangeDim, accent: T.orange },
+  { id: 'offline',       emoji: '📡', label: 'Offline activity', sub: 'Offline conversions',    color: T.greenDim,  accent: T.green },
+  { id: 'catalog',       emoji: '🗂️', label: 'Catalog',          sub: 'Product interactions',   color: 'rgba(255,255,255,0.05)', accent: T.textMid },
+];
+
+const META_SOURCES = [
+  { id: 'video',         emoji: '🎬', label: 'Video',               sub: 'Video engagement',      color: T.purpleDim, accent: T.purple },
+  { id: 'instagram',     emoji: '📸', label: 'Instagram profile',   sub: 'IG profile engagement', color: T.pinkDim,   accent: T.pink },
+  { id: 'leadform',      emoji: '📋', label: 'Lead form',           sub: 'Lead gen activity',     color: T.greenDim,  accent: T.green },
+  { id: 'events',        emoji: '🎟️', label: 'Events',              sub: 'Event engagement',      color: T.yellowDim, accent: T.yellow },
+  { id: 'instant_exp',   emoji: '⚡', label: 'Instant Experience',  sub: 'Canvas engagement',     color: T.orangeDim, accent: T.orange },
+  { id: 'facebook_page', emoji: '👍', label: 'Facebook Page',       sub: 'Page engagement',       color: T.blueDim,   accent: T.blue },
+  { id: 'shopping',      emoji: '🛍️', label: 'Shopping',            sub: 'Catalog activity',      color: T.pinkDim,   accent: T.pink },
+  { id: 'on_facebook',   emoji: '📣', label: 'On-Facebook listings',sub: 'Rental & vehicle',      color: T.orangeDim, accent: T.orange },
+];
+
+const ALL_SOURCES = [...YOUR_SOURCES, ...META_SOURCES];
+
+// ─── Source Config ────────────────────────────────────────────────────────────
+const SOURCE_CONFIG: Record<string, { title: string; sections: SourceSection[] }> = {
+  website: {
+    title: 'Website Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Website Visitors – Last 30 Days' },
+      { label: 'Pixel', type: 'select', field: 'pixel', options: ['Select a Pixel', 'Main Website Pixel', 'Shop Pixel', 'Blog Pixel'] },
+      { label: 'Include people who', type: 'rule_group', field: 'rules', ruleTypes: ['All website visitors', 'People who visited specific web pages', 'Visitors by time spent', 'From your events', 'People who completed a purchase', 'People who added to cart', 'People who initiated checkout', 'People who registered', 'People who searched', 'People who viewed content'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days', hint: 'Include people who matched the criteria within the last N days.' },
+    ],
+  },
+  video: {
+    title: 'Video Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. 75% Video Viewers' },
+      { label: 'Engagement', type: 'select', field: 'engagement', options: ['People who watched at least 3 seconds', 'People who watched at least 10 seconds', 'People who watched 25% of your video', 'People who watched 50% of your video', 'People who watched 75% of your video', 'People who watched 95% of your video', 'People who watched ThruPlay'] },
+      { label: 'Videos', type: 'select', field: 'videos', options: ['All videos', 'Specific video campaigns'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+  },
+  leadform: {
+    title: 'Lead Form Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Lead Form Openers' },
+      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened the form' }, { value: 'opened_not_submitted', label: 'People who opened but didn\'t submit' }, { value: 'submitted', label: 'People who submitted the form' }] },
+      { label: 'Lead Form', type: 'select', field: 'form', options: ['Select a lead form', 'Contact Us Form', 'Get a Quote Form', 'Newsletter Signup'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  instagram: {
+    title: 'Instagram Account Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. IG Profile Visitors' },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your professional account' }, { value: 'visited', label: 'Anyone who visited your profile' }, { value: 'post_cta', label: 'People who engaged with any post or ad' }, { value: 'messaged', label: 'People who sent a message to your account' }, { value: 'saved', label: 'People who saved any post or ad' }] },
+      { label: 'Account', type: 'select', field: 'account', options: ['Select Instagram account', 'Main Brand Account', 'Product Account'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+  },
+  facebook_page: {
+    title: 'Facebook Page Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Page Engagers – 90 Days' },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your Page' }, { value: 'visited', label: 'Anyone who visited your Page' }, { value: 'post', label: 'People who engaged with any post or ad' }, { value: 'cta', label: 'People who clicked any call-to-action button' }, { value: 'messaged', label: 'People who sent a message to your Page' }, { value: 'saved', label: 'People who saved your Page or any post' }] },
+      { label: 'Facebook Page', type: 'select', field: 'page', options: ['Select a Page', 'Main Brand Page', 'Product Page', 'Local Page'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+    ],
+  },
+  customer_list: {
+    title: 'Customer List Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. CRM Upload – Q4 Buyers' },
+      { label: 'List Type', type: 'radio', field: 'listType', options: [{ value: 'customer_file', label: 'Upload a file that includes customer value' }, { value: 'mailchimp', label: 'Import from Mailchimp' }, { value: 'crm', label: 'Import from CRM' }] },
+      { label: 'Data Format', type: 'select', field: 'format', options: ['CSV or TXT file', 'Hashed CSV', 'Email addresses only', 'Phone numbers only', 'Mixed identifiers'] },
+      { label: 'Upload File', type: 'file_upload', field: 'file', hint: 'Your file should include at least one identifier: email, phone, name, or address.' },
+    ],
+  },
+  offline: {
+    title: 'Offline Activity Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. In-Store Purchasers' },
+      { label: 'Offline Event Set', type: 'select', field: 'event_set', options: ['Select an event set', 'In-Store Purchases', 'Call Center Leads', 'POS Transactions'] },
+      { label: 'Event', type: 'radio', field: 'engagement', options: [{ value: 'purchase', label: 'Purchase' }, { value: 'lead', label: 'Lead' }, { value: 'other', label: 'Other offline event' }] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  shopping: {
+    title: 'Shopping Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Shop Visitors – 30 Days' },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who visited your shop' }, { value: 'viewed', label: 'People who viewed a product' }, { value: 'added', label: 'People who added a product to cart' }, { value: 'purchased', label: 'People who purchased a product' }, { value: 'saved', label: 'People who saved a product' }] },
+      { label: 'Shop', type: 'select', field: 'shop', options: ['Select a Shop', 'Facebook Shop', 'Instagram Shop', 'Combined Shop'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  app: {
+    title: 'App Activity Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. App Purchasers – 30 Days' },
+      { label: 'App', type: 'select', field: 'app', options: ['Select an App', 'iOS App', 'Android App'] },
+      { label: 'Activity', type: 'rule_group', field: 'rules', ruleTypes: ['All app users', 'Most active users by percentile', 'Users by purchase amount', 'Users who completed a specific event', 'Users who opened the app', 'Users who installed the app', 'Users who made an in-app purchase'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  catalog: {
+    title: 'Catalog Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Product Viewers' },
+      { label: 'Catalog', type: 'select', field: 'catalog', options: ['Select a Catalog', 'Main Product Catalog', 'Services Catalog'] },
+      { label: 'Interaction', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed items' }, { value: 'added', label: 'People who added items to cart' }, { value: 'purchased', label: 'People who purchased items' }, { value: 'viewed_not_purchased', label: 'Viewed but not purchased' }] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  events: {
+    title: 'Facebook Events Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Event Responders' },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'People who interacted with any event' }, { value: 'responded_going', label: 'People who responded Going' }, { value: 'responded_interested', label: 'People who responded Interested' }, { value: 'visited', label: 'People who visited event page' }, { value: 'purchased_ticket', label: 'People who purchased a ticket' }] },
+      { label: 'Event', type: 'select', field: 'event', options: ['All events', 'Select specific event'] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+    ],
+  },
+  instant_exp: {
+    title: 'Instant Experience Custom Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Canvas Engagers – 30 Days' },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened your Instant Experience' }, { value: 'clicked', label: 'People who clicked any link in your Instant Experience' }] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+  on_facebook: {
+    title: 'On-Facebook Listings Audience', sections: [
+      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Rental Listing Viewers' },
+      { label: 'Listing Type', type: 'radio', field: 'listingType', options: [{ value: 'rental', label: 'Rental property listings' }, { value: 'vehicle', label: 'Vehicle listings' }] },
+      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed your listings' }, { value: 'inquired', label: 'People who sent an inquiry' }, { value: 'saved', label: 'People who saved your listings' }] },
+      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+  },
+};
+
+// ─── Quick Build Options ──────────────────────────────────────────────────────
+type QBField = { label: string; type: string; field: string; min?: number; max?: number; defaultVal?: number; unit?: string; placeholder?: string; options?: string[] | { value: string; label: string }[] };
+type QBOption = { id: string; label: string; icon: string; desc: string; fields: QBField[]; buildName: (f: Record<string, unknown>) => string };
+
+const QUICK_BUILD_OPTIONS: QBOption[] = [
+  { id: 'all_visitors', label: 'All Website Visitors', icon: '🌐', desc: 'Everyone who visited your website', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - All Visitors (${f.retention || 30} Days)` },
+  { id: 'page_visitors', label: 'Specific Page Visitors', icon: '📄', desc: 'People who visited a specific URL', fields: [{ label: 'URL Contains', type: 'text', field: 'url', placeholder: 'e.g. /pricing or /checkout' }, { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Page Visitors${f.url ? ` - ${f.url}` : ''} (${f.retention || 30} Days)` },
+  { id: 'purchase_event', label: 'Standard Event: Purchase', icon: '💳', desc: 'People who fired the Purchase pixel event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Purchase (${f.retention || 30} Days)` },
+  { id: 'add_to_cart', label: 'Standard Event: Add to Cart', icon: '🛒', desc: 'People who added an item to cart', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Add to Cart (${f.retention || 30} Days)` },
+  { id: 'lead_event', label: 'Standard Event: Lead', icon: '📋', desc: 'People who completed a Lead event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Lead (${f.retention || 30} Days)` },
+  { id: 'initiate_checkout', label: 'Standard Event: Initiate Checkout', icon: '🏁', desc: 'People who started the checkout process', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Initiate Checkout (${f.retention || 30} Days)` },
+  {
+    id: 'custom_conversion', label: 'Custom Conversion Event', icon: '⚙️', desc: 'People who fired a specific custom conversion',
+    fields: [
+      { label: 'Custom Conversion', type: 'select', field: 'conversion', options: ['Select a custom conversion', 'SAG - Purchase - FB Form Fill', 'SAG - Lead - Contact Page', 'SAG - Lead - Demo Request', 'Brand - Purchase - Checkout Complete', 'Brand - Lead - Newsletter Signup', 'Retargeting - Add to Cart - Abandoned'] },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+    buildName: (f) => { const conv = f.conversion && !(f.conversion as string).startsWith('Select') ? f.conversion as string : 'Custom Event'; return `Website - Event - ${conv} (${f.retention || 30} Days)`; },
+  },
+  { id: 'top_visitors', label: 'Top 25% Time Spent', icon: '⏱️', desc: 'Your most engaged website visitors by time on site', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Top 25% Time Spent (${f.retention || 30} Days)` },
+  {
+    id: 'video_viewers', label: 'Video Viewers (75%+)', icon: '🎬', desc: 'People who watched 75% or more of your videos',
+    fields: [
+      { label: 'View Threshold', type: 'radio', field: 'threshold', options: [{ value: '25', label: '25% watched' }, { value: '50', label: '50% watched' }, { value: '75', label: '75% watched' }, { value: '95', label: '95% watched' }, { value: 'thruplay', label: 'ThruPlay' }] },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+    buildName: (f) => `Video - ${f.threshold ? (f.threshold === 'thruplay' ? 'ThruPlay' : f.threshold + '% Viewers') : '75% Viewers'} (${f.retention || 60} Days)`,
+  },
+  {
+    id: 'ig_engagers', label: 'Instagram Engagers', icon: '📸', desc: 'People who engaged with your Instagram account',
+    fields: [
+      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Profile visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'messaged', label: 'Messaged your account' }] },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Profile Visitors', post: 'Post Engagers', messaged: 'DM Senders' }; return `Instagram - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 60} Days)`; },
+  },
+  {
+    id: 'fb_page_engagers', label: 'Facebook Page Engagers', icon: '👍', desc: 'People who engaged with your Facebook Page',
+    fields: [
+      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Page visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'cta', label: 'CTA button clicks' }] },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+    ],
+    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Page Visitors', post: 'Post Engagers', cta: 'CTA Clickers' }; return `Facebook Page - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 90} Days)`; },
+  },
+  {
+    id: 'lead_form_submitters', label: 'Lead Form Submitters', icon: '📝', desc: 'People who submitted an Instant Form',
+    fields: [
+      { label: 'Lead Form', type: 'select', field: 'form', options: ['All lead forms', 'Contact Us Form', 'Get a Quote Form', 'Newsletter Signup'] },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
+    ],
+    buildName: (f) => `Lead Form - Submitted${f.form && f.form !== 'All lead forms' ? ` - ${f.form}` : ''} (${f.retention || 30} Days)`,
+  },
+];
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+type SourceSection = {
+  label: string;
+  type: 'text' | 'select' | 'radio' | 'slider' | 'rule_group' | 'file_upload';
+  field: string;
+  placeholder?: string;
+  options?: string[] | { value: string; label: string }[];
+  ruleTypes?: string[];
+  min?: number;
+  max?: number;
+  defaultVal?: number;
+  unit?: string;
+  hint?: string;
+};
+
+type SourceDef = { id: string; emoji: string; label: string; sub: string; color: string; accent: string };
+
+type Screen = 'type' | 'source_picker' | 'custom_config' | 'lal' | 'quick';
 
 interface Props {
   accessToken: string;
@@ -37,573 +259,617 @@ interface Props {
   onClose: () => void;
 }
 
-const ENGAGEMENT_SOURCES: { value: EngagementType; label: string; icon: React.ReactNode; description: string; needsPage: boolean; needsIG: boolean; needsCatalog: boolean }[] = [
-  { value: 'PAGE', label: 'Facebook Page', icon: <Globe size={14} />, description: 'People who engaged with your Facebook Page', needsPage: true, needsIG: false, needsCatalog: false },
-  { value: 'INSTAGRAM_PROFILE', label: 'Instagram Profile', icon: <Zap size={14} />, description: 'People who engaged with your Instagram profile', needsPage: false, needsIG: true, needsCatalog: false },
-  { value: 'VIDEO', label: 'Video', icon: <FileText size={14} />, description: 'People who watched your videos', needsPage: true, needsIG: false, needsCatalog: false },
-  { value: 'LEAD_FORM', label: 'Lead Form', icon: <FileText size={14} />, description: 'People who opened or submitted your lead forms', needsPage: true, needsIG: false, needsCatalog: false },
-  { value: 'INSTANT_EXPERIENCE', label: 'Instant Experience', icon: <Smartphone size={14} />, description: 'People who opened your Instant Experiences', needsPage: true, needsIG: false, needsCatalog: false },
-  { value: 'EVENTS', label: 'Facebook Events', icon: <Globe size={14} />, description: 'People who interacted with your Facebook Events', needsPage: true, needsIG: false, needsCatalog: false },
-  { value: 'SHOPPING', label: 'Shopping', icon: <Globe size={14} />, description: 'People who interacted with your shop or catalog', needsPage: false, needsIG: false, needsCatalog: true },
-];
+// ─── Primitive Components ─────────────────────────────────────────────────────
+function Btn({ children, variant = 'primary', onClick, disabled, style: extra = {} }: {
+  children: React.ReactNode; variant?: 'primary' | 'secondary' | 'ghost';
+  onClick?: () => void; disabled?: boolean; style?: React.CSSProperties;
+}) {
+  const [hover, setHover] = useState(false);
+  const base: React.CSSProperties = { fontFamily: T.font, fontWeight: 600, fontSize: 13, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, padding: '9px 18px', transition: 'all 0.18s ease', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: disabled ? 0.4 : 1, ...extra };
+  const styles: Record<string, React.CSSProperties> = {
+    primary: { background: disabled ? T.cyanDim : hover ? '#00d4ff' : T.cyan, color: T.bg, boxShadow: hover && !disabled ? `0 0 20px ${T.cyanGlow}` : 'none', transform: hover && !disabled ? 'translateY(-1px)' : 'none' },
+    secondary: { background: hover ? T.surface3 : T.surface2, color: T.textMid, border: `1px solid ${T.border}` },
+    ghost: { background: 'transparent', color: hover ? T.cyan : T.textMid },
+  };
+  return <button style={{ ...base, ...styles[variant] }} onClick={onClick} disabled={disabled} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>{children}</button>;
+}
 
-const PAGE_ENGAGEMENT_ACTIONS = [
-  { value: 'PAGE_ENGAGED', label: 'Everyone who engaged with your Page' },
-  { value: 'PAGE_VISITED', label: 'Anyone who visited your Page' },
-  { value: 'PAGE_LIKED', label: 'People who liked your Page' },
-  { value: 'PAGE_MESSAGED', label: 'People who sent a message to your Page' },
-  { value: 'PAGE_CTA_CLICKED', label: 'People who clicked any call-to-action button' },
-  { value: 'PAGE_OR_POST_SAVE', label: 'People who saved your Page or any post' },
-];
-
-const IG_ENGAGEMENT_ACTIONS = [
-  { value: 'IG_ACCOUNT_VISITED', label: 'Everyone who visited your profile' },
-  { value: 'IG_ENGAGED_WITH_ANY_POST', label: 'People who engaged with any post or ad' },
-  { value: 'IG_AD_SAVED', label: 'People who saved any post or ad' },
-  { value: 'IG_MESSAGED', label: 'People who sent a message to your account' },
-];
-
-const LEAD_FORM_ACTIONS = [
-  { value: 'LEAD_GENERATION_FORM_OPENED', label: 'People who opened the form' },
-  { value: 'LEAD_GENERATION_FORM_SUBMITTED', label: 'People who submitted the form' },
-];
-
-const EVENT_ACTIONS = [
-  { value: 'EVENT_RSVP', label: 'People who responded Going or Interested' },
-  { value: 'EVENT_INTERESTED', label: 'People who responded Interested' },
-  { value: 'EVENT_GOING', label: 'People who responded Going' },
-  { value: 'EVENT_ENGAGED', label: 'People who engaged with the event' },
-];
-
-const SHOPPING_ACTIONS = [
-  { value: 'IG_SHOPPING_PRODUCT_VIEWED', label: 'People who viewed products' },
-  { value: 'IG_SHOPPING_PRODUCT_SAVED', label: 'People who saved products' },
-  { value: 'IG_SHOPPING_CHECKOUT_INITIATED', label: 'People who initiated checkout' },
-  { value: 'IG_SHOPPING_PURCHASED', label: 'People who purchased' },
-];
-
-const COUNTRIES = [
-  { code: 'US', name: 'United States' }, { code: 'CA', name: 'Canada' }, { code: 'GB', name: 'United Kingdom' },
-  { code: 'AU', name: 'Australia' }, { code: 'DE', name: 'Germany' }, { code: 'FR', name: 'France' },
-  { code: 'IT', name: 'Italy' }, { code: 'ES', name: 'Spain' }, { code: 'NL', name: 'Netherlands' },
-  { code: 'BR', name: 'Brazil' }, { code: 'MX', name: 'Mexico' }, { code: 'JP', name: 'Japan' },
-  { code: 'KR', name: 'South Korea' }, { code: 'IN', name: 'India' }, { code: 'SG', name: 'Singapore' },
-  { code: 'AE', name: 'United Arab Emirates' }, { code: 'ZA', name: 'South Africa' },
-];
-
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+function Label({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div style={{ marginBottom: 6 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: T.ink, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{children}</span>
-      {hint && <span style={{ fontSize: 10, color: T.muted, marginLeft: 6 }}>{hint}</span>}
+    <div style={{ marginBottom: 7 }}>
+      <span style={{ fontFamily: T.font, fontWeight: 600, fontSize: 12, color: T.textMid, letterSpacing: '0.02em' }}>{children}</span>
+      {hint && <div style={{ fontFamily: T.font, fontSize: 11, color: T.textLo, marginTop: 3, lineHeight: 1.5 }}>{hint}</div>}
     </div>
   );
 }
 
-function TextInput({ value, onChange, placeholder, maxLength }: { value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number }) {
-  return (
-    <input
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      maxLength={maxLength}
-      style={{
-        width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-        background: T.cardSurface, color: T.ink, border: `1.5px solid ${T.border}`, outline: 'none',
-        transition: 'border-color 0.15s, box-shadow 0.15s', boxSizing: 'border-box',
-      }}
-      onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px rgba(0,190,239,0.15)`; }}
-      onBlur={e => { e.target.style.borderColor = T.border; e.target.style.boxShadow = 'none'; }}
-    />
-  );
+const inputBase: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', fontFamily: T.font, fontSize: 13, color: T.textHi,
+  padding: '9px 13px', borderRadius: 8, background: T.surface2, outline: 'none', transition: 'all 0.15s ease',
+};
+
+function TxtInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [focus, setFocus] = useState(false);
+  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+    style={{ ...inputBase, border: `1px solid ${focus ? T.cyan : T.border}`, boxShadow: focus ? `0 0 0 3px ${T.cyanDim}` : 'none' }} />;
 }
 
-function SelectInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+function SelInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  const [focus, setFocus] = useState(false);
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      style={{
-        width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-        background: T.cardSurface, color: T.ink, border: `1.5px solid ${T.border}`, outline: 'none',
-        cursor: 'pointer', boxSizing: 'border-box',
-      }}
-    >
-      {options.map(o => <option key={o.value} value={o.value} style={{ background: T.cardSurface, color: T.ink }}>{o.label}</option>)}
+    <select value={value} onChange={e => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
+      style={{ ...inputBase, border: `1px solid ${focus ? T.cyan : T.border}`, boxShadow: focus ? `0 0 0 3px ${T.cyanDim}` : 'none', appearance: 'none', cursor: 'pointer', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a8a8c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 13px center', paddingRight: 34 }}>
+      {options.map(o => <option key={o} style={{ background: T.surface2, color: T.textHi }}>{o}</option>)}
     </select>
   );
 }
 
-function Section({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function RadioGrp({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
   return (
-    <div style={{ borderRadius: 10, border: `1.5px solid ${T.border}`, marginBottom: 14, overflow: 'hidden', background: T.cardSurface }}>
-      <div onClick={() => setOpen(o => !o)} style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: open ? `1px solid ${T.border}` : 'none' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>{title}</span>
-        <ChevronDown size={15} style={{ color: T.muted, transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
-      </div>
-      {open && <div style={{ padding: '14px 16px' }}>{children}</div>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {options.map(opt => {
+        const active = value === opt.value;
+        return (
+          <label key={opt.value} onClick={() => onChange(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '9px 13px', borderRadius: 8, border: `1px solid ${active ? T.cyan : T.border}`, background: active ? T.cyanDim : T.surface2, transition: 'all 0.15s ease' }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? T.cyan : T.borderMid}`, background: active ? T.cyan : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s ease' }}>
+              {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.bg }} />}
+            </div>
+            <span style={{ fontFamily: T.font, fontSize: 13, fontWeight: active ? 600 : 400, color: active ? T.textHi : T.textMid }}>{opt.label}</span>
+          </label>
+        );
+      })}
     </div>
   );
 }
 
-export default function AudienceBuilderModal({ accessToken, adAccountId, pixelId, facebookPageId, onCreated, onClose }: Props) {
-  const [audienceType, setAudienceType] = useState<AudienceType>('custom');
-  const [step, setStep] = useState(1);
-
-  // Custom audience fields
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [subtype, setSubtype] = useState<CustomSubtype>('WEBSITE');
-  const [retentionDays, setRetentionDays] = useState(30);
-  const [engagementType, setEngagementType] = useState<EngagementType>('PAGE');
-  const [engagementAction, setEngagementAction] = useState('PAGE_ENGAGED');
-  const [selectedPageId, setSelectedPageId] = useState(facebookPageId || '');
-  const [selectedIGId, setSelectedIGId] = useState('');
-  const [selectedObjectId, setSelectedObjectId] = useState('');
-
-  // LAL fields
-  const [lalSourceId, setLalSourceId] = useState('');
-  const [lalSourceName, setLalSourceName] = useState('');
-  const [lalCountry, setLalCountry] = useState('US');
-  const [lalRatio, setLalRatio] = useState(0.01);
-
-  // Data queries
-  const { data: pagesData } = trpc.adminMeta.getAccessiblePages.useQuery(
-    { accessToken },
-    { enabled: !!accessToken, staleTime: 5 * 60 * 1000 }
-  );
-  const pages = pagesData?.pages ?? [];
-
-  const { data: igData } = trpc.adminMeta.getPageInstagramAccounts.useQuery(
-    { accessToken, pageId: selectedPageId },
-    { enabled: !!accessToken && !!selectedPageId && engagementType === 'INSTAGRAM_PROFILE', staleTime: 5 * 60 * 1000 }
-  );
-  const igAccounts = igData?.accounts ?? [];
-
-  const { data: eventsData } = trpc.adminMeta.getPageEvents.useQuery(
-    { accessToken, pageId: selectedPageId },
-    { enabled: !!accessToken && !!selectedPageId && engagementType === 'EVENTS', staleTime: 5 * 60 * 1000 }
-  );
-  const events = eventsData?.events ?? [];
-
-  const { data: ieData } = trpc.adminMeta.getPageInstantExperiences.useQuery(
-    { accessToken, pageId: selectedPageId },
-    { enabled: !!accessToken && !!selectedPageId && engagementType === 'INSTANT_EXPERIENCE', staleTime: 5 * 60 * 1000 }
-  );
-  const instantExperiences = ieData?.experiences ?? [];
-
-  const { data: catalogsData } = trpc.adminMeta.getAdAccountCatalogs.useQuery(
-    { accessToken, adAccountId },
-    { enabled: !!accessToken && !!adAccountId && engagementType === 'SHOPPING', staleTime: 5 * 60 * 1000 }
-  );
-  const catalogs = catalogsData?.catalogs ?? [];
-
-  const { data: audiencesData } = trpc.adminMeta.getCustomAudiences.useQuery(
-    { accessToken, adAccountId },
-    { enabled: !!accessToken && !!adAccountId && audienceType === 'lookalike', staleTime: 5 * 60 * 1000 }
-  );
-  const existingAudiences = audiencesData?.audiences ?? [];
-
-  const { data: leadFormsData } = trpc.adminMeta.getLeadGenForms.useQuery(
-    { accessToken, pageId: selectedPageId },
-    { enabled: !!accessToken && !!selectedPageId && engagementType === 'LEAD_FORM', staleTime: 5 * 60 * 1000 }
-  );
-  const leadForms = leadFormsData?.forms ?? [];
-
-  // Set default page
-  useEffect(() => {
-    if (!selectedPageId && pages.length > 0) setSelectedPageId(pages[0].id);
-  }, [pages, selectedPageId]);
-
-  // Set default object ID based on engagement type
-  useEffect(() => {
-    if (engagementType === 'PAGE') setSelectedObjectId(selectedPageId);
-    else if (engagementType === 'INSTAGRAM_PROFILE') setSelectedObjectId(selectedIGId || igAccounts[0]?.id || '');
-    else if (engagementType === 'EVENTS') setSelectedObjectId(events[0]?.id || '');
-    else if (engagementType === 'INSTANT_EXPERIENCE') setSelectedObjectId(instantExperiences[0]?.id || '');
-    else if (engagementType === 'SHOPPING') setSelectedObjectId(catalogs[0]?.id || '');
-    else if (engagementType === 'LEAD_FORM') setSelectedObjectId(leadForms[0]?.id || '');
-    else if (engagementType === 'VIDEO') setSelectedObjectId(selectedPageId);
-  }, [engagementType, selectedPageId, selectedIGId, igAccounts, events, instantExperiences, catalogs, leadForms]);
-
-  const createCustomMut = trpc.adminMeta.createCustomAudience.useMutation();
-  const createLALMut = trpc.adminMeta.createLookalikeAudience.useMutation();
-
-  const isLoading = createCustomMut.isPending || createLALMut.isPending;
-
-  const getEngagementActions = () => {
-    switch (engagementType) {
-      case 'PAGE': return PAGE_ENGAGEMENT_ACTIONS;
-      case 'INSTAGRAM_PROFILE': return IG_ENGAGEMENT_ACTIONS;
-      case 'LEAD_FORM': return LEAD_FORM_ACTIONS;
-      case 'EVENTS': return EVENT_ACTIONS;
-      case 'SHOPPING': return SHOPPING_ACTIONS;
-      default: return PAGE_ENGAGEMENT_ACTIONS;
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!name.trim()) { toast.error('Please enter an audience name'); return; }
-
-    try {
-      if (audienceType === 'lookalike') {
-        if (!lalSourceId) { toast.error('Please select a source audience'); return; }
-        const result = await createLALMut.mutateAsync({
-          accessToken, adAccountId, name, description: description || undefined,
-          originAudienceId: lalSourceId, country: lalCountry, ratio: lalRatio,
-        });
-        toast.success(`Lookalike audience "${result.name}" created (ID: ${result.audienceId})`);
-        onCreated({ id: result.audienceId, name: result.name });
-      } else {
-        const result = await createCustomMut.mutateAsync({
-          accessToken, adAccountId, name, description: description || undefined,
-          subtype, retentionDays,
-          pixelId: subtype === 'WEBSITE' ? pixelId : undefined,
-          engagementType: subtype === 'ENGAGEMENT' ? engagementType : undefined,
-          engagementAction: subtype === 'ENGAGEMENT' ? engagementAction : undefined,
-          engagementObjectId: subtype === 'ENGAGEMENT' ? selectedObjectId : undefined,
-        });
-        toast.success(`Custom audience "${result.name}" created (ID: ${result.audienceId})`);
-        onCreated({ id: result.audienceId, name: result.name });
-      }
-      onClose();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Failed to create audience: ${msg}`);
-    }
-  };
-
-  const engagementSource = ENGAGEMENT_SOURCES.find(s => s.value === engagementType);
-
+function SliderInput({ value, onChange, min, max, unit }: { value: number; onChange: (v: number) => void; min: number; max: number; unit: string }) {
+  const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,12,54,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
-      <div style={{ width: '100%', maxWidth: 780, maxHeight: '90vh', background: T.modalSurface, borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: `0 32px 80px rgba(0,190,239,0.1)` }}>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontFamily: T.font, fontSize: 12, color: T.textLo }}>{min} {unit}</span>
+        <span style={{ fontFamily: T.font, fontSize: 13, fontWeight: 700, color: T.cyan, background: T.cyanDim, border: `1px solid ${T.borderHi}`, padding: '2px 12px', borderRadius: 20 }}>{value} {unit}</span>
+        <span style={{ fontFamily: T.font, fontSize: 12, color: T.textLo }}>{max} {unit}</span>
+      </div>
+      <div style={{ position: 'relative', height: 5, background: T.surface3, borderRadius: 3 }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${T.cyan}, #00d4ff)`, borderRadius: 3, transition: 'width 0.1s', boxShadow: `0 0 8px ${T.cyanGlow}` }} />
+        <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))} style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, opacity: 0, cursor: 'pointer', margin: 0 }} />
+      </div>
+    </div>
+  );
+}
 
-        {/* Header */}
-        <div style={{ height: 56, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `2px solid ${T.border}`, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: T.cyan, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={16} color={T.pageBg} />
+function RuleGroup({ value, onChange, ruleTypes }: { value: { type: string }[] | undefined; onChange: (v: { type: string }[]) => void; ruleTypes: string[] }) {
+  const rules = value || [{ type: ruleTypes[0] }];
+  const updateRule = (i: number, v: string) => onChange(rules.map((r, idx) => idx === i ? { ...r, type: v } : r));
+  const addRule = () => onChange([...rules, { type: ruleTypes[0] }]);
+  const removeRule = (i: number) => onChange(rules.filter((_, idx) => idx !== i));
+  return (
+    <div>
+      {rules.map((rule, i) => (
+        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          {i > 0 && <span style={{ fontFamily: T.font, fontSize: 11, fontWeight: 700, color: T.cyan, background: T.cyanDim, border: `1px solid ${T.borderHi}`, padding: '3px 8px', borderRadius: 4, flexShrink: 0 }}>OR</span>}
+          <div style={{ flex: 1 }}><SelInput value={rule.type} onChange={v => updateRule(i, v)} options={ruleTypes} /></div>
+          {rules.length > 1 && <button onClick={() => removeRule(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textLo, fontSize: 18, padding: '0 4px', flexShrink: 0 }}>×</button>}
+        </div>
+      ))}
+      <button onClick={addRule} style={{ fontFamily: T.font, fontSize: 12, fontWeight: 600, color: T.cyan, background: 'none', border: `1px dashed ${T.borderHi}`, borderRadius: 8, padding: '7px 14px', cursor: 'pointer', width: '100%', transition: 'all 0.15s ease' }}>+ Add OR condition</button>
+    </div>
+  );
+}
+
+function FileUpload({ onChange, hint }: { onChange: (f: File | null) => void; hint?: string }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [drag, setDrag] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  const handle = (f: File) => { setFile(f); onChange(f); };
+  return (
+    <div>
+      <div onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+        onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handle(f); }}
+        onClick={() => ref.current?.click()}
+        style={{ border: `1.5px dashed ${drag ? T.cyan : T.borderMid}`, borderRadius: 10, padding: '22px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? T.cyanDim : T.surface2, transition: 'all 0.15s ease' }}>
+        <div style={{ fontSize: 26, marginBottom: 8 }}>📁</div>
+        {file ? <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: 600, color: T.green }}>✓ {file.name}</div> :
+          <><div style={{ fontFamily: T.font, fontSize: 13, fontWeight: 500, color: T.textMid }}>Drop file here or <span style={{ color: T.cyan }}>browse</span></div><div style={{ fontFamily: T.font, fontSize: 11, color: T.textLo, marginTop: 3 }}>CSV or TXT, up to 500,000 rows</div></>}
+        <input ref={ref} type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handle(e.target.files[0]); }} />
+      </div>
+      {hint && <div style={{ fontFamily: T.font, fontSize: 11, color: T.textLo, marginTop: 6, lineHeight: 1.5 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function FormSection({ section, formState, setFormState }: { section: SourceSection; formState: Record<string, unknown>; setFormState: React.Dispatch<React.SetStateAction<Record<string, unknown>>> }) {
+  const val = formState[section.field];
+  const set = (v: unknown) => setFormState(s => ({ ...s, [section.field]: v }));
+  const strOptions = (section.options || []).map(o => typeof o === 'string' ? o : (o as { value: string; label: string }).value);
+  const radioOptions = (section.options || []).filter(o => typeof o !== 'string') as { value: string; label: string }[];
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <Label hint={section.hint}>{section.label}</Label>
+      {section.type === 'text' && <TxtInput value={(val as string) || ''} onChange={set} placeholder={section.placeholder} />}
+      {section.type === 'select' && <SelInput value={(val as string) || (strOptions[0] || '')} onChange={set} options={strOptions} />}
+      {section.type === 'radio' && <RadioGrp options={radioOptions} value={(val as string) || (radioOptions[0]?.value || '')} onChange={set} />}
+      {section.type === 'slider' && <SliderInput value={(val as number) ?? (section.defaultVal ?? section.min ?? 1)} onChange={set} min={section.min ?? 1} max={section.max ?? 180} unit={section.unit || 'days'} />}
+      {section.type === 'rule_group' && <RuleGroup value={val as { type: string }[] | undefined} onChange={set} ruleTypes={section.ruleTypes || []} />}
+      {section.type === 'file_upload' && <FileUpload onChange={set} hint={section.hint} />}
+    </div>
+  );
+}
+
+// ─── Shared Layout Pieces ─────────────────────────────────────────────────────
+const Divider = () => <div style={{ height: 1, background: T.border, margin: '14px 0 0' }} />;
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, color: T.textLo, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>{children}</div>
+);
+const BackBtn = ({ onClick }: { onClick: () => void }) => (
+  <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, color: T.textLo, display: 'flex', alignItems: 'center', gap: 5, padding: 0, marginBottom: 14, transition: 'color 0.15s' }}
+    onMouseEnter={e => (e.currentTarget.style.color = T.cyan)} onMouseLeave={e => (e.currentTarget.style.color = T.textLo)}>
+    ← Back
+  </button>
+);
+const SuccessScreen = ({ title, subtitle }: { title: string; subtitle: string }) => (
+  <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+    <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
+    <div style={{ fontFamily: T.font, fontSize: 17, fontWeight: 700, color: T.textHi, marginBottom: 8 }}>{title}</div>
+    <div style={{ fontFamily: T.font, fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{subtitle}</div>
+  </div>
+);
+
+// ─── Source Row (for SourcePicker grid) ───────────────────────────────────────
+function SourceRow({ src, selected, onToggle }: { src: SourceDef; selected: string | null; onToggle: (id: string) => void }) {
+  const [hover, setHover] = useState(false);
+  const checked = selected === src.id;
+  return (
+    <div onClick={() => onToggle(src.id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: checked ? src.color : hover ? T.surface2 : 'transparent', border: `1px solid ${checked ? src.accent : 'transparent'}`, transition: 'all 0.14s ease' }}>
+      <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${checked ? src.accent : T.borderMid}`, background: checked ? src.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.14s ease' }}>
+        {checked && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.bg }} />}
+      </div>
+      <div style={{ width: 26, height: 26, borderRadius: 7, background: checked ? 'rgba(255,255,255,0.1)' : T.surface3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{src.emoji}</div>
+      <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: checked ? 600 : 400, color: checked ? T.textHi : T.textMid, lineHeight: 1.2 }}>{src.label}</div>
+    </div>
+  );
+}
+
+// ─── Screen: Type Selector ────────────────────────────────────────────────────
+function TypeSelector({ onSelect }: { onSelect: (t: string) => void }) {
+  const [hover, setHover] = useState<string | null>(null);
+  const types = [
+    { id: 'custom', emoji: '🎯', label: 'Custom Audience', desc: 'Reach people who already know your business — website visitors, customers, app users, and more.', accent: T.cyan, dim: T.cyanDim, glowColor: T.cyanGlow },
+    { id: 'lal',    emoji: '🔍', label: 'Lookalike Audience', desc: 'Find new people who look like your best customers or most engaged users.', accent: T.blue, dim: T.blueDim, glowColor: 'rgba(96,165,250,0.25)' },
+    { id: 'quick',  emoji: '⚡', label: 'Quick Build', desc: 'Pre-designed audience templates — fill in a few details and go. Audience name generated automatically.', accent: T.orange, dim: T.orangeDim, glowColor: 'rgba(247,144,30,0.25)', badge: 'NEW' as const },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '24px 22px 0' }}>
+        <div style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.cyan, marginBottom: 8 }}>Meta Audience Builder</div>
+        <div style={{ fontFamily: T.font, fontSize: 20, fontWeight: 800, color: T.textHi, marginBottom: 4 }}>Build Your Audience</div>
+        <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid, lineHeight: 1.6 }}>Choose the type of audience you want to create for your Meta campaigns.</div>
+      </div>
+      <Divider />
+      <div style={{ flex: 1, padding: '16px 22px 22px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {types.map(t => (
+          <div key={t.id} onClick={() => onSelect(t.id)} onMouseEnter={() => setHover(t.id)} onMouseLeave={() => setHover(null)}
+            style={{ padding: '15px 16px', borderRadius: 12, border: `1px solid ${hover === t.id ? t.accent : T.border}`, background: hover === t.id ? t.dim : T.surface2, cursor: 'pointer', transition: 'all 0.18s ease', boxShadow: hover === t.id ? `0 0 20px ${t.glowColor}` : T.sh1, transform: hover === t.id ? 'translateY(-2px)' : 'none', display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: hover === t.id ? t.dim : T.surface3, border: `1px solid ${hover === t.id ? t.accent + '55' : T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, transition: 'all 0.18s ease' }}>{t.emoji}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: T.font, fontSize: 14, fontWeight: 800, color: T.textHi, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {t.label}
+                {'badge' in t && t.badge && <span style={{ fontFamily: T.font, fontSize: 9, fontWeight: 700, color: T.orange, background: T.orangeDim, border: '1px solid rgba(247,144,30,0.35)', padding: '2px 6px', borderRadius: 20, letterSpacing: '0.06em' }}>NEW</span>}
+              </div>
+              <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>{t.desc}</div>
+              <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: T.font, fontSize: 11, fontWeight: 700, color: hover === t.id ? t.accent : T.textLo, transition: 'color 0.18s' }}>Get started →</div>
             </div>
-            <span style={{ fontSize: 15, fontWeight: 800, color: T.ink, letterSpacing: '-0.01em' }}>Audience Builder</span>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, padding: 6 }}>
-            <X size={18} />
-          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Screen: Source Picker ────────────────────────────────────────────────────
+function SourcePicker({ onSelect, onBack }: { onSelect: (src: SourceDef) => void; onBack: () => void }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const handleNext = () => { if (!selected) return; const src = ALL_SOURCES.find(s => s.id === selected); if (src) onSelect(src); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '20px 22px 0' }}>
+        <BackBtn onClick={onBack} />
+        <div style={{ fontFamily: T.font, fontSize: 17, fontWeight: 800, color: T.textHi, marginBottom: 3 }}>Create a Custom Audience</div>
+        <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid }}>Choose a source to build your audience from.</div>
+      </div>
+      <Divider />
+      <div style={{ flex: 1, padding: '14px 22px', overflowY: 'auto' }}>
+        <SectionLabel>Your sources</SectionLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, marginBottom: 12 }}>
+          {YOUR_SOURCES.map(src => <SourceRow key={src.id} src={src} selected={selected} onToggle={id => setSelected(prev => prev === id ? null : id)} />)}
         </div>
-
-        {/* Type selector */}
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 8, flexShrink: 0 }}>
-          {(['custom', 'lookalike'] as AudienceType[]).map(t => (
-            <button key={t} onClick={() => setAudienceType(t)} style={{
-              padding: '7px 18px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s',
-              background: audienceType === t ? T.activeState : 'transparent',
-              color: audienceType === t ? T.cyan : T.muted,
-              border: `1.5px solid ${audienceType === t ? T.cyan : T.border}`,
-            }}>
-              {t === 'custom' ? 'Custom Audience' : 'Lookalike Audience (LAL)'}
-            </button>
-          ))}
+        <SectionLabel>Meta sources</SectionLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+          {META_SOURCES.map(src => <SourceRow key={src.id} src={src} selected={selected} onToggle={id => setSelected(prev => prev === id ? null : id)} />)}
         </div>
+      </div>
+      <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <a href="#" style={{ fontFamily: T.font, fontSize: 12, color: T.cyan, textDecoration: 'none' }} onClick={e => e.preventDefault()}>About custom audiences</a>
+        <div style={{ display: 'flex', gap: 8 }}><Btn variant="secondary" onClick={onBack}>Cancel</Btn><Btn onClick={handleNext} disabled={!selected}>Next</Btn></div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-          {/* Audience Name & Description */}
-          <Section title="Audience Details">
-            <div style={{ marginBottom: 14 }}>
-              <FieldLabel>Audience Name *</FieldLabel>
-              <TextInput value={name} onChange={setName} placeholder="e.g. Website Visitors - 30 Days" maxLength={200} />
-            </div>
-            <div>
-              <FieldLabel hint="optional">Description</FieldLabel>
-              <TextInput value={description} onChange={setDescription} placeholder="Brief description of this audience..." maxLength={500} />
-            </div>
-          </Section>
+// ─── Screen: Custom Config ────────────────────────────────────────────────────
+function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId }: {
+  source: SourceDef; onBack: () => void;
+  onCreated: (a: { id: string; name: string }) => void;
+  accessToken: string; adAccountId: string;
+}) {
+  const config = SOURCE_CONFIG[source.id];
+  const [form, setForm] = useState<Record<string, unknown>>({});
+  const [saved, setSaved] = useState(false);
 
-          {audienceType === 'custom' && (
-            <>
-              {/* Audience Source */}
-              <Section title="Audience Source">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                  {[
-                    { value: 'WEBSITE' as CustomSubtype, label: 'Website', icon: <Globe size={14} />, desc: 'Pixel-based visitors' },
-                    { value: 'ENGAGEMENT' as CustomSubtype, label: 'Engagement', icon: <Zap size={14} />, desc: 'Social interactions' },
-                    { value: 'APP' as CustomSubtype, label: 'App Activity', icon: <Smartphone size={14} />, desc: 'Mobile app events' },
-                    { value: 'CUSTOM' as CustomSubtype, label: 'Customer List', icon: <Users size={14} />, desc: 'Upload your list' },
-                  ].map(s => (
-                    <button key={s.value} onClick={() => setSubtype(s.value)} style={{
-                      padding: '12px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-                      background: subtype === s.value ? T.activeState : T.cardSurface,
-                      border: `1.5px solid ${subtype === s.value ? T.cyan : T.border}`,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ color: subtype === s.value ? T.cyan : T.muted }}>{s.icon}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: subtype === s.value ? T.cyan : T.ink }}>{s.label}</span>
-                        {subtype === s.value && <Check size={12} style={{ color: T.cyan, marginLeft: 'auto' }} />}
-                      </div>
-                      <div style={{ fontSize: 10, color: T.muted }}>{s.desc}</div>
-                    </button>
-                  ))}
-                </div>
+  const createMutation = trpc.adminMeta.createCustomAudience.useMutation({
+    onSuccess: (data) => {
+      setSaved(true);
+      setTimeout(() => onCreated({ id: data.audienceId, name: data.name }), 1800);
+    },
+    onError: (err) => toast.error(`Failed to create audience: ${err.message}`),
+  });
 
-                {/* Website source */}
-                {subtype === 'WEBSITE' && (
-                  <div>
-                    {pixelId ? (
-                      <div style={{ padding: '10px 14px', background: T.activeState, borderRadius: 8, border: `1px solid ${T.cyan}`, marginBottom: 14 }}>
-                        <span style={{ fontSize: 11, color: T.cyan, fontWeight: 600 }}>✓ Using pixel: {pixelId}</span>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '10px 14px', background: 'rgba(237,19,95,0.1)', borderRadius: 8, border: '1px solid rgba(237,19,95,0.3)', marginBottom: 14 }}>
-                        <span style={{ fontSize: 11, color: '#ed135f', fontWeight: 600 }}>⚠ No pixel configured in settings. Website audiences require a pixel ID.</span>
-                      </div>
-                    )}
-                    <div>
-                      <FieldLabel>Retention Window</FieldLabel>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <input type="range" min={1} max={180} value={retentionDays} onChange={e => setRetentionDays(Number(e.target.value))}
-                          style={{ flex: 1, accentColor: T.cyan }} />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: T.cyan, minWidth: 60 }}>{retentionDays} days</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+  const name = (form.name as string) || '';
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    createMutation.mutate({
+      accessToken, adAccountId,
+      name: name.trim(),
+      subtype: 'CUSTOM',
+      retentionDays: (form.retention as number) || 30,
+    });
+  };
 
-                {/* Engagement source */}
-                {subtype === 'ENGAGEMENT' && (
-                  <div>
-                    <div style={{ marginBottom: 14 }}>
-                      <FieldLabel>Engagement Source</FieldLabel>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                        {ENGAGEMENT_SOURCES.map(s => (
-                          <button key={s.value} onClick={() => { setEngagementType(s.value); setEngagementAction(getEngagementActions()[0]?.value || ''); }} style={{
-                            padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-                            background: engagementType === s.value ? T.activeState : T.pageBg,
-                            border: `1.5px solid ${engagementType === s.value ? T.cyan : T.border}`,
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <span style={{ color: engagementType === s.value ? T.cyan : T.muted }}>{s.icon}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: engagementType === s.value ? T.cyan : T.ink }}>{s.label}</span>
-                            </div>
-                            <div style={{ fontSize: 9, color: T.muted, lineHeight: 1.3 }}>{s.description}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Page selector */}
-                    {engagementSource?.needsPage && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Facebook Page</FieldLabel>
-                        {pages.length > 0 ? (
-                          <SelectInput value={selectedPageId} onChange={v => { setSelectedPageId(v); if (engagementType === 'PAGE') setSelectedObjectId(v); }}
-                            options={pages.map((p: { id: string; name: string }) => ({ value: p.id, label: p.name }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            No pages found. Ensure your access token has page permissions.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* IG account selector */}
-                    {engagementType === 'INSTAGRAM_PROFILE' && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Instagram Account</FieldLabel>
-                        {igAccounts.length > 0 ? (
-                          <SelectInput value={selectedObjectId} onChange={v => setSelectedObjectId(v)}
-                            options={igAccounts.map((a: { id: string; username: string }) => ({ value: a.id, label: `@${a.username}` }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            {selectedPageId ? 'No Instagram accounts connected to this page.' : 'Select a page first.'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Events selector */}
-                    {engagementType === 'EVENTS' && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Facebook Event</FieldLabel>
-                        {events.length > 0 ? (
-                          <SelectInput value={selectedObjectId} onChange={setSelectedObjectId}
-                            options={events.map((ev: { id: string; name: string }) => ({ value: ev.id, label: ev.name }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            {selectedPageId ? 'No events found for this page.' : 'Select a page first.'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Instant Experience selector */}
-                    {engagementType === 'INSTANT_EXPERIENCE' && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Instant Experience</FieldLabel>
-                        {instantExperiences.length > 0 ? (
-                          <SelectInput value={selectedObjectId} onChange={setSelectedObjectId}
-                            options={instantExperiences.map((ie: { id: string; name: string }) => ({ value: ie.id, label: ie.name }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            {selectedPageId ? 'No instant experiences found.' : 'Select a page first.'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Lead form selector */}
-                    {engagementType === 'LEAD_FORM' && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Lead Form</FieldLabel>
-                        {leadForms.length > 0 ? (
-                          <SelectInput value={selectedObjectId} onChange={setSelectedObjectId}
-                            options={leadForms.map(f => ({ value: f.id, label: f.name }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            {selectedPageId ? 'No lead forms found for this page.' : 'Select a page first.'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Shopping catalog selector */}
-                    {engagementType === 'SHOPPING' && (
-                      <div style={{ marginBottom: 14 }}>
-                        <FieldLabel>Product Catalog</FieldLabel>
-                        {catalogs.length > 0 ? (
-                          <SelectInput value={selectedObjectId} onChange={setSelectedObjectId}
-                            options={catalogs.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name }))} />
-                        ) : (
-                          <div style={{ fontSize: 11, color: T.muted, padding: '8px 12px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                            No product catalogs found for this ad account.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Engagement action */}
-                    <div style={{ marginBottom: 14 }}>
-                      <FieldLabel>Engagement Action</FieldLabel>
-                      <SelectInput value={engagementAction} onChange={setEngagementAction}
-                        options={getEngagementActions()} />
-                    </div>
-
-                    {/* Retention */}
-                    <div>
-                      <FieldLabel>Retention Window</FieldLabel>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <input type="range" min={1} max={365} value={retentionDays} onChange={e => setRetentionDays(Number(e.target.value))}
-                          style={{ flex: 1, accentColor: T.cyan }} />
-                        <span style={{ fontSize: 13, fontWeight: 700, color: T.cyan, minWidth: 60 }}>{retentionDays} days</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {subtype === 'APP' && (
-                  <div style={{ padding: '12px 14px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                    <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                      App activity audiences require an app registered in your Meta Business Manager. Configure the app ID and events in Meta Events Manager, then use the Meta Ads Manager to create app-based audiences directly.
-                    </p>
-                  </div>
-                )}
-
-                {subtype === 'CUSTOM' && (
-                  <div style={{ padding: '12px 14px', background: T.pageBg, borderRadius: 8, border: `1px solid ${T.border}` }}>
-                    <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                      Customer list audiences are created by uploading a CSV/TXT file of customer data (emails, phone numbers, etc.) directly in Meta Ads Manager. This builder will create an empty audience shell — upload your list in Meta Ads Manager after creation.
-                    </p>
-                  </div>
-                )}
-              </Section>
-            </>
-          )}
-
-          {audienceType === 'lookalike' && (
-            <Section title="Lookalike Configuration">
-              <div style={{ marginBottom: 14 }}>
-                <FieldLabel>Source Audience *</FieldLabel>
-                <p style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>Select an existing custom audience as the seed for your lookalike.</p>
-                <div style={{ maxHeight: 200, overflowY: 'auto', border: `1px solid ${T.border}`, borderRadius: 8, background: T.pageBg }}>
-                  {existingAudiences.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', fontSize: 11, color: T.muted, fontStyle: 'italic' }}>
-                      No custom audiences found. Create a custom audience first.
-                    </div>
-                  ) : (
-                    existingAudiences.filter((a: { subtype?: string }) => a.subtype !== 'LOOKALIKE').map((aud: { id: string; name: string; subtype?: string; approximateCount?: number }) => (
-                      <button key={aud.id} onClick={() => { setLalSourceId(aud.id); setLalSourceName(aud.name); }} style={{
-                        width: '100%', textAlign: 'left', padding: '10px 14px', background: lalSourceId === aud.id ? T.activeState : 'transparent',
-                        border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'background 0.15s',
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: lalSourceId === aud.id ? T.cyan : T.ink }}>{aud.name}</div>
-                          <div style={{ fontSize: 10, color: T.muted }}>{aud.subtype} {aud.approximateCount ? `• ~${(aud.approximateCount / 1000).toFixed(0)}K` : ''}</div>
-                        </div>
-                        {lalSourceId === aud.id && <Check size={14} style={{ color: T.cyan, flexShrink: 0 }} />}
-                      </button>
-                    ))
-                  )}
-                </div>
-                {lalSourceId && (
-                  <div style={{ marginTop: 8, padding: '6px 12px', background: T.activeState, borderRadius: 6, border: `1px solid ${T.cyan}` }}>
-                    <span style={{ fontSize: 11, color: T.cyan, fontWeight: 600 }}>✓ Source: {lalSourceName}</span>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <FieldLabel>Target Country</FieldLabel>
-                <SelectInput value={lalCountry} onChange={setLalCountry}
-                  options={COUNTRIES.map(c => ({ value: c.code, label: `${c.name} (${c.code})` }))} />
-              </div>
-
-              <div>
-                <FieldLabel>Audience Size</FieldLabel>
-                <p style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>
-                  Percentage of the country's population. Smaller = more similar to source, larger = broader reach.
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input type="range" min={1} max={20} step={1} value={Math.round(lalRatio * 100)} onChange={e => setLalRatio(Number(e.target.value) / 100)}
-                    style={{ flex: 1, accentColor: T.cyan }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.cyan, minWidth: 50 }}>{Math.round(lalRatio * 100)}%</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                  <span style={{ fontSize: 9, color: T.hint }}>1% — Most Similar</span>
-                  <span style={{ fontSize: 9, color: T.hint }}>20% — Broadest</span>
-                </div>
-              </div>
-            </Section>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '12px 22px', borderTop: `2px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <button onClick={onClose} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'transparent', color: T.ink,
-            border: `1.5px solid ${T.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-          }}>
-            Cancel
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {name && (
-              <span style={{ fontSize: 11, color: T.muted, fontStyle: 'italic' }}>
-                Creating: "{name}"
-              </span>
-            )}
-            <button onClick={handleCreate} disabled={isLoading || !name.trim()} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px',
-              background: isLoading || !name.trim() ? T.border : T.cyan,
-              color: isLoading || !name.trim() ? T.hint : T.pageBg,
-              border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: isLoading || !name.trim() ? 'not-allowed' : 'pointer',
-              transition: 'all 0.15s', opacity: isLoading || !name.trim() ? 0.6 : 1,
-            }}>
-              {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {isLoading ? 'Creating...' : audienceType === 'lookalike' ? 'Create Lookalike' : 'Create Audience'}
-            </button>
+  if (!config) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '20px 22px 0' }}>
+        <BackBtn onClick={onBack} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 3 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, background: source.color, border: `1px solid ${source.accent}44`, flexShrink: 0 }}>{source.emoji}</div>
+          <div>
+            <div style={{ fontFamily: T.font, fontSize: 16, fontWeight: 800, color: T.textHi }}>{config.title}</div>
+            <div style={{ fontFamily: T.font, fontSize: 11, color: T.textMid }}>{source.sub}</div>
           </div>
         </div>
       </div>
+      <Divider />
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
+        {saved ? <SuccessScreen title="Custom Audience Created!" subtitle="Your audience is being populated. It may take up to 24 hours to be ready for use in campaigns." /> :
+          config.sections.map((section, i) => <FormSection key={i} section={section} formState={form} setFormState={setForm} />)}
+      </div>
+      {!saved && (
+        <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
+          <Btn variant="secondary" onClick={onBack}>Back</Btn>
+          <Btn onClick={handleCreate} disabled={createMutation.isPending || !name.trim()}>
+            {createMutation.isPending ? '⏳ Creating...' : 'Create Audience'}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Screen: LAL Builder ──────────────────────────────────────────────────────
+function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
+  onBack: () => void; onCreated: (a: { id: string; name: string }) => void;
+  accessToken: string; adAccountId: string;
+}) {
+  const [source, setSource] = useState('');
+  const [country, setCountry] = useState('United States');
+  const [size, setSize] = useState(2);
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'Brazil', 'Japan', 'India', 'Mexico', 'Spain', 'Italy', 'Netherlands', 'South Korea', 'Singapore', 'United Arab Emirates', 'South Africa'];
+
+  const { data: audiencesData } = trpc.adminMeta.getCustomAudiences.useQuery(
+    { accessToken, adAccountId },
+    { enabled: !!accessToken && !!adAccountId, staleTime: 5 * 60 * 1000 }
+  );
+  const existingAudiences = audiencesData?.audiences ?? [];
+  const seedOptions = ['Select a source audience', ...existingAudiences.filter((a: { subtype?: string }) => a.subtype !== 'LOOKALIKE').map((a: { id: string; name: string }) => a.name)];
+
+  const createMutation = trpc.adminMeta.createLookalikeAudience.useMutation({
+    onSuccess: (data) => {
+      setSaved(true);
+      setTimeout(() => onCreated({ id: data.audienceId, name: data.name }), 1800);
+    },
+    onError: (err) => toast.error(`Failed to create lookalike: ${err.message}`),
+  });
+
+  const complete = source && source !== seedOptions[0] && name.trim();
+  const handleCreate = () => {
+    if (!complete) return;
+    const srcAud = existingAudiences.find((a: { name: string }) => a.name === source);
+    createMutation.mutate({
+      accessToken, adAccountId,
+      name: name.trim(),
+      originAudienceId: srcAud?.id || '',
+      country: COUNTRIES.indexOf(country) >= 0 ? ['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'BR', 'JP', 'IN', 'MX', 'ES', 'IT', 'NL', 'KR', 'SG', 'AE', 'ZA'][COUNTRIES.indexOf(country)] : 'US',
+      ratio: size / 100,
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '20px 22px 0' }}>
+        <BackBtn onClick={onBack} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 3 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: T.cyanDim, border: `1px solid ${T.borderHi}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🔍</div>
+          <div>
+            <div style={{ fontFamily: T.font, fontSize: 17, fontWeight: 800, color: T.textHi }}>Lookalike Audience</div>
+            <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid }}>Find new people similar to your best customers</div>
+          </div>
+        </div>
+      </div>
+      <Divider />
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
+        {saved ? <SuccessScreen title="Lookalike Audience Created!" subtitle="Meta is building your audience. This typically takes 1–6 hours." /> : (
+          <>
+            {/* Source Audience */}
+            <div style={{ marginBottom: 18 }}>
+              <Label>Source Audience</Label>
+              <SelInput value={source || seedOptions[0]} onChange={setSource} options={seedOptions} />
+              {source && source !== seedOptions[0] && (
+                <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: T.cyanDim, border: `1px solid ${T.borderHi}`, fontFamily: T.font, fontSize: 12, color: T.textMid, display: 'flex', gap: 6 }}>
+                  <span>ℹ️</span><span>Source needs at least <strong style={{ color: T.textHi }}>100 people</strong> in the target country.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Audience Location */}
+            <div style={{ marginBottom: 18 }}>
+              <Label>Audience Location</Label>
+              <SelInput value={country} onChange={setCountry} options={COUNTRIES} />
+            </div>
+
+            {/* Audience Size */}
+            <div style={{ marginBottom: 18 }}>
+              <Label hint="1% = most similar. 10% = larger, less similar.">Audience Size</Label>
+              <SliderInput value={size} onChange={setSize} min={1} max={10} unit="%" />
+              <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+                {['1%', '2%', '5%', '10%'].map(pct => {
+                  const v = parseInt(pct);
+                  const active = size === v;
+                  return (
+                    <button key={pct} onClick={() => setSize(v)} style={{ flex: 1, fontFamily: T.font, fontSize: 12, fontWeight: 600, padding: '5px 4px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${active ? T.cyan : T.border}`, background: active ? T.cyanDim : T.surface2, color: active ? T.cyan : T.textMid, transition: 'all 0.14s ease' }}>{pct}</button>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 8, padding: '7px 12px', borderRadius: 8, background: T.surface2, fontFamily: T.font, fontSize: 12, color: T.textMid }}>
+                Estimated reach: <strong style={{ color: T.cyan }}>{(size * 1.8).toFixed(1)}M – {(size * 2.4).toFixed(1)}M people</strong> in {country}
+              </div>
+            </div>
+
+            {/* Audience Name */}
+            <div style={{ marginBottom: 18 }}>
+              <Label>Audience Name</Label>
+              <TxtInput value={name} onChange={setName} placeholder={`e.g. Lookalike (${country}, ${size}%) – Source`} />
+            </div>
+          </>
+        )}
+      </div>
+      {!saved && (
+        <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
+          <Btn variant="secondary" onClick={onBack}>Cancel</Btn>
+          <Btn onClick={handleCreate} disabled={createMutation.isPending || !complete}>
+            {createMutation.isPending ? '⏳ Creating...' : 'Create Lookalike Audience'}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Screen: Quick Build ──────────────────────────────────────────────────────
+function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
+  onBack: () => void; onCreated: (a: { id: string; name: string }) => void;
+  accessToken: string; adAccountId: string;
+}) {
+  const [step, setStep] = useState<'pick' | 'config'>('pick');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, unknown>>({});
+  const [name, setName] = useState('');
+  const [nameDirty, setNameDirty] = useState(false);
+  const [hover, setHover] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const option = selectedId ? QUICK_BUILD_OPTIONS.find(o => o.id === selectedId) : null;
+
+  // Auto-update name from template when form changes (unless user manually edited)
+  useEffect(() => {
+    if (option && !nameDirty) setName(option.buildName(form));
+  }, [form, option, nameDirty]);
+
+  const createMutation = trpc.adminMeta.createCustomAudience.useMutation({
+    onSuccess: (data) => {
+      setSaved(true);
+      setTimeout(() => onCreated({ id: data.audienceId, name: data.name }), 1800);
+    },
+    onError: (err) => toast.error(`Failed to create audience: ${err.message}`),
+  });
+
+  const pickOption = (id: string) => {
+    const opt = QUICK_BUILD_OPTIONS.find(o => o.id === id);
+    if (!opt) return;
+    const defaults: Record<string, unknown> = {};
+    opt.fields.forEach(f => { if (f.type === 'slider') defaults[f.field] = f.defaultVal ?? f.min ?? 1; });
+    setForm(defaults);
+    setNameDirty(false);
+    setName(opt.buildName(defaults));
+    setSelectedId(id);
+    setStep('config');
+  };
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    createMutation.mutate({
+      accessToken, adAccountId,
+      name: name.trim(),
+      subtype: 'CUSTOM',
+      retentionDays: (form.retention as number) || 30,
+    });
+  };
+
+  // ── Pick screen ──
+  if (step === 'pick') return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '20px 22px 0' }}>
+        <BackBtn onClick={onBack} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: T.orangeDim, border: '1px solid rgba(247,144,30,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>⚡</div>
+          <div>
+            <div style={{ fontFamily: T.font, fontSize: 17, fontWeight: 800, color: T.textHi }}>Quick Build</div>
+            <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid }}>Pre-designed audiences ready in seconds</div>
+          </div>
+        </div>
+      </div>
+      <Divider />
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px 16px' }}>
+        {QUICK_BUILD_OPTIONS.map(opt => (
+          <div key={opt.id} onClick={() => pickOption(opt.id)} onMouseEnter={() => setHover(opt.id)} onMouseLeave={() => setHover(null)}
+            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 9, border: `1px solid ${hover === opt.id ? T.cyan : T.border}`, background: hover === opt.id ? T.cyanDim : T.surface2, cursor: 'pointer', transition: 'all 0.14s ease', marginBottom: 6, boxShadow: hover === opt.id ? T.shCyan : 'none' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: hover === opt.id ? T.cyanDim : T.surface3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all 0.14s ease' }}>{opt.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: 600, color: hover === opt.id ? T.textHi : T.textMid }}>{opt.label}</div>
+              <div style={{ fontFamily: T.font, fontSize: 11, color: T.textLo, marginTop: 1 }}>{opt.desc}</div>
+            </div>
+            <span style={{ fontFamily: T.font, fontSize: 16, color: hover === opt.id ? T.cyan : T.textLo, transition: 'color 0.14s' }}>→</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Config screen ──
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '20px 22px 0' }}>
+        <BackBtn onClick={() => { setStep('pick'); setSelectedId(null); }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: T.cyanDim, border: `1px solid ${T.borderHi}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>{option?.icon}</div>
+          <div>
+            <div style={{ fontFamily: T.font, fontSize: 16, fontWeight: 800, color: T.textHi }}>{option?.label}</div>
+            <div style={{ fontFamily: T.font, fontSize: 11, color: T.textMid }}>{option?.desc}</div>
+          </div>
+        </div>
+      </div>
+      <Divider />
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
+        {saved ? <SuccessScreen title="Audience Created!" subtitle="Your audience is being populated. It may take up to 24 hours to be ready for use in campaigns." /> : (
+          <>
+            {/* Dynamic fields for this template */}
+            {option?.fields.map((section, i) => {
+              const srcSection: SourceSection = {
+                label: section.label,
+                type: section.type as SourceSection['type'],
+                field: section.field,
+                placeholder: section.placeholder,
+                min: section.min,
+                max: section.max,
+                defaultVal: section.defaultVal,
+                unit: section.unit,
+                options: section.options as SourceSection['options'],
+              };
+              return <FormSection key={i} section={srcSection} formState={form} setFormState={setForm} />;
+            })}
+
+            {/* Audience Name with auto-naming template */}
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                <Label>Audience Name</Label>
+                {nameDirty && (
+                  <button onClick={() => { setNameDirty(false); if (option) setName(option.buildName(form)); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 11, color: T.cyan, fontWeight: 600, padding: 0 }}>
+                    ↺ Reset to template
+                  </button>
+                )}
+              </div>
+              {!nameDirty && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6, padding: '4px 10px', background: T.greenDim, border: '1px solid rgba(0,212,138,0.25)', borderRadius: 6, width: 'fit-content' }}>
+                  <span style={{ fontSize: 11 }}>✨</span>
+                  <span style={{ fontFamily: T.font, fontSize: 11, fontWeight: 600, color: T.green }}>Auto-generated from your selections</span>
+                </div>
+              )}
+              <input
+                value={name}
+                onChange={e => { setName(e.target.value); setNameDirty(true); }}
+                placeholder="Audience name"
+                style={{ ...inputBase, border: `1px solid ${nameDirty ? T.orange : T.cyan}`, boxShadow: nameDirty ? `0 0 0 3px ${T.orangeDim}` : `0 0 0 3px ${T.cyanDim}` }}
+              />
+              {nameDirty && <div style={{ fontFamily: T.font, fontSize: 11, color: T.orange, marginTop: 4 }}>✏️ Custom name — template auto-fill paused</div>}
+            </div>
+          </>
+        )}
+      </div>
+      {!saved && (
+        <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Btn variant="secondary" onClick={() => setStep('pick')}>Back</Btn>
+          <Btn onClick={handleCreate} disabled={createMutation.isPending || !name.trim()}>
+            {createMutation.isPending ? '⏳ Creating...' : 'Create Audience'}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Modal ───────────────────────────────────────────────────────────────
+export default function AudienceBuilderModal({ accessToken, adAccountId, onCreated, onClose }: Props) {
+  const [screen, setScreen] = useState<Screen>('type');
+  const [selectedSource, setSelectedSource] = useState<SourceDef | null>(null);
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: T.overlay, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: T.surface, borderRadius: 16, width: '100%', maxWidth: 510, maxHeight: '92vh', boxShadow: `${T.sh4}, 0 0 0 1px ${T.border}`, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', animation: 'abSlideUp 0.22s cubic-bezier(.2,.7,.2,1)' }}>
+        {/* Close button */}
+        <button onClick={onClose}
+          style={{ position: 'absolute', right: 14, top: 14, zIndex: 20, width: 26, height: 26, borderRadius: '50%', border: `1px solid ${T.border}`, background: T.surface2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: T.font, fontSize: 14, color: T.textMid, fontWeight: 700, transition: 'all 0.15s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.cyan; (e.currentTarget as HTMLButtonElement).style.color = T.cyan; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.border; (e.currentTarget as HTMLButtonElement).style.color = T.textMid; }}>
+          ×
+        </button>
+
+        {screen === 'type' && (
+          <TypeSelector onSelect={t => {
+            if (t === 'custom') setScreen('source_picker');
+            else if (t === 'lal') setScreen('lal');
+            else setScreen('quick');
+          }} />
+        )}
+        {screen === 'source_picker' && (
+          <SourcePicker onSelect={src => { setSelectedSource(src); setScreen('custom_config'); }} onBack={() => setScreen('type')} />
+        )}
+        {screen === 'custom_config' && selectedSource && (
+          <CustomConfig source={selectedSource} onBack={() => setScreen('source_picker')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
+        )}
+        {screen === 'lal' && (
+          <LALBuilder onBack={() => setScreen('type')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
+        )}
+        {screen === 'quick' && (
+          <QuickBuild onBack={() => setScreen('type')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
+        )}
+      </div>
+
+      <style>{`
+        @keyframes abSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: ${T.cyan}; cursor: pointer; box-shadow: 0 0 8px ${T.cyanGlow}; }
+        input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: ${T.cyan}; cursor: pointer; border: none; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: ${T.surface3}; border-radius: 2px; }
+        ::placeholder { color: ${T.textLo} !important; }
+        select option { background: #1a1860; color: #f0f0ff; }
+      `}</style>
     </div>
   );
 }
