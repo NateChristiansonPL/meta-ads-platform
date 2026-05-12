@@ -22,6 +22,7 @@ import { getDb, getTokenById } from "../../db";
 import {
   adPerformance,
   adSourceDetails,
+  adsetGoals,
   metaSyncHistory,
   metaSyncSchedule,
 } from "../../../drizzle/schema";
@@ -58,6 +59,23 @@ type InsightRow = {
   cpc?: string;
   actions?: MetaAction[];
   cost_per_action_type?: MetaAction[];
+};
+
+// ── Ad set goal metadata (fetched from Meta Graph API per adset) ─────────────
+type AdsetGoalMeta = {
+  adsetId: string;
+  adsetName: string | null;
+  accountId: string | null;
+  campaignId: string | null;
+  optimizationGoal: string | null;
+  // From promoted_object — only present when the ad set explicitly targets a
+  // custom conversion (not a standard pixel event).
+  customConversionId: string | null;
+  // From promoted_object.custom_event_type — e.g. PURCHASE, LEAD, OTHER.
+  customEventType: string | null;
+  pixelId: string | null;
+  // Human-readable label derived at fetch time for use in decay analysis.
+  convEventLabel: string | null;
 };
 
 type CreativeMeta = {
@@ -166,6 +184,113 @@ function parseCreative(
   };
 }
 
+/**
+ * Batch-fetch optimization_goal + promoted_object for a set of ad set IDs.
+ * Uses the Meta Batch API (up to 50 per request) to minimise round-trips.
+ * Returns a Map<adsetId, AdsetGoalMeta>.
+ */
+async function fetchAdsetGoals(
+  accessToken: string,
+  adsetIds: string[],
+): Promise<Map<string, AdsetGoalMeta>> {
+  const map = new Map<string, AdsetGoalMeta>();
+  if (!adsetIds.length) return map;
+
+  // Chunk into batches of 50 (Meta Batch API limit)
+  const chunks: string[][] = [];
+  for (let i = 0; i < adsetIds.length; i += 50) {
+    chunks.push(adsetIds.slice(i, i + 50));
+  }
+
+  for (const chunk of chunks) {
+    try {
+      const batch = chunk.map((id) => ({
+        method: "GET",
+        relative_url: `${id}?fields=id,name,account_id,campaign_id,optimization_goal,promoted_object`,
+      }));
+      const resp = await axios.post(
+        `${META_BASE}/`,
+        { batch: JSON.stringify(batch), access_token: accessToken },
+        { timeout: 60000 },
+      );
+      const results = resp.data as Array<{ code: number; body: string }>;
+      for (const item of results) {
+        if (item.code !== 200) continue;
+        try {
+          const data = JSON.parse(item.body) as {
+            id?: string;
+            name?: string;
+            account_id?: string;
+            campaign_id?: string;
+            optimization_goal?: string;
+            promoted_object?: {
+              pixel_id?: string;
+              custom_conversion_id?: string;
+              custom_event_type?: string;
+              lead_gen_form_id?: string;
+            };
+          };
+          if (!data.id) continue;
+          const goal = data.optimization_goal ?? null;
+          const po = data.promoted_object ?? {};
+          const customConvId = po.custom_conversion_id ?? null;
+          const customEventType = po.custom_event_type ?? null;
+          const pixelId = po.pixel_id ?? null;
+
+          // Build a human-readable convEventLabel:
+          //   - If there's a custom_conversion_id, label it "Custom:{id}"
+          //   - If there's a custom_event_type (e.g. PURCHASE, LEAD), use that
+          //   - Otherwise fall back to the optimization goal itself
+          let convEventLabel: string | null = null;
+          if (customConvId) {
+            convEventLabel = `Custom:${customConvId}`;
+          } else if (customEventType && customEventType !== "OTHER") {
+            // Capitalise: PURCHASE → Purchase
+            convEventLabel = customEventType.charAt(0).toUpperCase() + customEventType.slice(1).toLowerCase();
+          } else if (goal === "OFFSITE_CONVERSIONS") {
+            // OTHER or no custom_event_type — Meta scopes results to the pixel's
+            // primary event; label as "Conversion" generically
+            convEventLabel = "Conversion";
+          } else if (goal === "LEAD_GENERATION") {
+            convEventLabel = "Lead";
+          } else if (goal === "LINK_CLICKS") {
+            convEventLabel = "Link click";
+          } else if (goal === "LANDING_PAGE_VIEWS") {
+            convEventLabel = "Landing page view";
+          } else if (goal === "THRUPLAY") {
+            convEventLabel = "ThruPlay";
+          } else if (goal === "VIDEO_VIEWS") {
+            convEventLabel = "Video view";
+          } else if (goal === "PAGE_LIKES") {
+            convEventLabel = "Page like";
+          } else if (goal === "POST_ENGAGEMENT") {
+            convEventLabel = "Post engagement";
+          } else if (goal === "REACH" || goal === "IMPRESSIONS") {
+            convEventLabel = null; // No conversion metric for reach/impressions
+          }
+
+          map.set(data.id, {
+            adsetId: data.id,
+            adsetName: data.name ?? null,
+            accountId: data.account_id ? cleanAccountId(data.account_id) : null,
+            campaignId: data.campaign_id ?? null,
+            optimizationGoal: goal,
+            customConversionId: customConvId,
+            customEventType,
+            pixelId,
+            convEventLabel,
+          });
+        } catch {
+          // Skip malformed batch item
+        }
+      }
+    } catch (err) {
+      console.warn("[PerformanceSync] fetchAdsetGoals batch failed:", err);
+    }
+  }
+  return map;
+}
+
 async function metaGetAll(
   path: string,
   params: Record<string, string>,
@@ -245,24 +370,105 @@ async function fetchCreativeMap(accessToken: string, adIds: string[]) {
   return map;
 }
 
-function resultMetric(row: InsightRow) {
+/**
+ * Goal-aware result metric extraction.
+ *
+ * When we know the ad set's optimization goal (from adsetGoals), we use the
+ * metric that directly corresponds to what Meta is optimising for. This ensures
+ * the decay analysis always measures the right event.
+ *
+ * For OFFSITE_CONVERSIONS with a custom_conversion_id, Meta reports the
+ * conversion under the action type `offsite_conversion.custom.{id}`. We look
+ * for that specific key first, then fall back to the generic `results` field
+ * (which Meta already scopes to the ad set's optimization event).
+ *
+ * For all other goals we use the dedicated action type column directly.
+ * The generic waterfall is only used when no goal metadata is available.
+ */
+function resultMetric(
+  row: InsightRow,
+  goalMeta?: AdsetGoalMeta | null,
+): { results: number; costPerResult: number | null; convEvent: string | null } {
+  const goal = goalMeta?.optimizationGoal ?? null;
+
+  if (goal === "OFFSITE_CONVERSIONS") {
+    const customConvId = goalMeta?.customConversionId;
+    const label = goalMeta?.convEventLabel ?? "Conversion";
+    if (customConvId) {
+      // Try the exact custom conversion action type first
+      const customKey = `offsite_conversion.custom.${customConvId}`;
+      const customVal = actionValue(row.actions, [customKey]);
+      if (customVal > 0) {
+        return {
+          results: customVal,
+          costPerResult: costValue(row.cost_per_action_type, [customKey]),
+          convEvent: label,
+        };
+      }
+    }
+    // Fall back to the generic `results` field — Meta already scopes this to
+    // the ad set's optimization event in the API response.
+    const genericKeys = [
+      "offsite_conversion.fb_pixel_custom",
+      "purchase",
+      "omni_purchase",
+      "offsite_conversion.fb_pixel_purchase",
+      "lead",
+      "onsite_conversion.lead_grouped",
+      "offsite_conversion.fb_pixel_lead",
+    ];
+    for (const key of genericKeys) {
+      const v = actionValue(row.actions, [key]);
+      if (v > 0) return { results: v, costPerResult: costValue(row.cost_per_action_type, [key]), convEvent: label };
+    }
+    return { results: 0, costPerResult: null, convEvent: label };
+  }
+
+  if (goal === "LEAD_GENERATION") {
+    const keys = ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"];
+    const v = actionValue(row.actions, keys);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, keys), convEvent: "Lead" };
+  }
+
+  if (goal === "LINK_CLICKS") {
+    const v = actionValue(row.actions, ["link_click"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["link_click"]), convEvent: "Link click" };
+  }
+
+  if (goal === "LANDING_PAGE_VIEWS") {
+    const v = actionValue(row.actions, ["landing_page_view"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["landing_page_view"]), convEvent: "Landing page view" };
+  }
+
+  if (goal === "THRUPLAY") {
+    const v = actionValue(row.actions, ["video_thruplay_watched_actions"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["video_thruplay_watched_actions"]), convEvent: "ThruPlay" };
+  }
+
+  if (goal === "VIDEO_VIEWS") {
+    const v = actionValue(row.actions, ["video_view"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["video_view"]), convEvent: "Video view" };
+  }
+
+  if (goal === "PAGE_LIKES") {
+    const v = actionValue(row.actions, ["like", "page_like"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["like", "page_like"]), convEvent: "Page like" };
+  }
+
+  if (goal === "POST_ENGAGEMENT") {
+    const v = actionValue(row.actions, ["post_engagement"]);
+    return { results: v, costPerResult: costValue(row.cost_per_action_type, ["post_engagement"]), convEvent: "Post engagement" };
+  }
+
+  if (goal === "REACH" || goal === "IMPRESSIONS") {
+    // No conversion metric for reach/impressions — decay uses CTR + frequency only
+    return { results: 0, costPerResult: null, convEvent: null };
+  }
+
+  // ── Generic waterfall fallback (no goal metadata available) ──────────────────
   const priority = [
-    {
-      label: "Lead",
-      keys: [
-        "lead",
-        "onsite_conversion.lead_grouped",
-        "offsite_conversion.fb_pixel_lead",
-      ],
-    },
-    {
-      label: "Purchase",
-      keys: [
-        "purchase",
-        "omni_purchase",
-        "offsite_conversion.fb_pixel_purchase",
-      ],
-    },
+    { label: "Lead", keys: ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"] },
+    { label: "Purchase", keys: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
     { label: "Landing page view", keys: ["landing_page_view"] },
     { label: "Link click", keys: ["link_click"] },
     { label: "ThruPlay", keys: ["video_thruplay_watched_actions"] },
@@ -272,11 +478,7 @@ function resultMetric(row: InsightRow) {
   for (const metric of priority) {
     const value = actionValue(row.actions, metric.keys);
     if (value > 0)
-      return {
-        results: value,
-        costPerResult: costValue(row.cost_per_action_type, metric.keys),
-        convEvent: metric.label,
-      };
+      return { results: value, costPerResult: costValue(row.cost_per_action_type, metric.keys), convEvent: metric.label };
   }
   return { results: 0, costPerResult: null, convEvent: null };
 }
@@ -317,6 +519,34 @@ export async function syncMetaPerformanceData(input: {
       `${adIds.length - creativeMap.size} ads had performance but no resolved creative metadata.`,
     );
 
+  // ── Fetch ad set optimization goals + promoted_object ──────────────────────
+  // Collect unique adset IDs from insight rows, then batch-fetch their
+  // optimization_goal and promoted_object from the Meta Graph API.
+  const adsetIds = Array.from(
+    new Set(rows.map((row) => row.adset_id).filter(Boolean) as string[]),
+  );
+  const adsetGoalMap = await fetchAdsetGoals(input.accessToken, adsetIds);
+
+  // Upsert adset goal records into the adset_goals table so the decay analysis
+  // can always look up the correct metric without hitting the API again.
+  for (const goal of Array.from(adsetGoalMap.values())) {
+    const goalRecord = {
+      adsetId: goal.adsetId,
+      adsetName: goal.adsetName,
+      accountId: goal.accountId ?? cleanAccountId(input.accountId),
+      campaignId: goal.campaignId,
+      optimizationGoal: goal.optimizationGoal,
+      customConversionId: goal.customConversionId,
+      customEventType: goal.customEventType,
+      pixelId: goal.pixelId,
+      convEventLabel: goal.convEventLabel,
+    };
+    await db
+      .insert(adsetGoals)
+      .values(goalRecord)
+      .onDuplicateKeyUpdate({ set: goalRecord });
+  }
+
   for (const row of rows) {
     const meta = row.ad_id ? creativeMap.get(row.ad_id) : undefined;
     if (meta) {
@@ -344,7 +574,8 @@ export async function syncMetaPerformanceData(input: {
         .onDuplicateKeyUpdate({ set: details });
     }
 
-    const result = resultMetric(row);
+    const goalMeta = row.adset_id ? adsetGoalMap.get(row.adset_id) ?? null : null;
+    const result = resultMetric(row, goalMeta);
     const values = {
       adId: row.ad_id ?? "unknown",
       date: row.date_start ?? input.dateFrom,
@@ -379,6 +610,9 @@ export async function syncMetaPerformanceData(input: {
       results: dec(result.results),
       costPerResult: dec(result.costPerResult),
       convEvent: result.convEvent,
+      // Populate optimizationGoal from the fetched ad set metadata so the
+      // decay analysis can use goal-aware metric selection.
+      optimizationGoal: goalMeta?.optimizationGoal ?? null,
       pageLikes:
         Math.round(actionValue(row.actions, ["like", "page_like"])) || null,
       postEngagement:

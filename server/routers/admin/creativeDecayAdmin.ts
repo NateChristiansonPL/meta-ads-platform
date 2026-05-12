@@ -21,6 +21,7 @@ import { and, between, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, router } from "../../_core/trpc";
 import { getDb } from "../../db";
+import { getTokenById } from "../../db";
 import {
   adPerformance,
   creativeFatigueResults,
@@ -29,6 +30,7 @@ import {
   decayNotificationLog,
 } from "../../../drizzle/schema";
 import { notifyOwner } from "../../_core/notification";
+import { syncMetaPerformanceData } from "./creativePerformanceSyncAdmin";
 
 // ── Admin guard ───────────────────────────────────────────────────────────────
 
@@ -49,18 +51,66 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 type VisionRow = typeof adPerformance.$inferSelect;
-const eventCount = (row: VisionRow) =>
-  [
-    row.results,
-    row.fbLeads,
-    row.landingPageViews,
-    row.linkClicks,
-    row.thruplays,
-    row.videoViews,
-    row.pageLikes,
-  ]
-    .map(num)
-    .find((v) => v > 0) ?? 0;
+
+/**
+ * Goal-aware event count selector.
+ *
+ * Returns the single metric that corresponds to what the ad set is optimising
+ * for. This ensures CPE calculations in the decay analysis always use the
+ * correct denominator — never a proxy metric from a different funnel stage.
+ *
+ * The `optimizationGoal` and `convEvent` values are populated by the sync
+ * router from the ad set's `optimization_goal` and `promoted_object` fields.
+ *
+ * Weight implications by goal:
+ *   REACH / IMPRESSIONS  → no CPE signal; cpeWeight forced to 0 at call site
+ *   all others           → use the goal-specific column directly
+ *   null / unknown       → generic waterfall fallback (safe)
+ */
+function goalEventCount(row: VisionRow): number {
+  const goal = row.optimizationGoal ?? null;
+
+  if (goal === "OFFSITE_CONVERSIONS") {
+    // `results` is already scoped to the ad set's optimization event by Meta.
+    // For custom conversions this is the custom event count; for standard
+    // pixel events (PURCHASE, LEAD, etc.) it is the standard event count.
+    return num(row.results);
+  }
+  if (goal === "LEAD_GENERATION") return num(row.fbLeads) || num(row.results);
+  if (goal === "LINK_CLICKS") return num(row.linkClicks);
+  if (goal === "LANDING_PAGE_VIEWS") return num(row.landingPageViews);
+  if (goal === "THRUPLAY") return num(row.thruplays);
+  if (goal === "VIDEO_VIEWS") return num(row.videoViews);
+  if (goal === "PAGE_LIKES") return num(row.pageLikes);
+  if (goal === "POST_ENGAGEMENT") return num(row.postEngagement);
+  // REACH / IMPRESSIONS: no conversion metric — return 0 so cpeWeight is
+  // suppressed by the caller.
+  if (goal === "REACH" || goal === "IMPRESSIONS") return 0;
+
+  // Generic waterfall fallback when optimizationGoal is null/unknown.
+  return (
+    [
+      row.results,
+      row.fbLeads,
+      row.landingPageViews,
+      row.linkClicks,
+      row.thruplays,
+      row.videoViews,
+      row.pageLikes,
+    ]
+      .map(num)
+      .find((v) => v > 0) ?? 0
+  );
+}
+
+/**
+ * Whether the optimization goal has a meaningful CPE signal.
+ * REACH and IMPRESSIONS campaigns have no conversion denominator so we
+ * suppress the CPE weight entirely and redistribute to CTR + EWMA + freq.
+ */
+function goalHasCpeSignal(goal: string | null): boolean {
+  return goal !== "REACH" && goal !== "IMPRESSIONS";
+}
 const sum = (rows: VisionRow[], selector: (row: VisionRow) => number) =>
   rows.reduce((total, row) => total + selector(row), 0);
 
@@ -176,7 +226,14 @@ async function analyzeStoredPerformance(input: {
       sum(group, (row) => num(row.impressions)),
     );
     const totalSpend = sum(group, (row) => num(row.spend));
-    const totalEvents = sum(group, eventCount);
+    // Derive the optimization goal for this creative group. All rows in a
+    // group share the same ad set (or at least the same account + campaign),
+    // so the first non-null value is authoritative.
+    const groupGoal =
+      group.find((row) => row.optimizationGoal)?.optimizationGoal ?? null;
+    const hasCpe = goalHasCpeSignal(groupGoal);
+
+    const totalEvents = sum(group, goalEventCount);
     const avgCtr = weightedCtr(group);
     const avgFrequency = group.length
       ? sum(group, (row) => num(row.frequency)) / group.length
@@ -186,12 +243,12 @@ async function analyzeStoredPerformance(input: {
     const ctrDrop = earlyCtr ? (earlyCtr - recentCtr) / earlyCtr : 0;
     const earlySpend = sum(early, (row) => num(row.spend));
     const recentSpend = sum(recent, (row) => num(row.spend));
-    const earlyEvents = sum(early, eventCount);
-    const recentEvents = sum(recent, eventCount);
+    const earlyEvents = sum(early, goalEventCount);
+    const recentEvents = sum(recent, goalEventCount);
     const earlyCpe = earlyEvents ? earlySpend / earlyEvents : null;
     const recentCpe = recentEvents ? recentSpend / recentEvents : null;
     const cpeDegrade =
-      earlyCpe && recentCpe
+      hasCpe && earlyCpe && recentCpe
         ? (recentCpe - earlyCpe) / Math.max(earlyCpe, 0.01)
         : 0;
     const dailyEwma = ewma(
@@ -213,10 +270,14 @@ async function analyzeStoredPerformance(input: {
             1,
           )
         : clamp(totalImpressions / 100, 0, 0.3);
-    const cpeWeight = totalEvents >= 5 ? 0.35 : 0.15;
-    const ctrWeight = totalEvents >= 5 ? 0.3 : 0.45;
-    const ewmaWeight = 0.2;
-    const freqWeight = totalEvents >= 5 ? 0.15 : 0.2;
+    // Goal-aware weight distribution:
+    //   - REACH/IMPRESSIONS: no CPE signal, redistribute weight to CTR + EWMA
+    //   - Conversion goals with enough events: standard weights
+    //   - Conversion goals with sparse events: lean on CTR + EWMA
+    const cpeWeight = !hasCpe ? 0 : totalEvents >= 5 ? 0.35 : 0.15;
+    const ctrWeight = !hasCpe ? 0.55 : totalEvents >= 5 ? 0.3 : 0.45;
+    const ewmaWeight = !hasCpe ? 0.3 : 0.2;
+    const freqWeight = !hasCpe ? 0.15 : totalEvents >= 5 ? 0.15 : 0.2;
     const rawSignal =
       clamp(cpeDegrade, 0, 1) * cpeWeight +
       clamp(ctrDrop, 0, 1) * ctrWeight +
@@ -383,15 +444,19 @@ async function analyzeStoredPerformance(input: {
       const rCtr = weightedCtr(recentR.length ? recentR : earlyR);
       const ctrDropD = eCtr ? (eCtr - rCtr) / eCtr : 0;
       const totalImpD = sum(rowsUpToDate, (r) => num(r.impressions));
-      const totalEvD = sum(rowsUpToDate, eventCount);
+      // Use the same goal-aware event count for the trend series
+      const trendGoal =
+        rowsUpToDate.find((r: VisionRow) => r.optimizationGoal)?.optimizationGoal ?? null;
+      const trendHasCpe = goalHasCpeSignal(trendGoal);
+      const totalEvD = sum(rowsUpToDate, goalEventCount);
       const eSpend = sum(earlyR, (r) => num(r.spend));
       const rSpend = sum(recentR, (r) => num(r.spend));
-      const eEv = sum(earlyR, eventCount);
-      const rEv = sum(recentR, eventCount);
+      const eEv = sum(earlyR, goalEventCount);
+      const rEv = sum(recentR, goalEventCount);
       const eCpe = eEv ? eSpend / eEv : null;
       const rCpe = rEv ? rSpend / rEv : null;
       const cpeDeg =
-        eCpe && rCpe ? (rCpe - eCpe) / Math.max(eCpe, 0.01) : 0;
+        trendHasCpe && eCpe && rCpe ? (rCpe - eCpe) / Math.max(eCpe, 0.01) : 0;
       const avgFreqD = rowsUpToDate.length
         ? sum(rowsUpToDate, (r) => num(r.frequency)) / rowsUpToDate.length
         : 0;
@@ -416,13 +481,13 @@ async function analyzeStoredPerformance(input: {
               1,
             )
           : clamp(totalImpD / 100, 0, 0.3);
-      const cpeW = totalEvD >= 5 ? 0.35 : 0.15;
-      const ctrW = totalEvD >= 5 ? 0.3 : 0.45;
+      const cpeW = !trendHasCpe ? 0 : totalEvD >= 5 ? 0.35 : 0.15;
+      const ctrW = !trendHasCpe ? 0.55 : totalEvD >= 5 ? 0.3 : 0.45;
       const rawSig =
         clamp(cpeDeg, 0, 1) * cpeW +
         clamp(ctrDropD, 0, 1) * ctrW +
-        clamp(ewmaDropD, 0, 1) * 0.2 +
-        freqFat * (totalEvD >= 5 ? 0.15 : 0.2);
+        clamp(ewmaDropD, 0, 1) * (!trendHasCpe ? 0.3 : 0.2) +
+        freqFat * (!trendHasCpe ? 0.15 : totalEvD >= 5 ? 0.15 : 0.2);
       const dayFatigueScore = clamp(rawSig * rel * 100, 0, 100);
       return {
         date,
@@ -538,6 +603,123 @@ async function getAnalysisSchedulerConfig() {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
+
+// ── Shared trigger logic (used by manual procedure + cron) ──────────────────
+
+/**
+ * runDecayChain — the single source of truth for triggering the full
+ * sync → analysis pipeline.
+ *
+ * When vaultTokenId is configured, it runs syncMetaPerformanceData before
+ * the analysis so the analysis always sees fresh data.
+ *
+ * Called by:
+ *   - triggerDecayAnalysis procedure (manual on-demand trigger)
+ *   - startCreativeDecayCron() (automated daily run)
+ */
+async function runDecayChain(config: {
+  accountId: string;
+  campaignIds: string[];
+  dateFrom: string;
+  dateTo: string;
+  onlyLiveAds: boolean;
+  notifyEmerging: boolean;
+  notifyPossible: boolean;
+  notifyProbable: boolean;
+  vaultTokenId?: number | null;
+  syncPreset?: string | null;
+  syncRollingDays?: number | null;
+}) {
+  const syncWarnings: string[] = [];
+
+  // Step 1: Sync (if token is configured)
+  if (config.vaultTokenId) {
+    const token = await getTokenById(config.vaultTokenId);
+    if (token?.accessToken) {
+      try {
+        await syncMetaPerformanceData({
+          accessToken: token.accessToken,
+          accountId: config.accountId,
+          campaignIds: config.campaignIds,
+          dateFrom: config.dateFrom,
+          dateTo: config.dateTo,
+          mode: "scheduled",
+        });
+        console.log(`[DecayChain] Sync completed (${config.dateFrom} to ${config.dateTo})`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        syncWarnings.push(`Sync failed: ${msg}`);
+        console.warn("[DecayChain] Sync failed, proceeding with existing data:", e);
+      }
+    } else {
+      syncWarnings.push("vaultTokenId configured but token not found.");
+    }
+  }
+
+  // Step 2: Analysis
+  const analysis = await analyzeStoredPerformance({
+    accountId: config.accountId,
+    campaignIds: config.campaignIds,
+    dateFrom: config.dateFrom,
+    dateTo: config.dateTo,
+    onlyLiveAds: config.onlyLiveAds,
+  });
+
+  // Step 3: Notifications
+  const triggered = analysis.records.filter((r) => {
+    const level =
+      r.fatigueStatus === "URGENT" ? "probable"
+      : r.fatigueStatus === "REFRESH" ? "possible"
+      : r.fatigueStatus === "MONITOR" ? "emerging"
+      : null;
+    if (!level) return false;
+    return (
+      (level === "probable" && config.notifyProbable) ||
+      (level === "possible" && config.notifyPossible) ||
+      (level === "emerging" && config.notifyEmerging)
+    );
+  });
+
+  if (triggered.length > 0) {
+    const lines = triggered.map((r) => {
+      const level = r.fatigueStatus === "URGENT" ? "Probable"
+        : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
+      const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
+      return `- ${r.creativeName} (${level} fatigue, score ${r.fatigueScore.toFixed(0)})${
+        firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""
+      }`;
+    }).join("\n");
+    await notifyOwner({
+      title: `Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+      content: `Analysis (${config.dateFrom} to ${config.dateTo}):\n\n${lines}${
+        syncWarnings.length ? `\n\nSync warnings:\n${syncWarnings.join("\n")}` : ""
+      }`,
+    });
+    const dbLog = await getDb();
+    if (dbLog) {
+      const logRows = triggered.map((r) => {
+        const lvl = r.fatigueStatus === "URGENT" ? "probable"
+          : r.fatigueStatus === "REFRESH" ? "possible" : "emerging";
+        const firstDate = r.firstDetectedAt?.[lvl as "emerging" | "possible" | "probable"];
+        return {
+          accountId: cleanAccountId(config.accountId),
+          adId: r.creativeId ?? "",
+          adName: r.creativeName ?? "",
+          signalLevel: lvl as "emerging" | "possible" | "probable",
+          fatigueScore: Math.round(r.fatigueScore ?? 0),
+          firstDetectedAt: firstDate ? new Date(firstDate) : undefined,
+          notifiedAt: new Date(),
+          dateFrom: config.dateFrom,
+          dateTo: config.dateTo,
+        };
+      });
+      if (logRows.length) await dbLog.insert(decayNotificationLog).values(logRows);
+    }
+  }
+
+  return { analysis, syncWarnings };
+}
+
 export const creativeDecayAdminRouter = router({
   // ── Manual analysis trigger ─────────────────────────────────────────────────
   runDecayAnalysis: adminProcedure
@@ -605,6 +787,66 @@ export const creativeDecayAdminRouter = router({
     }),
 
   // ── Latest results ──────────────────────────────────────────────────────────
+
+  // ── On-demand trigger: sync then analysis ───────────────────────────────────
+  // Runs the full sync → analysis chain on demand.
+  // Reads scheduler config for account/campaigns/date range.
+  triggerDecayAnalysis: adminProcedure
+    .input(
+      z.object({
+        dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        skipSync: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const config = await getAnalysisSchedulerConfig();
+      if (!config?.accountId)
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No account configured in the analysis scheduler.",
+        });
+
+      const today = new Date();
+      const from = new Date(today);
+      from.setUTCDate(from.getUTCDate() - (config.analysisRollingDays ?? 14));
+      const dateFrom = input.dateFrom ?? from.toISOString().slice(0, 10);
+      const dateTo = input.dateTo ?? today.toISOString().slice(0, 10);
+      const campaignIds = config.campaignIds
+        ? config.campaignIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
+      const { analysis, syncWarnings } = await runDecayChain({
+        accountId: config.accountId,
+        campaignIds,
+        dateFrom,
+        dateTo,
+        onlyLiveAds: config.onlyLiveAds ?? false,
+        notifyEmerging: config.notifyEmerging ?? false,
+        notifyPossible: config.notifyPossible ?? true,
+        notifyProbable: config.notifyProbable ?? true,
+        vaultTokenId: input.skipSync ? null : config.vaultTokenId,
+        syncPreset: config.syncPreset,
+        syncRollingDays: config.syncRollingDays,
+      });
+
+      const db = await getDb();
+      if (db)
+        await db
+          .update(metaSyncSchedule)
+          .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "success" })
+          .where(eq(metaSyncSchedule.id, 1));
+
+      return {
+        analysisRunId: analysis.analysisRunId,
+        recordCount: analysis.records.length,
+        dateFrom,
+        dateTo,
+        syncWarnings,
+      };
+    }),
+
+
   getLatestResults: adminProcedure
     .input(z.object({ accountId: z.string().optional() }).optional())
     .query(async ({ input }) => {
@@ -748,112 +990,49 @@ export async function startCreativeDecayCron() {
 
       const today = new Date();
       const from = new Date(today);
-      from.setUTCDate(
-        from.getUTCDate() - (config.analysisRollingDays ?? 14),
-      );
+      from.setUTCDate(from.getUTCDate() - (config.analysisRollingDays ?? 14));
       const dateFrom = from.toISOString().slice(0, 10);
       const dateTo = today.toISOString().slice(0, 10);
       const campaignIds = config.campaignIds
-        ? config.campaignIds
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
+        ? config.campaignIds.split(",").map((s) => s.trim()).filter(Boolean)
         : [];
 
       try {
-        const analysis = await analyzeStoredPerformance({
+        // runDecayChain handles sync → analysis → notifications in sequence.
+        // Sync is only performed when vaultTokenId is configured (i.e. the
+        // sync scheduler has a token set). This guarantees fresh data before
+        // every automated analysis run.
+        await runDecayChain({
           accountId: config.accountId,
           campaignIds,
           dateFrom,
           dateTo,
-          onlyLiveAds: config.onlyLiveAds,
+          onlyLiveAds: config.onlyLiveAds ?? false,
+          notifyEmerging: config.notifyEmerging ?? false,
+          notifyPossible: config.notifyPossible ?? true,
+          notifyProbable: config.notifyProbable ?? true,
+          vaultTokenId: config.vaultTokenId,
+          syncPreset: config.syncPreset,
+          syncRollingDays: config.syncRollingDays,
         });
-        const triggered = analysis.records.filter((r) => {
-          const level =
-            r.fatigueStatus === "URGENT"
-              ? "probable"
-              : r.fatigueStatus === "REFRESH"
-                ? "possible"
-                : r.fatigueStatus === "MONITOR"
-                  ? "emerging"
-                  : null;
-          if (!level) return false;
-          return (
-            (level === "probable" && config.notifyProbable) ||
-            (level === "possible" && config.notifyPossible) ||
-            (level === "emerging" && config.notifyEmerging)
-          );
-        });
-        if (triggered.length > 0) {
-          const lines = triggered
-            .map((r) => {
-              const level =
-                r.fatigueStatus === "URGENT"
-                  ? "Probable"
-                  : r.fatigueStatus === "REFRESH"
-                    ? "Possible"
-                    : "Emerging";
-              const firstDate =
-                r.firstDetectedAt?.[
-                  level.toLowerCase() as
-                    | "emerging"
-                    | "possible"
-                    | "probable"
-                ];
-              return `- ${r.creativeName} (${level} fatigue, score ${r.fatigueScore.toFixed(0)})${firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""}`;
-            })
-            .join("\n");
-          await notifyOwner({
-            title: `[Scheduled] Creative Fatigue Alert - ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
-            content: `Automated daily analysis (${dateFrom} to ${dateTo}) detected the following fatigue signals:\n\n${lines}`,
-          });
-          // Log to decayNotificationLog for UI display (one row per triggered ad)
-          const dbLog = await getDb();
-          if (dbLog) {
-            const logRows = triggered.map((r) => {
-              const lvl =
-                r.fatigueStatus === "URGENT" ? "probable" :
-                r.fatigueStatus === "REFRESH" ? "possible" : "emerging";
-              const firstDate = r.firstDetectedAt?.[lvl as "emerging" | "possible" | "probable"];
-              return {
-                accountId: cleanAccountId(config.accountId),
-                adId: r.creativeId ?? "",
-                adName: r.creativeName ?? "",
-                signalLevel: lvl as "emerging" | "possible" | "probable",
-                fatigueScore: Math.round(r.fatigueScore ?? 0),
-                firstDetectedAt: firstDate ? new Date(firstDate) : undefined,
-                notifiedAt: new Date(),
-                dateFrom,
-                dateTo,
-              };
-            });
-            if (logRows.length) await dbLog.insert(decayNotificationLog).values(logRows);
-          }
-        }
         const db = await getDb();
         if (db)
           await db
             .update(metaSyncSchedule)
-            .set({
-              lastAnalysisAt: new Date(),
-              lastAnalysisStatus: "success",
-            })
+            .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "success" })
             .where(eq(metaSyncSchedule.id, 1));
       } catch (e) {
         const db = await getDb();
         if (db)
           await db
             .update(metaSyncSchedule)
-            .set({
-              lastAnalysisAt: new Date(),
-              lastAnalysisStatus: "error",
-            })
+            .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "error" })
             .where(eq(metaSyncSchedule.id, 1));
-        console.error("[CreativeDecay Cron] Analysis failed:", e);
+        console.error("[CreativeDecay Cron] Chain failed:", e);
       }
     } catch (e) {
       console.error("[CreativeDecay Cron] Unexpected error:", e);
     }
   });
-  console.log("[CreativeDecay Cron] Analysis scheduler started.");
+  console.log("[CreativeDecay Cron] Analysis scheduler started (sync → analysis chain enabled).");
 }

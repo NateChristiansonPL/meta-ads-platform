@@ -470,3 +470,35 @@ export const decayNotificationLog = mysqlTable("decay_notification_log", {
   accountIdx: index("dnl_account_idx").on(table.accountId),
   notifiedAtIdx: index("dnl_notified_at_idx").on(table.notifiedAt),
 }));
+
+// ── Ad Set Goals ──────────────────────────────────────────────────────────────
+// Stores the optimization goal and promoted_object for each ad set.
+// Populated during every performance sync so the decay analysis always knows
+// what metric each ad set is optimizing towards — including the exact custom
+// conversion ID when goal is OFFSITE_CONVERSIONS.
+export const adsetGoals = mysqlTable("adset_goals", {
+  adsetId: varchar("adset_id", { length: 128 }).primaryKey(),
+  adsetName: text("adset_name"),
+  accountId: varchar("account_id", { length: 64 }),
+  campaignId: varchar("campaign_id", { length: 128 }),
+  optimizationGoal: varchar("optimization_goal", { length: 128 }),
+  // From promoted_object — only present for OFFSITE_CONVERSIONS ad sets
+  // targeting a custom conversion (not a standard pixel event).
+  customConversionId: varchar("custom_conversion_id", { length: 128 }),
+  // From promoted_object.custom_event_type — e.g. PURCHASE, LEAD, OTHER.
+  // Present for OFFSITE_CONVERSIONS ad sets using standard pixel events.
+  customEventType: varchar("custom_event_type", { length: 128 }),
+  // From promoted_object.pixel_id
+  pixelId: varchar("pixel_id", { length: 128 }),
+  // Human-readable label used in the decay analysis (e.g. "Purchase", "Lead",
+  // "Custom: 123456789"). Derived at sync time so the analysis never has to
+  // re-derive it.
+  convEventLabel: varchar("conv_event_label", { length: 256 }),
+  lastFetchedAt: timestamp("last_fetched_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  accountIdx: index("ag_account_idx").on(table.accountId),
+  campaignIdx: index("ag_campaign_idx").on(table.campaignId),
+}));
+
+export type AdsetGoal = typeof adsetGoals.$inferSelect;
+export type InsertAdsetGoal = typeof adsetGoals.$inferInsert;

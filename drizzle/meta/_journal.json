@@ -127,6 +127,20 @@
       "when": 1778547476146,
       "tag": "0017_real_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1778619499733,
+      "tag": "0018_curious_morlun",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1778619577899,
+      "tag": "curious_morlun",
+      "breakpoints": true
     }
   ]
 }
