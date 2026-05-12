@@ -10,6 +10,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startCreativeDecayCron } from "../routers/admin/creativeDecayAdmin";
+import { startCreativePerformanceSyncCron } from "../routers/admin/creativePerformanceSyncAdmin";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -68,3 +69,4 @@ async function startServer() {
 
 startServer().catch(console.error);
 startCreativeDecayCron().catch(e => console.error("[CreativeDecay Cron] Failed to start:", e));
+startCreativePerformanceSyncCron().catch(e => console.error("[PerformanceSync Cron] Failed to start:", e));

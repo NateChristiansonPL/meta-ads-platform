@@ -612,3 +612,12 @@
 - [x] Fix 10: `contextual_multi_ads: OPT_OUT` — already on every branch
 - [x] Fix 11: `degrees_of_freedom_spec` per format — already correct (video adds video_filtering, carousel excludes invalid fields)
 - [x] Fix 12: UTM params in url_tags only — already correct
+
+## Admin Creative Decay — Split into Two Separate Tools (May 11 2026)
+- [x] Create new server router: creativePerformanceSyncAdmin.ts — syncPerformance, getSchedulerConfig (sync only), saveSchedulerConfig (sync only), listSyncHistory
+- [x] Create new page: AdminCreativePerformanceSync.tsx — BM token, ad account, campaign scope (with status filter), sync date range, sync scheduler (with Yesterday preset), sync history log
+- [x] Strip sync logic from creativeDecayAdmin.ts — removed syncPerformance, sync scheduler fields, sync history procedures
+- [x] Rewrite AdminCreativeDecay.tsx — analysis-only: BM token (for campaign scope loading), ad account, campaign scope, analysis date range, analysis scheduler, results table
+- [x] Register AdminCreativePerformanceSync at /admin/creative-performance-sync in App.tsx
+- [x] Add "Creative Perf. Sync (Admin)" entry to ADMIN_ITEMS in AppShell.tsx
+- [x] TypeScript check: 0 errors

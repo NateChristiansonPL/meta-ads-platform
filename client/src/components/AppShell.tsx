@@ -75,6 +75,7 @@ const ADMIN_ITEMS = [
   { label: "Team Members", icon: Users, path: "/admin/team-members" },
   { label: "Usage & Tallies", icon: BarChart2, path: "/admin/usage" },
   { label: "Campaign Builder (Admin)", icon: Wrench, path: "/admin/campaign-builder" },
+  { label: "Creative Perf. Sync (Admin)", icon: RefreshCw, path: "/admin/creative-performance-sync" },
   { label: "Creative Decay (Admin)", icon: Zap, path: "/admin/creative-decay" },
 ];
 

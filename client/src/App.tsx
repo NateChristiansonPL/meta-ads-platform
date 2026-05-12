@@ -19,6 +19,7 @@ import ManusAI from "./pages/ManusAI";
 import CampaignBuilder from "./pages/CampaignBuilder";
 import CampaignBuilderAdmin from "./pages/admin/CampaignBuilderAdmin/CampaignBuilderAdmin";
 import AdminCreativeDecay from "./pages/admin/AdminCreativeDecay";
+import AdminCreativePerformanceSync from "./pages/admin/AdminCreativePerformanceSync";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import { useAuth } from "./_core/hooks/useAuth";
 import { useEffect } from "react";
@@ -133,6 +134,9 @@ function Router() {
           </Route>
           <Route path="/admin/creative-decay">
             <AdminRoute component={AdminCreativeDecay} />
+          </Route>
+          <Route path="/admin/creative-performance-sync">
+            <AdminRoute component={AdminCreativePerformanceSync} />
           </Route>
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
