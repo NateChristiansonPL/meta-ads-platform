@@ -7,6 +7,7 @@ import {
   Zap, Plus, Trash2, Eye, Copy, Grid3X3, List, ChevronDown,
   AlertTriangle, RefreshCw, FileText, X, Loader2,
 } from 'lucide-react';
+import LeadGenFormBuilder from './LeadGenFormBuilderAdmin';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import {
@@ -23,6 +24,7 @@ interface Props {
   settings?: {
     accessToken: string;
     facebookPageId: string;
+    facebookPageName?: string;
   };
   onChange: (ads: AdRow[]) => void;
 }
@@ -68,6 +70,7 @@ function parseLaunchDate(startDate: string): string {
 
 export default function AdsMatrix({ ads, adSets, creatives, campaigns, buildMode, settings, onChange }: Props) {
   const [view, setView] = useState<'list' | 'matrix'>('list');
+  const [leadGenBuilderOpen, setLeadGenBuilderOpen] = useState(false);
   const [checked, setChecked] = useState<Set<MatrixKey>>(new Set());
 
   const filledAdSets = adSets.filter(a => a.name.trim());
@@ -178,6 +181,18 @@ export default function AdsMatrix({ ads, adSets, creatives, campaigns, buildMode
 
   return (
     <div className="flex flex-col h-full bg-surface-0">
+      {/* Lead Gen Form Builder Modal */}
+      {leadGenBuilderOpen && settings?.facebookPageId && (
+        <LeadGenFormBuilder
+          accessToken={settings.accessToken}
+          pageId={settings.facebookPageId}
+          pageName={settings.facebookPageName}
+          onCreated={(form) => {
+            toast.success(`Lead gen form "${form.name}" created (ID: ${form.id})`);
+          }}
+          onClose={() => setLeadGenBuilderOpen(false)}
+        />
+      )}
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-surface-1 flex-shrink-0">
         <div className="min-w-0">
@@ -198,6 +213,16 @@ export default function AdsMatrix({ ads, adSets, creatives, campaigns, buildMode
                 <Grid3X3 className="w-3.5 h-3.5" />
                 Ad Trafficker
               </button>
+              {settings?.facebookPageId && (
+                <button
+                  onClick={() => setLeadGenBuilderOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface-2 text-xs font-600 text-foreground hover:bg-surface-1 transition-all"
+                  title="Build a Lead Gen Form for this Facebook Page"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Build Lead Gen Form
+                </button>
+              )}
               <button
                 onClick={() => {
                   const row = newAdRow();

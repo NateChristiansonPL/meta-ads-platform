@@ -496,6 +496,7 @@ export default function CampaignBuilderAdmin() {
                     settings={state.settings.accessToken ? {
                       accessToken: state.settings.accessToken,
                       facebookPageId: state.settings.facebookPageId,
+                      facebookPageName: state.settings.facebookPageName,
                     } : undefined}
                     onChange={ads => update("ads", ads)}
                   />

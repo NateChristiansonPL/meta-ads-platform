@@ -129,74 +129,117 @@ function AssetUploadModal({ settings, onClose }: AssetUploadModalProps) {
     }
   };
 
+  // Dark theme tokens
+  const DT = {
+    pageBg: '#0d0c36', modalSurface: '#141349', cardSurface: '#1a1860',
+    activeState: '#1f1d70', border: 'rgba(255,255,255,0.1)',
+    cyan: '#00BEEF', ink: '#f0f0ff', muted: '#a8a8c8', hint: '#6b6b8f',
+    white: '#ffffff', green: '#00b37a',
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-surface-1 border border-border rounded-xl shadow-2xl w-[500px] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-          <div>
-            <h2 className="text-sm font-700 text-foreground">Asset Upload</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Upload an image or video directly to your ad account library</p>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(13,12,54,0.8)', backdropFilter: 'blur(4px)' }}>
+      <div style={{ width: 520, background: DT.modalSurface, borderRadius: 16, display: 'flex', flexDirection: 'column', boxShadow: `0 32px 80px rgba(0,190,239,0.1), 0 0 0 1px ${DT.border}`, overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: `2px solid ${DT.border}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: DT.cyan, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Upload size={16} color={DT.pageBg} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 15, fontWeight: 800, color: DT.ink, margin: 0, letterSpacing: '-0.01em' }}>Asset Upload</h2>
+              <p style={{ fontSize: 11, color: DT.muted, margin: 0, marginTop: 1 }}>Upload an image or video directly to your ad account library</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: DT.muted, padding: 6, borderRadius: 8, transition: 'color 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.color = DT.cyan)}
+            onMouseLeave={e => (e.currentTarget.style.color = DT.muted)}>
+            <X size={18} />
+          </button>
         </div>
-        <div className="p-5 space-y-4">
+
+        {/* Body */}
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Asset Name */}
           <div>
-            <label className="text-[11px] font-600 text-muted-foreground block mb-1">Asset Name</label>
+            <label style={{ fontSize: 11, fontWeight: 700, color: DT.ink, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Asset Name</label>
             <input value={assetName} onChange={e => setAssetName(e.target.value)}
-              placeholder="e.g. Summer Campaign Hero" className="cell-input w-full" />
+              placeholder="e.g. Summer Campaign Hero"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, background: DT.cardSurface, color: DT.ink, border: `1.5px solid ${DT.border}`, outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+              onFocus={e => { e.target.style.borderColor = DT.cyan; e.target.style.boxShadow = `0 0 0 3px rgba(0,190,239,0.15)`; }}
+              onBlur={e => { e.target.style.borderColor = DT.border; e.target.style.boxShadow = 'none'; }}
+            />
           </div>
+
           {/* Mode toggle */}
-          <div className="flex items-center gap-1 bg-surface-2 rounded-lg p-0.5 w-fit">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: DT.pageBg, borderRadius: 10, padding: 3, width: 'fit-content' }}>
             {(['file', 'url'] as const).map(m => (
-              <button key={m} onClick={() => setMode(m)}
-                className={`px-3 py-1.5 rounded-md text-xs font-600 transition-all capitalize ${
-                  mode === m ? 'bg-surface-1 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                }`}>{m === 'file' ? 'Upload File' : 'From URL'}</button>
+              <button key={m} onClick={() => setMode(m)} style={{
+                padding: '6px 16px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+                background: mode === m ? DT.activeState : 'transparent',
+                color: mode === m ? DT.cyan : DT.muted,
+                boxShadow: mode === m ? `0 0 0 1px ${DT.cyan}` : 'none',
+              }}>{m === 'file' ? 'Upload File' : 'From URL'}</button>
             ))}
           </div>
+
           {mode === 'file' ? (
             <div>
-              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileChange} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
               <button onClick={() => fileInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
+                style={{ width: '100%', border: `2px dashed ${file ? DT.cyan : DT.border}`, borderRadius: 12, padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: file ? DT.activeState : DT.cardSurface, transition: 'all 0.15s' }}
+                onMouseEnter={e => { if (!file) { (e.currentTarget as HTMLButtonElement).style.borderColor = DT.cyan; (e.currentTarget as HTMLButtonElement).style.background = DT.activeState; } }}
+                onMouseLeave={e => { if (!file) { (e.currentTarget as HTMLButtonElement).style.borderColor = DT.border; (e.currentTarget as HTMLButtonElement).style.background = DT.cardSurface; } }}>
                 {file ? (
-                  <div className="space-y-1">
-                    <p className="text-sm font-600 text-foreground">{file.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB · {file.type}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: DT.cyan, margin: 0 }}>{file.name}</p>
+                    <p style={{ fontSize: 11, color: DT.muted, margin: 0 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · {file.type}</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    <Upload className="w-6 h-6 text-muted-foreground/50 mx-auto" />
-                    <p className="text-[12px] text-muted-foreground">Click to select image or video file</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <Upload size={24} style={{ color: DT.hint }} />
+                    <p style={{ fontSize: 12, color: DT.muted, margin: 0 }}>Click to select image or video file</p>
                   </div>
                 )}
               </button>
             </div>
           ) : (
             <div>
-              <label className="text-[11px] font-600 text-muted-foreground block mb-1">Asset URL</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: DT.ink, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Asset URL</label>
               <input value={urlInput} onChange={e => setUrlInput(e.target.value)}
-                placeholder="https://example.com/image.jpg" className="cell-input w-full font-mono text-[11px]" />
-              <p className="text-[10px] text-muted-foreground mt-1">The asset will be fetched and uploaded to your ad account library.</p>
+                placeholder="https://example.com/image.jpg"
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 11, fontWeight: 500, fontFamily: 'monospace', background: DT.cardSurface, color: DT.ink, border: `1.5px solid ${DT.border}`, outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                onFocus={e => { e.target.style.borderColor = DT.cyan; e.target.style.boxShadow = `0 0 0 3px rgba(0,190,239,0.15)`; }}
+                onBlur={e => { e.target.style.borderColor = DT.border; e.target.style.boxShadow = 'none'; }}
+              />
+              <p style={{ fontSize: 10, color: DT.muted, marginTop: 6 }}>The asset will be fetched and uploaded to your ad account library.</p>
             </div>
           )}
+
           {result && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <p className="text-[11px] font-700 text-emerald-400">Upload successful!</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+            <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(0,179,122,0.1)', border: `1.5px solid rgba(0,179,122,0.3)` }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: DT.green, margin: 0 }}>✓ Upload successful!</p>
+              <p style={{ fontSize: 10, color: DT.muted, margin: '4px 0 0' }}>
                 {result.hash ? `Image hash: ${result.hash}` : `Video ID: ${result.videoId}`}
               </p>
-              <p className="text-[10px] text-muted-foreground">Name: {result.name}</p>
+              <p style={{ fontSize: 10, color: DT.muted, margin: '2px 0 0' }}>Name: {result.name}</p>
             </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-          <button onClick={onClose} className="px-4 py-1.5 rounded-lg text-xs font-600 text-muted-foreground hover:text-foreground border border-border hover:bg-surface-2 transition-all">Close</button>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '12px 20px', borderTop: `2px solid ${DT.border}` }}>
+          <button onClick={onClose}
+            style={{ padding: '7px 16px', background: 'transparent', color: DT.muted, border: `1.5px solid ${DT.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = DT.cyan; (e.currentTarget as HTMLButtonElement).style.color = DT.cyan; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = DT.border; (e.currentTarget as HTMLButtonElement).style.color = DT.muted; }}>
+            Close
+          </button>
           {!result && (
             <button onClick={handleUpload} disabled={uploading || (!file && !urlInput.trim())}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-700 bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 20px', background: uploading || (!file && !urlInput.trim()) ? DT.border : DT.cyan, color: uploading || (!file && !urlInput.trim()) ? DT.hint : DT.pageBg, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: uploading || (!file && !urlInput.trim()) ? 'not-allowed' : 'pointer', opacity: uploading || (!file && !urlInput.trim()) ? 0.5 : 1, transition: 'all 0.15s' }}>
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
               {uploading ? 'Uploading…' : 'Upload to Library'}
             </button>
           )}

@@ -345,11 +345,12 @@ export function TargetingPopup({
                   {customAudiences.length > 0 && (
                     <div className="max-h-36 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
                       {customAudiences.map((aud) => {
-                        const isSel = (tmRow.targetedAudiences || '').includes(aud.name);
+                        const entry = `${aud.id}|${aud.name}`;
+                        const isSel = (tmRow.targetedAudiences || '').split('\n').some(a => a.split('|')[0] === aud.id);
                         return (
                           <button key={aud.id} onClick={() => {
                             const cur = tmRow.targetedAudiences ? tmRow.targetedAudiences.split('\n').filter(Boolean) : [];
-                            update(tmRow.id, { targetedAudiences: isSel ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                            update(tmRow.id, { targetedAudiences: isSel ? cur.filter(a => a.split('|')[0] !== aud.id).join('\n') : [...cur, entry].join('\n') });
                           }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
                             isSel ? 'bg-[rgba(0,190,239,0.1)] text-[#00BEEF]' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
                             <span>{aud.name}</span>
@@ -363,8 +364,8 @@ export function TargetingPopup({
                     <div className="flex flex-wrap gap-1">
                       {tmRow.targetedAudiences.split('\n').filter(Boolean).map((a, i) => (
                         <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.2)] rounded-full text-[10px] text-[#00BEEF]">
-                          {a}
-                          <button onClick={() => update(tmRow.id, { targetedAudiences: tmRow.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
+                           {a.includes('|') ? a.split('|').slice(1).join('|') : a}
+                           <button onClick={() => update(tmRow.id, { targetedAudiences: tmRow.targetedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-400"><X size={9} /></button>
                         </span>
                       ))}
                     </div>
@@ -391,11 +392,12 @@ export function TargetingPopup({
                   {customAudiences.length > 0 && (
                     <div className="max-h-36 overflow-y-auto border border-[rgba(255,255,255,0.08)] rounded-lg bg-[rgba(255,255,255,0.03)] divide-y divide-[rgba(255,255,255,0.05)]">
                       {customAudiences.map((aud) => {
-                        const isExcl = (tmRow.excludedAudiences || '').includes(aud.name);
+                        const exclEntry = `${aud.id}|${aud.name}`;
+                        const isExcl = (tmRow.excludedAudiences || '').split('\n').some(a => a.split('|')[0] === aud.id);
                         return (
                           <button key={aud.id} onClick={() => {
                             const cur = tmRow.excludedAudiences ? tmRow.excludedAudiences.split('\n').filter(Boolean) : [];
-                            update(tmRow.id, { excludedAudiences: isExcl ? cur.filter(a => a !== aud.name).join('\n') : [...cur, aud.name].join('\n') });
+                            update(tmRow.id, { excludedAudiences: isExcl ? cur.filter(a => a.split('|')[0] !== aud.id).join('\n') : [...cur, exclEntry].join('\n') });
                           }} className={cn('w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 transition-colors',
                             isExcl ? 'bg-red-500/10 text-red-400' : 'hover:bg-[rgba(255,255,255,0.04)] text-white')}>
                             <span>{aud.name}</span>
@@ -409,7 +411,7 @@ export function TargetingPopup({
                     <div className="flex flex-wrap gap-1">
                       {tmRow.excludedAudiences.split('\n').filter(Boolean).map((a, i) => (
                         <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] text-red-400">
-                          {a}
+                          {a.includes('|') ? a.split('|').slice(1).join('|') : a}
                           <button onClick={() => update(tmRow.id, { excludedAudiences: tmRow.excludedAudiences!.split('\n').filter((_, li) => li !== i).join('\n') })} className="hover:text-red-600"><X size={9} /></button>
                         </span>
                       ))}

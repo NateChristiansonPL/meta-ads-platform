@@ -54,9 +54,9 @@ interface BulkFields {
   genders: string;
   locationsToAdd: string[];          // display labels
   locationsMode: LocationMode;
-  targetedAudiencesToAdd: string[];  // display names
+  targetedAudiencesToAdd: string[];  // id|name format
   targetedAudiencesMode: AudienceMode;
-  excludedAudiencesToAdd: string[];
+  excludedAudiencesToAdd: string[];  // id|name format
   excludedAudiencesMode: AudienceMode;
   // placements
   placementType: 'advantage_plus' | 'manual';
@@ -328,7 +328,8 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
           patch.targetedAudiences = fields.targetedAudiencesToAdd.join('\n');
         } else {
           const existing = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
-          const newAuds = fields.targetedAudiencesToAdd.filter(a => !existing.includes(a));
+          const existingIds = existing.map(a => a.split('|')[0]);
+          const newAuds = fields.targetedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
           patch.targetedAudiences = [...existing, ...newAuds].join('\n');
         }
       }
@@ -338,7 +339,8 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
           patch.excludedAudiences = fields.excludedAudiencesToAdd.join('\n');
         } else {
           const existing = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
-          const newAuds = fields.excludedAudiencesToAdd.filter(a => !existing.includes(a));
+          const existingIds = existing.map(a => a.split('|')[0]);
+          const newAuds = fields.excludedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
           patch.excludedAudiences = [...existing, ...newAuds].join('\n');
         }
       }
@@ -954,12 +956,12 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             {customAudiences.length > 0 && (
               <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
                 {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                  const alreadyAdded = fields.targetedAudiencesToAdd.includes(aud.name);
+                  const alreadyAdded = fields.targetedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
                   return (
                     <button
                       key={aud.id}
                       onClick={() => {
-                        if (!alreadyAdded) setField('targetedAudiencesToAdd', [...fields.targetedAudiencesToAdd, aud.name]);
+                        if (!alreadyAdded) setField('targetedAudiencesToAdd', [...fields.targetedAudiencesToAdd, `${aud.id}|${aud.name}`]);
                       }}
                       disabled={alreadyAdded}
                       className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
@@ -980,7 +982,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
               <div className="flex flex-wrap gap-1 mt-1">
                 {fields.targetedAudiencesToAdd.map((aud, i) => (
                   <span key={i} className="flex items-center gap-1 text-[10px] bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full">
-                    {aud}
+                    {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
                     <button onClick={() => setField('targetedAudiencesToAdd', fields.targetedAudiencesToAdd.filter((_, li) => li !== i))}>
                       <X size={9} />
                     </button>
@@ -1007,12 +1009,12 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             {customAudiences.length > 0 && (
               <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
                 {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                  const alreadyAdded = fields.excludedAudiencesToAdd.includes(aud.name);
+                  const alreadyAdded = fields.excludedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
                   return (
                     <button
                       key={aud.id}
                       onClick={() => {
-                        if (!alreadyAdded) setField('excludedAudiencesToAdd', [...fields.excludedAudiencesToAdd, aud.name]);
+                        if (!alreadyAdded) setField('excludedAudiencesToAdd', [...fields.excludedAudiencesToAdd, `${aud.id}|${aud.name}`]);
                       }}
                       disabled={alreadyAdded}
                       className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
@@ -1033,7 +1035,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
               <div className="flex flex-wrap gap-1 mt-1">
                 {fields.excludedAudiencesToAdd.map((aud, i) => (
                   <span key={i} className="flex items-center gap-1 text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
-                    {aud}
+                    {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
                     <button onClick={() => setField('excludedAudiencesToAdd', fields.excludedAudiencesToAdd.filter((_, li) => li !== i))}>
                       <X size={9} />
                     </button>

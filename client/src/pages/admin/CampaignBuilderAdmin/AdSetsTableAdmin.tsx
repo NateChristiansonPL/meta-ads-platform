@@ -36,6 +36,7 @@ import { BuildSettings } from './campaignStoreAdmin';
 import { ReachEstimatePanel, AudienceOverlapPanel } from './BuilderReachOverlapPanelAdmin';
 import { buildBuilderTargetingSpec } from './builderMetaMappingAdmin';
 import { BulkEditPanel } from './BulkEditPanelAdmin';
+import AudienceBuilderModal from './AudienceBuilderModalAdmin';
 
 interface Props {
   rows: AdSetRow[];
@@ -812,6 +813,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   // ── Pre-Launch QA rail ─────────────────────────────────────────────────────
   const [qaOpen, setQaOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [audienceBuilderOpen, setAudienceBuilderOpen] = useState(false);
 
   // Close panels on outside click
   useEffect(() => {
@@ -969,6 +971,14 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
               <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{selectedRows.size}</span>
             </button>
           )}
+          {/* Build Custom/LAL Audience button */}
+          <button
+            onClick={() => setAudienceBuilderOpen(true)}
+            title="Build a Custom or Lookalike Audience"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border bg-surface-2/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/30">
+            <Users size={12} />
+            Build Audience
+          </button>
           {/* Pre-Launch QA toggle */}
           <button
             onClick={() => setQaOpen(o => !o)}
@@ -1994,6 +2004,20 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
         )}
       </div>
       </div>{/* end main content */}
+
+      {/* ── Audience Builder Modal ─────────────────────────────────────────── */}
+      {audienceBuilderOpen && settings && (
+        <AudienceBuilderModal
+          accessToken={settings.accessToken}
+          adAccountId={settings.adAccountId}
+          pixelId={settings.pixelId}
+          facebookPageId={settings.facebookPageId}
+          onCreated={(aud) => {
+            toast.success(`Audience "${aud.name}" created and ready to use (ID: ${aud.id})`);
+          }}
+          onClose={() => setAudienceBuilderOpen(false)}
+        />
+      )}
 
       {/* ── Pre-Launch QA Rail (flex push, not overlay) ────────────────────── */}
       {qaOpen ? (

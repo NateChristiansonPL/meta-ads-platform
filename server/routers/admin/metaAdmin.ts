@@ -2532,6 +2532,336 @@ export const metaAdminRouter = router({
       return { overlapResults, pairList };
     }),
 
+  // ── Audience Builder Source Data ─────────────────────────────────────────────
+  /**
+   * Get Facebook Pages accessible by the access token (for lead form, events, IG profile sources).
+   */
+  getAccessiblePages: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken } = input;
+      try {
+        const data = await metaGet('/me/accounts', { fields: 'id,name,picture', limit: '200' }, accessToken);
+        const pages = (data.data || []).map((p: { id: string; name: string; picture?: { data?: { url?: string } } }) => ({
+          id: p.id,
+          name: p.name,
+          pictureUrl: p.picture?.data?.url ?? null,
+        }));
+        return { pages };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch pages: ${msg}` });
+      }
+    }),
+
+  /**
+   * Get Instagram accounts connected to a Facebook Page (for IG Profile audience source).
+   */
+  getPageInstagramAccounts: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, pageId } = input;
+      try {
+        const data = await metaGet(`/${pageId}/instagram_accounts`, { fields: 'id,username,profile_pic' }, accessToken);
+        const accounts = (data.data || []).map((a: { id: string; username: string; profile_pic?: string }) => ({
+          id: a.id,
+          username: a.username,
+          profilePic: a.profile_pic ?? null,
+        }));
+        return { accounts };
+      } catch {
+        return { accounts: [] };
+      }
+    }),
+
+  /**
+   * Get Facebook Events for a page (for event-based audience source).
+   */
+  getPageEvents: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, pageId } = input;
+      try {
+        const data = await metaGet(`/${pageId}/events`, { fields: 'id,name,start_time', limit: '100' }, accessToken);
+        const events = (data.data || []).map((e: { id: string; name: string; start_time?: string }) => ({
+          id: e.id,
+          name: e.name,
+          startTime: e.start_time ?? null,
+        }));
+        return { events };
+      } catch {
+        return { events: [] };
+      }
+    }),
+
+  /**
+   * Get Instant Experiences (Canvas ads) for a page.
+   */
+  getPageInstantExperiences: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, pageId } = input;
+      try {
+        const data = await metaGet(`/${pageId}/canvas_elements`, { fields: 'id,name', limit: '100' }, accessToken);
+        const experiences = (data.data || []).map((e: { id: string; name: string }) => ({
+          id: e.id,
+          name: e.name,
+        }));
+        return { experiences };
+      } catch {
+        return { experiences: [] };
+      }
+    }),
+
+  /**
+   * Get Facebook Shops / Catalogs for the ad account (for shopping audience source).
+   */
+  getAdAccountCatalogs: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      adAccountId: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, adAccountId } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+      try {
+        const data = await metaGet(`/${accountId}/product_catalogs`, { fields: 'id,name', limit: '100' }, accessToken);
+        const catalogs = (data.data || []).map((c: { id: string; name: string }) => ({
+          id: c.id,
+          name: c.name,
+        }));
+        return { catalogs };
+      } catch {
+        return { catalogs: [] };
+      }
+    }),
+
+  /**
+   * Create a Custom Audience via the Meta API.
+   * Supports: website (pixel), engagement (page/IG/video/lead form/instant experience/event/shopping), app activity, customer list.
+   */
+  createCustomAudience: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      adAccountId: z.string().min(1),
+      name: z.string().min(1),
+      description: z.string().optional(),
+      subtype: z.enum(['WEBSITE', 'ENGAGEMENT', 'APP', 'CUSTOM']),
+      retentionDays: z.number().int().min(1).max(365).default(30),
+      // Website (pixel) specific
+      pixelId: z.string().optional(),
+      pixelRule: z.string().optional(), // JSON string of inclusion rules
+      // Engagement specific
+      engagementType: z.enum(['PAGE', 'INSTAGRAM_PROFILE', 'VIDEO', 'LEAD_FORM', 'INSTANT_EXPERIENCE', 'EVENTS', 'SHOPPING']).optional(),
+      engagementAction: z.string().optional(), // e.g. PAGE_ENGAGED, INSTAGRAM_PROFILE_VISITED
+      engagementObjectId: z.string().optional(), // page ID, IG account ID, etc.
+      // App specific
+      appId: z.string().optional(),
+      appRule: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { accessToken, adAccountId, name, description, subtype, retentionDays } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+
+      let rule: Record<string, unknown> | undefined;
+      let customerFileSource: string | undefined;
+
+      if (subtype === 'WEBSITE' && input.pixelId) {
+        // Website custom audience rule
+        const pixelRule = input.pixelRule ? JSON.parse(input.pixelRule) : {
+          inclusions: {
+            operator: 'OR',
+            rules: [{
+              event_sources: [{ id: input.pixelId, type: 'pixel' }],
+              retention_seconds: retentionDays * 86400,
+              filter: { operator: 'AND', filters: [{ field: 'event', operator: 'eq', value: 'PageView' }] },
+            }],
+          },
+        };
+        rule = pixelRule;
+      } else if (subtype === 'ENGAGEMENT' && input.engagementType && input.engagementObjectId) {
+        // Engagement audience rule
+        const engagementSourceType = {
+          PAGE: 'page',
+          INSTAGRAM_PROFILE: 'ig_account',
+          VIDEO: 'video',
+          LEAD_FORM: 'lead_gen',
+          INSTANT_EXPERIENCE: 'canvas',
+          EVENTS: 'event',
+          SHOPPING: 'ig_shopping',
+        }[input.engagementType] || 'page';
+
+        rule = {
+          inclusions: {
+            operator: 'OR',
+            rules: [{
+              event_sources: [{ id: input.engagementObjectId, type: engagementSourceType }],
+              retention_seconds: retentionDays * 86400,
+              filter: { operator: 'AND', filters: [{ field: 'event', operator: 'eq', value: input.engagementAction || 'PAGE_ENGAGED' }] },
+            }],
+          },
+        };
+      } else if (subtype === 'CUSTOM') {
+        customerFileSource = 'USER_PROVIDED_ONLY';
+      }
+
+      const payload: Record<string, unknown> = {
+        name,
+        subtype,
+        retention_days: retentionDays,
+      };
+      if (description) payload.description = description;
+      if (rule) payload.rule = JSON.stringify(rule);
+      if (customerFileSource) payload.customer_file_source = customerFileSource;
+
+      try {
+        const data = await metaPost(`/${accountId}/customaudiences`, payload, accessToken);
+        return { audienceId: data.id, name };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to create custom audience: ${msg}` });
+      }
+    }),
+
+  /**
+   * Create a Lookalike Audience from a source custom audience.
+   */
+  createLookalikeAudience: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      adAccountId: z.string().min(1),
+      name: z.string().min(1),
+      originAudienceId: z.string().min(1),
+      country: z.string().min(2).max(2), // ISO 2-letter country code
+      ratio: z.number().min(0.01).max(0.20).default(0.01), // 1%-20% of country population
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { accessToken, adAccountId, name, originAudienceId, country, ratio, description } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+
+      const payload: Record<string, unknown> = {
+        name,
+        subtype: 'LOOKALIKE',
+        origin_audience_id: originAudienceId,
+        lookalike_spec: JSON.stringify({
+          type: 'similarity',
+          country,
+          ratio,
+        }),
+      };
+      if (description) payload.description = description;
+
+      try {
+        const data = await metaPost(`/${accountId}/customaudiences`, payload, accessToken);
+        return { audienceId: data.id, name };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to create lookalike audience: ${msg}` });
+      }
+    }),
+
+  /**
+   * Create a Lead Gen Form via the Meta API.
+   */
+  createLeadGenForm: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+      name: z.string().min(1),
+      formType: z.enum(['MORE_VOLUME', 'HIGHER_INTENT', 'RICH_CREATIVE']).default('MORE_VOLUME'),
+      privacyPolicyUrl: z.string().optional(),
+      privacyPolicyLinkText: z.string().optional(),
+      thankYouPage: z.object({
+        title: z.string().optional(),
+        body: z.string().optional(),
+        businessName: z.string().optional(),
+        websiteUrl: z.string().optional(),
+        ctaTitle: z.string().optional(),
+        ctaType: z.string().optional(),
+      }).optional(),
+      questions: z.array(z.object({
+        type: z.string(),
+        label: z.string().optional(),
+        key: z.string().optional(),
+        options: z.array(z.object({ value: z.string(), key: z.string().optional() })).optional(),
+      })),
+      contextCard: z.object({
+        title: z.string().optional(),
+        content: z.string().optional(),
+        style: z.enum(['LIST_STYLE', 'PARAGRAPH_STYLE']).optional(),
+        coverPhoto: z.string().optional(),
+      }).optional(),
+      locale: z.string().optional(),
+      trackingParameters: z.array(z.object({ key: z.string(), value: z.string() })).optional(),
+      followUpActionUrl: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { accessToken, pageId, name, formType, privacyPolicyUrl, privacyPolicyLinkText,
+        thankYouPage, questions, contextCard, locale, trackingParameters, followUpActionUrl } = input;
+
+      const payload: Record<string, unknown> = {
+        name,
+        form_type: formType,
+        questions: questions.map(q => {
+          const qObj: Record<string, unknown> = { type: q.type };
+          if (q.label) qObj.label = q.label;
+          if (q.key) qObj.key = q.key;
+          if (q.options) qObj.options = q.options;
+          return qObj;
+        }),
+      };
+
+      if (privacyPolicyUrl) {
+        payload.privacy_policy = { url: privacyPolicyUrl, link_text: privacyPolicyLinkText || 'Privacy Policy' };
+      }
+
+      if (thankYouPage) {
+        const tp: Record<string, unknown> = {};
+        if (thankYouPage.title) tp.title = thankYouPage.title;
+        if (thankYouPage.body) tp.body = thankYouPage.body;
+        if (thankYouPage.businessName) tp.business_name = thankYouPage.businessName;
+        if (thankYouPage.websiteUrl) tp.website_url = thankYouPage.websiteUrl;
+        if (thankYouPage.ctaTitle) tp.cta_title = thankYouPage.ctaTitle;
+        if (thankYouPage.ctaType) tp.cta_type = thankYouPage.ctaType;
+        payload.thank_you_page = tp;
+      }
+
+      if (contextCard) {
+        const cc: Record<string, unknown> = {};
+        if (contextCard.title) cc.title = contextCard.title;
+        if (contextCard.content) cc.content = contextCard.content;
+        if (contextCard.style) cc.style = contextCard.style;
+        if (contextCard.coverPhoto) cc.cover_photo = contextCard.coverPhoto;
+        payload.context_card = cc;
+      }
+
+      if (locale) payload.locale = locale;
+      if (trackingParameters && trackingParameters.length > 0) {
+        payload.tracking_parameters = Object.fromEntries(trackingParameters.map(p => [p.key, p.value]));
+      }
+      if (followUpActionUrl) payload.follow_up_action_url = followUpActionUrl;
+
+      try {
+        const data = await metaPost(`/${pageId}/leadgen_forms`, payload, accessToken);
+        return { formId: data.id, name };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to create lead gen form: ${msg}` });
+      }
+    }),
+
   // ── Lead Gen Forms ────────────────────────────────────────────────────────────
   getLeadGenForms: publicProcedure
     .input(z.object({
