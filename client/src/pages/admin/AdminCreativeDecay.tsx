@@ -44,6 +44,7 @@ type ResultRow = {
   firstDetectedAt?: { emerging: string | null; possible: string | null; probable: string | null };
   trendData?: TrendPoint[];
   optimizationGoal?: string | null;
+  convEventLabel?: string | null;
 };
 
 type CampaignStatusFilter = "active" | "active_30d" | "inactive" | "all";
@@ -771,6 +772,40 @@ function ResultRows({ rows }: { rows: ResultRow[] }) {
               <tr key={`trend-${row.id}`} style={{ borderTop: "none" }}>
                 <td colSpan={12} style={{ background: "rgba(0,0,0,0.25)", padding: "0 16px 12px 16px" }}>
                   <FatigueTrendChart data={row.trendData!} adName={row.creativeName} />
+                  {/* Evidence strip */}
+                  <div className="mt-3 flex flex-wrap gap-3 pb-1">
+                    {row.convEventLabel && (
+                      <EvidencePill
+                        label="Scored On"
+                        value={row.convEventLabel}
+                        highlight
+                      />
+                    )}
+                    {row.optimizationGoal && (
+                      <EvidencePill
+                        label="Opt. Goal"
+                        value={row.optimizationGoal.replace(/_/g, " ").toLowerCase().replace(/w/g, (c) => c.toUpperCase())}
+                      />
+                    )}
+                    {row.evidence?.avgCtr != null && (
+                      <EvidencePill label="Avg CTR" value={(row.evidence.avgCtr * 100).toFixed(2) + "%"} />
+                    )}
+                    {row.evidence?.avgFrequency != null && (
+                      <EvidencePill label="Avg Freq" value={row.evidence.avgFrequency.toFixed(2)} />
+                    )}
+                    {row.evidence?.reliability != null && (
+                      <EvidencePill label="Reliability" value={(row.evidence.reliability * 100).toFixed(0) + "%"} />
+                    )}
+                    {row.evidence?.totalEvents != null && (
+                      <EvidencePill label="Total Events" value={row.evidence.totalEvents.toLocaleString()} />
+                    )}
+                    {row.firstDetectedAt?.probable && (
+                      <EvidencePill label="Probable Since" value={new Date(row.firstDetectedAt.probable).toLocaleDateString()} />
+                    )}
+                    {row.firstDetectedAt?.possible && !row.firstDetectedAt?.probable && (
+                      <EvidencePill label="Possible Since" value={new Date(row.firstDetectedAt.possible).toLocaleDateString()} />
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
@@ -887,3 +922,30 @@ const secondaryButton: React.CSSProperties = {
   color: "rgba(255,255,255,0.7)",
   border: "1px solid rgba(255,255,255,0.1)",
 };
+
+function EvidencePill({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+      style={{
+        background: highlight ? "rgba(26,108,246,0.12)" : "rgba(255,255,255,0.06)",
+        border: highlight ? "1px solid rgba(26,108,246,0.3)" : "1px solid rgba(255,255,255,0.08)",
+      }}
+    >
+      <span className="text-[10px] font-bold uppercase" style={{ color: "rgba(255,255,255,0.35)", letterSpacing: "0.07em" }}>
+        {label}
+      </span>
+      <span className="text-[11px] font-semibold" style={{ color: highlight ? "#7CB9FF" : "#FAFAFA" }}>
+        {value}
+      </span>
+    </div>
+  );
+}

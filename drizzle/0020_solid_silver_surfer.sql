@@ -1,0 +1,1 @@
+ALTER TABLE `creative_fatigue_results` ADD `conv_event_label` varchar(256);

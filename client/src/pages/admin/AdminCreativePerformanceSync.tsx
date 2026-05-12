@@ -682,6 +682,29 @@ export default function AdminCreativePerformanceSync() {
                   </div>
                 </div>
               )}
+              {goalStats.stalestFetchedAt && (
+                <div className="flex items-center justify-between pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase" style={{ color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>Stalest Record</p>
+                      <p className="text-xs mt-0.5" style={{ color: goalStats.stalestFetchedAt && (Date.now() - new Date(goalStats.stalestFetchedAt).getTime()) > 3 * 24 * 60 * 60 * 1000 ? "#F7901E" : "rgba(255,255,255,0.55)" }}>
+                        {new Date(goalStats.stalestFetchedAt).toLocaleString()}
+                        {(Date.now() - new Date(goalStats.stalestFetchedAt).getTime()) > 3 * 24 * 60 * 60 * 1000 && (
+                          <span className="ml-2 text-[10px] font-bold" style={{ color: "#F7901E" }}>stale &gt;3d</span>
+                        )}
+                      </p>
+                    </div>
+                    {goalStats.freshestFetchedAt && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase" style={{ color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em" }}>Most Recent</p>
+                        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+                          {new Date(goalStats.freshestFetchedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         )}

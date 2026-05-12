@@ -249,6 +249,9 @@ export const creativeFatigueResults = mysqlTable("creative_fatigue_results", {
   campaignIds: json("campaign_ids").$type<string[]>().default([]),
   campaignName: text("campaign_name"),
   optimizationGoal: varchar("optimization_goal", { length: 128 }),
+  // Human-readable label for the metric the analysis scored this creative on
+  // e.g. "Offsite Conversions", "Link Clicks", "Custom: 123456789"
+  convEventLabel: varchar("conv_event_label", { length: 256 }),
   mediaType: varchar("media_type", { length: 32 }),
   eligible: boolean("eligible").default(false).notNull(),
   totalSpend: decimal("total_spend", { precision: 14, scale: 4 }),

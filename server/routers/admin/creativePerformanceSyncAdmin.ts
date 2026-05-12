@@ -750,7 +750,7 @@ export const creativePerformanceSyncAdminRouter = router({
     .input(z.object({ accountId: z.string() }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) return { total: 0, customConvResolved: 0, standardEvent: 0, noGoal: 0, byGoal: [] };
+      if (!db) return { total: 0, customConvResolved: 0, standardEvent: 0, noGoal: 0, byGoal: [], stalestFetchedAt: null, freshestFetchedAt: null };
       const cleanId = input?.accountId?.replace(/^act_/, "") ?? null;
       const rows = await db
         .select()
@@ -768,7 +768,19 @@ export const creativePerformanceSyncAdminRouter = router({
       const byGoal = Array.from(goalCounts.entries())
         .map(([goal, count]) => ({ goal, count }))
         .sort((a, b) => b.count - a.count);
-      return { total, customConvResolved, standardEvent, noGoal, byGoal };
+      // Stalest record — the one that was synced the longest ago
+      const fetchedDates = rows
+        .map((r) => r.lastFetchedAt)
+        .filter(Boolean) as Date[];
+      const stalestFetchedAt =
+        fetchedDates.length > 0
+          ? new Date(Math.min(...fetchedDates.map((d) => d.getTime()))).toISOString()
+          : null;
+      const freshestFetchedAt =
+        fetchedDates.length > 0
+          ? new Date(Math.max(...fetchedDates.map((d) => d.getTime()))).toISOString()
+          : null;
+      return { total, customConvResolved, standardEvent, noGoal, byGoal, stalestFetchedAt, freshestFetchedAt };
     }),
     saveSyncSchedulerConfig: adminProcedure
     .input(

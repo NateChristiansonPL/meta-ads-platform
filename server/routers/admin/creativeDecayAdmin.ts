@@ -354,6 +354,28 @@ async function analyzeStoredPerformance(input: {
       badgeEwma: ewmaDrop > 0.05,
       badgeFrequency: avgFrequency > 3,
       notificationLevel: label.level,
+      // Derive the human-readable label for the metric used in scoring
+      convEventLabel: (() => {
+        const goal = group.find((r) => r.optimizationGoal)?.optimizationGoal ?? null;
+        if (!goal) return null;
+        if (goal === 'OFFSITE_CONVERSIONS') {
+          const convEvent = group.find((r) => r.convEvent)?.convEvent ?? null;
+          if (convEvent) return convEvent;
+          return 'Offsite Conversions';
+        }
+        const GOAL_LABELS: Record<string, string> = {
+          LEAD_GENERATION: 'Lead Generation',
+          LINK_CLICKS: 'Link Clicks',
+          LANDING_PAGE_VIEWS: 'Landing Page Views',
+          THRUPLAY: 'ThruPlay',
+          VIDEO_VIEWS: 'Video Views',
+          PAGE_LIKES: 'Page Likes',
+          POST_ENGAGEMENT: 'Post Engagement',
+          REACH: 'Reach',
+          IMPRESSIONS: 'Impressions',
+        };
+        return GOAL_LABELS[goal] ?? goal.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+      })(),
     };
     await db
       .insert(creativeFatigueResults)
@@ -578,6 +600,7 @@ function mapResult(
     fatigueStatus: row.fatigueStatus ?? "HEALTHY",
     fatigueScore: score,
     optimizationGoal: row.optimizationGoal ?? null,
+    convEventLabel: row.convEventLabel ?? null,
     evidence: {
       avgCtr: num(row.avgCtr),
       avgFrequency: num(row.avgFrequency),
