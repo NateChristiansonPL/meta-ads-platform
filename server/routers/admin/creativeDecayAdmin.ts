@@ -17,7 +17,7 @@
 
 import { TRPCError } from "@trpc/server";
 import crypto from "node:crypto";
-import { and, between, desc, eq, inArray } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNotNull, or, gt } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, router } from "../../_core/trpc";
 import { getDb } from "../../db";
@@ -28,6 +28,8 @@ import {
   metaSyncSchedule,
   firstFatigueDetected,
   decayNotificationLog,
+  decayReports,
+  users,
 } from "../../../drizzle/schema";
 import { notifyOwner } from "../../_core/notification";
 import { syncMetaPerformanceData } from "./creativePerformanceSyncAdmin";
@@ -614,9 +616,20 @@ function mapResult(
 
 // ── Scheduler config helper ───────────────────────────────────────────────────
 
-async function getAnalysisSchedulerConfig() {
+async function getAnalysisSchedulerConfig(accountId?: string, userId?: number) {
   const db = await getDb();
   if (!db) return null;
+  if (accountId && userId) {
+    // User+account scoped lookup
+    const cleanId = accountId.replace(/^act_/, "");
+    const rows = await db
+      .select()
+      .from(metaSyncSchedule)
+      .where(and(eq(metaSyncSchedule.userId, userId), eq(metaSyncSchedule.accountId, cleanId)))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+  // Legacy global row (id=1) — used by triggerDecayAnalysis when no userId
   const rows = await db
     .select()
     .from(metaSyncSchedule)
@@ -641,8 +654,22 @@ async function getAnalysisSchedulerConfig() {
  *   - triggerDecayAnalysis procedure (manual on-demand trigger)
  *   - startCreativeDecayCron() (automated daily run)
  */
+async function sendSlackNotification(webhookUrl: string, message: string) {
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: message }),
+    });
+    if (!res.ok) console.warn("[Slack] Webhook returned", res.status);
+  } catch (e) {
+    console.warn("[Slack] Failed to send notification:", e);
+  }
+}
+
 async function runDecayChain(config: {
   accountId: string;
+  accountName?: string;
   campaignIds: string[];
   dateFrom: string;
   dateTo: string;
@@ -653,6 +680,8 @@ async function runDecayChain(config: {
   vaultTokenId?: number | null;
   syncPreset?: string | null;
   syncRollingDays?: number | null;
+  userId?: number | null;
+  alwaysSendReport?: boolean;
 }) {
   const syncWarnings: string[] = [];
 
@@ -981,24 +1010,149 @@ export const creativeDecayAdminRouter = router({
         notifyPossible: z.boolean(),
         notifyProbable: z.boolean(),
         onlyLiveAds: z.boolean(),
+        alwaysSendReport: z.boolean().optional(),
         accountId: z.string(),
         campaignIds: z.string().nullable(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db)
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Database not configured.",
-        });
-      // Preserve sync fields when updating analysis-only config
-      await db
-        .insert(metaSyncSchedule)
-        .values({ id: 1, ...input })
-        .onDuplicateKeyUpdate({ set: input });
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Database not configured." });
+      const userId = ctx.user.id;
+      const cleanId = cleanAccountId(input.accountId);
+      // Find existing user+account row or create new
+      const existing = await db
+        .select({ id: metaSyncSchedule.id })
+        .from(metaSyncSchedule)
+        .where(and(eq(metaSyncSchedule.userId, userId), eq(metaSyncSchedule.accountId, cleanId)))
+        .limit(1);
+      const payload = { ...input, userId, accountId: cleanId };
+      if (existing.length > 0) {
+        await db.update(metaSyncSchedule).set(payload).where(eq(metaSyncSchedule.id, existing[0].id));
+      } else {
+        await db.insert(metaSyncSchedule).values(payload);
+      }
       return { ok: true };
     }),
+
+  getAnalysisSchedulerConfigForAccount: adminProcedure
+    .input(z.object({ accountId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const cleanId = cleanAccountId(input.accountId);
+      const rows = await db
+        .select()
+        .from(metaSyncSchedule)
+        .where(and(eq(metaSyncSchedule.userId, ctx.user.id), eq(metaSyncSchedule.accountId, cleanId)))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
+  getUserDecaySchedules: adminProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { schedules: [] };
+    const rows = await db
+      .select()
+      .from(metaSyncSchedule)
+      .where(eq(metaSyncSchedule.userId, ctx.user.id))
+      .orderBy(desc(metaSyncSchedule.id));
+    return { schedules: rows };
+  }),
+
+  saveDecayReport: adminProcedure
+    .input(z.object({
+      accountId: z.string(),
+      accountName: z.string().optional(),
+      campaignIds: z.string().optional(),
+      dateFrom: z.string(),
+      dateTo: z.string(),
+      reportType: z.enum(["manual", "auto"]),
+      signalCount: z.number().int(),
+      probableCount: z.number().int(),
+      possibleCount: z.number().int(),
+      emergingCount: z.number().int(),
+      reportJson: z.string(),
+      label: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Database not configured." });
+      const result = await db.insert(decayReports).values({
+        userId: ctx.user.id,
+        accountId: cleanAccountId(input.accountId),
+        accountName: input.accountName ?? cleanAccountId(input.accountId),
+        campaignIds: input.campaignIds ?? "",
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        reportType: input.reportType,
+        signalCount: input.signalCount,
+        probableCount: input.probableCount,
+        possibleCount: input.possibleCount,
+        emergingCount: input.emergingCount,
+        reportJson: input.reportJson,
+        label: input.label,
+      });
+      return { ok: true, id: Number(result[0].insertId) };
+    }),
+
+  getDecayReports: adminProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }).optional())
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { reports: [] };
+      const rows = await db
+        .select({
+          id: decayReports.id,
+          accountId: decayReports.accountId,
+          accountName: decayReports.accountName,
+          campaignIds: decayReports.campaignIds,
+          dateFrom: decayReports.dateFrom,
+          dateTo: decayReports.dateTo,
+          reportType: decayReports.reportType,
+          signalCount: decayReports.signalCount,
+          probableCount: decayReports.probableCount,
+          possibleCount: decayReports.possibleCount,
+          emergingCount: decayReports.emergingCount,
+          label: decayReports.label,
+          createdAt: decayReports.createdAt,
+        })
+        .from(decayReports)
+        .where(eq(decayReports.userId, ctx.user.id))
+        .orderBy(desc(decayReports.createdAt))
+        .limit(input?.limit ?? 50);
+      return { reports: rows };
+    }),
+
+  getDecayReportById: adminProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db
+        .select()
+        .from(decayReports)
+        .where(and(eq(decayReports.id, input.id), eq(decayReports.userId, ctx.user.id)))
+        .limit(1);
+      return rows[0] ?? null;
+    }),
+
+  saveSlackWebhook: adminProcedure
+    .input(z.object({ webhookUrl: z.string().url().or(z.literal("")) }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Database not configured." });
+      await db.update(users).set({ slackWebhookUrl: input.webhookUrl || null }).where(eq(users.id, ctx.user.id));
+      return { ok: true };
+    }),
+
+  getSlackWebhook: adminProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { webhookUrl: null };
+    const rows = await db.select({ slackWebhookUrl: users.slackWebhookUrl }).from(users).where(eq(users.id, ctx.user.id)).limit(1);
+    return { webhookUrl: rows[0]?.slackWebhookUrl ?? null };
+  }),
 });
 
 // ── Cron scheduler (analysis only) ───────────────────────────────────────────

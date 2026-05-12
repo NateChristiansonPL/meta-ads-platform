@@ -1,4 +1,6 @@
-/**
+import pathlib
+
+tsx = r"""/**
  * AdminCreativeDecay — redesigned
  * Four sections:
  *   1. Manual Analysis — run + optional save
@@ -114,7 +116,7 @@ function AnalysisTab() {
 
   const runMutation = trpc.adminCreativeDecay.runDecayAnalysis.useMutation({
     onSuccess: (data) => {
-      setResults(data.records as unknown as ResultRow[]);
+      setResults(data.records as ResultRow[]);
       setAnalysisRunId(data.analysisRunId ?? null);
       toast.success(`Analysis complete: ${data.records.length} creatives evaluated.`);
     },
@@ -597,7 +599,7 @@ function NotificationsTab() {
                       <Td className="max-w-xs truncate">{n.adName}</Td>
                       <Td className="max-w-xs truncate">{n.campaignName ?? "\u2014"}</Td>
                       <Td className="max-w-xs truncate">{n.adsetName ?? "\u2014"}</Td>
-                      <Td><FatiguePill level={n.signalLevel} /></Td>
+                      <Td><FatiguePill level={n.fatigueLevel} /></Td>
                       <Td>{n.fatigueScore != null ? n.fatigueScore.toFixed(2) : "\u2014"}</Td>
                       <Td>
                         <div className="flex gap-1">
@@ -715,7 +717,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 function EmptyTxt({ children }: { children: React.ReactNode }) {
   return <div className="px-3 py-4 text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{children}</div>;
 }
-function Th({ children }: { children?: React.ReactNode }) {
+function Th({ children }: { children: React.ReactNode }) {
   return <th className="text-left font-bold px-4 py-3 whitespace-nowrap">{children}</th>;
 }
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -757,3 +759,7 @@ function EvidencePill({ label, value, highlight }: { label: string; value: strin
 }
 const inputStyle: React.CSSProperties = { background: "rgba(10,10,40,0.72)", border: "1px solid rgba(255,255,255,0.1)", color: "#FAFAFA" };
 const secondaryBtn: React.CSSProperties = { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.1)" };
+"""
+
+pathlib.Path('/home/ubuntu/meta-ads-platform/client/src/pages/admin/AdminCreativeDecay.tsx').write_text(tsx, encoding='utf-8')
+print('Written OK, lines:', len(tsx.splitlines()))

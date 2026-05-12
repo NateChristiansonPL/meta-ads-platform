@@ -728,7 +728,9 @@ export const creativePerformanceSyncAdminRouter = router({
       return { history };
     }),
 
-  getSchedulerConfig: adminProcedure.query(async () => {
+  getSchedulerConfig: adminProcedure
+    .input(z.object({ accountId: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
     const config = await getSyncSchedulerConfig();
     return (
       config ?? {
@@ -782,7 +784,7 @@ export const creativePerformanceSyncAdminRouter = router({
           : null;
       return { total, customConvResolved, standardEvent, noGoal, byGoal, stalestFetchedAt, freshestFetchedAt };
     }),
-    saveSyncSchedulerConfig: adminProcedure
+  saveSyncSchedulerConfig: adminProcedure
     .input(
       z.object({
         syncEnabled: z.boolean(),

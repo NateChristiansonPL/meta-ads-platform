@@ -43,6 +43,8 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  /** Slack incoming webhook URL for creative decay fatigue notifications. Per-user, optional. */
+  slackWebhookUrl: text("slack_webhook_url"),
 });
 
 export type User = typeof users.$inferSelect;
@@ -75,7 +77,9 @@ export type InsertTokenVaultEntry = typeof tokenVault.$inferInsert;
 // fact table and writes deterministic outputs into creativeFatigueResults.
 
 export const metaSyncSchedule = mysqlTable("meta_sync_schedule", {
-  id: int("id").primaryKey().default(1),
+  id: int("id").autoincrement().primaryKey(),
+  /** The user who owns this schedule. NULL = legacy global row (id=1). */
+  userId: int("user_id"),
   // Sync scheduler
   syncEnabled: boolean("sync_enabled").default(false).notNull(),
   syncUtcHour: int("sync_utc_hour").default(6).notNull(),
@@ -95,6 +99,8 @@ export const metaSyncSchedule = mysqlTable("meta_sync_schedule", {
   notifyProbable: boolean("notify_probable").default(true).notNull(),
   // Filters
   onlyLiveAds: boolean("only_live_ads").default(false).notNull(),
+  // Whether to always save a report (even when no signals found)
+  alwaysSendReport: boolean("always_send_report").default(false).notNull(),
   // Notification owner — the admin user who last saved the analysis scheduler config
   notifyUserId: int("notify_user_id"),
   // Legacy fields kept for compatibility
@@ -469,6 +475,10 @@ export const decayNotificationLog = mysqlTable("decay_notification_log", {
   notifyUserId: int("notify_user_id"),
   dateFrom: varchar("date_from", { length: 16 }),
   dateTo: varchar("date_to", { length: 16 }),
+  campaignName: text("campaign_name"),
+  adsetName: text("adset_name"),
+  notifiedViaApp: boolean("notified_via_app").default(false).notNull(),
+  notifiedViaSlack: boolean("notified_via_slack").default(false).notNull(),
 }, (table) => ({
   accountIdx: index("dnl_account_idx").on(table.accountId),
   notifiedAtIdx: index("dnl_notified_at_idx").on(table.notifiedAt),
@@ -505,3 +515,47 @@ export const adsetGoals = mysqlTable("adset_goals", {
 
 export type AdsetGoal = typeof adsetGoals.$inferSelect;
 export type InsertAdsetGoal = typeof adsetGoals.$inferInsert;
+
+// ── Decay Reports ─────────────────────────────────────────────────────────────
+// Persists the output of every creative decay analysis run so users can
+// retrieve past reports at any time without re-running the analysis.
+// Manual reports are saved explicitly by the user; automated reports are saved
+// automatically when the cron fires (regardless of whether fatigue was detected
+// when alwaysSendReport is true, or only when signals are found otherwise).
+export const decayReports = mysqlTable("decay_reports", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  /** The user who owns this report. */
+  userId: int("user_id").notNull(),
+  /** Ad account the analysis was run against. */
+  accountId: varchar("account_id", { length: 64 }).notNull(),
+  /** Human-readable account name (snapshot at run time). */
+  accountName: text("account_name"),
+  /** Comma-separated campaign IDs included in the analysis (empty = all). */
+  campaignIds: text("campaign_ids"),
+  /** ISO date string for the start of the analysis window. */
+  dateFrom: varchar("date_from", { length: 16 }).notNull(),
+  /** ISO date string for the end of the analysis window. */
+  dateTo: varchar("date_to", { length: 16 }).notNull(),
+  /** Whether this was a manual save or an automated cron run. */
+  reportType: mysqlEnum("report_type", ["manual", "auto"]).notNull(),
+  /** Total number of fatigue signals detected (emerging + possible + probable). */
+  signalCount: int("signal_count").default(0).notNull(),
+  /** Number of probable fatigue signals. */
+  probableCount: int("probable_count").default(0).notNull(),
+  /** Number of possible fatigue signals. */
+  possibleCount: int("possible_count").default(0).notNull(),
+  /** Number of emerging fatigue signals. */
+  emergingCount: int("emerging_count").default(0).notNull(),
+  /** Full serialized analysis output (array of ResultRow objects). */
+  reportJson: mediumtext("report_json").notNull(),
+  /** Optional user-supplied label for manual saves. */
+  label: varchar("label", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("dr_user_idx").on(table.userId),
+  userAccountIdx: index("dr_user_account_idx").on(table.userId, table.accountId),
+  createdAtIdx: index("dr_created_at_idx").on(table.createdAt),
+}));
+
+export type DecayReport = typeof decayReports.$inferSelect;
+export type InsertDecayReport = typeof decayReports.$inferInsert;

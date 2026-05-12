@@ -1,4 +1,6 @@
-/**
+import pathlib
+
+tsx = r"""/**
  * AdminCreativePerformanceSync — redesigned
  * Combines manual pull + automated scheduler + sync history in one clean page.
  */
@@ -374,7 +376,7 @@ export default function AdminCreativePerformanceSync() {
               )}
               <div className="flex justify-end">
                 <button
-                  onClick={() => saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter })}
+                  onClick={() => saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null })}
                   disabled={saveScheduler.isPending}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40"
                   style={{ background: "#1A6CF6", color: "#fff" }}
@@ -500,3 +502,7 @@ function StatusPill({ status }: { status: string }) {
 }
 const inputStyle: React.CSSProperties = { background: "rgba(10,10,40,0.72)", border: "1px solid rgba(255,255,255,0.1)", color: "#FAFAFA" };
 const secondaryBtn: React.CSSProperties = { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.1)" };
+"""
+
+pathlib.Path('/home/ubuntu/meta-ads-platform/client/src/pages/admin/AdminCreativePerformanceSync.tsx').write_text(tsx, encoding='utf-8')
+print('Written OK, lines:', len(tsx.splitlines()))
