@@ -577,6 +577,7 @@ function mapResult(
       row.earlyCpe === null ? null : num(row.earlyCpe),
     fatigueStatus: row.fatigueStatus ?? "HEALTHY",
     fatigueScore: score,
+    optimizationGoal: row.optimizationGoal ?? null,
     evidence: {
       avgCtr: num(row.avgCtr),
       avgFrequency: num(row.avgFrequency),

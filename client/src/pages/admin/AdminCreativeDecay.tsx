@@ -15,7 +15,7 @@ import { trpc } from "@/lib/trpc";
 import { format, subDays } from "date-fns";
 import {
   AlertTriangle, Bell, BellOff, CheckCircle2, ChevronDown,
-  Eye, Filter, LineChart, Loader2, RefreshCw, Search, Settings2, Shield, X, Zap,
+  Eye, Filter, LineChart, Loader2, Play, RefreshCw, Search, Settings2, Shield, X, Zap,
 } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -43,6 +43,7 @@ type ResultRow = {
   evidence?: { avgCtr?: number; avgFrequency?: number; reliability?: number; totalEvents?: number };
   firstDetectedAt?: { emerging: string | null; possible: string | null; probable: string | null };
   trendData?: TrendPoint[];
+  optimizationGoal?: string | null;
 };
 
 type CampaignStatusFilter = "active" | "active_30d" | "inactive" | "all";
@@ -179,6 +180,19 @@ export default function AdminCreativeDecay() {
     onError: (e: { message: string }) => toast.error(e.message || "Analysis failed."),
   });
 
+  // Run Now (triggerDecayAnalysis) — uses scheduler config account/campaigns
+  const [skipSync, setSkipSync] = useState(false);
+  const [runNowOpen, setRunNowOpen] = useState(false);
+  const triggerMutation = trpc.adminCreativeDecay.triggerDecayAnalysis.useMutation({
+    onSuccess: (data) => {
+      utils.adminCreativeDecay.getLatestResults.invalidate();
+      refetchNotifs();
+      setRunNowOpen(false);
+      toast.success(`Chain complete: ${data.recordCount} creative group${data.recordCount === 1 ? "" : "s"} analyzed.${data.syncWarnings?.length ? ` (${data.syncWarnings.length} sync warning${data.syncWarnings.length === 1 ? "" : "s"})` : ""}`);
+    },
+    onError: (e: { message: string }) => toast.error(e.message || "Trigger failed."),
+  });
+  const canTrigger = !!schedulerConfig?.accountId && !triggerMutation.isPending;
   // Filtered data
   const filteredAccounts = useMemo(() => {
     const q = accountSearch.toLowerCase();
@@ -226,6 +240,16 @@ export default function AdminCreativeDecay() {
             )}
           </button>
           <button
+            onClick={() => setRunNowOpen(true)}
+            disabled={!canTrigger}
+            title={!schedulerConfig?.accountId ? "Configure an account in the Scheduler first" : "Run full sync → analysis chain using scheduler config"}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "rgba(26,108,246,0.18)", color: "#1A6CF6", border: "1px solid rgba(26,108,246,0.3)" }}
+          >
+            {triggerMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+            Run Now
+          </button>
+          <button
             onClick={handleAnalysis}
             disabled={!canAnalyze}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -237,6 +261,46 @@ export default function AdminCreativeDecay() {
         </div>
       }
     >
+      {/* ── Run Now Modal ────────────────────────────────────────────────── */}
+      {runNowOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setRunNowOpen(false)}>
+          <div className="rounded-2xl p-5 w-full max-w-sm space-y-4" style={{ background: "#1A1A3A", border: "1px solid rgba(26,108,246,0.3)" }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Run Now</h3>
+              <button onClick={() => setRunNowOpen(false)} style={{ color: "rgba(255,255,255,0.4)" }}><X size={15} /></button>
+            </div>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Runs the full chain using your scheduler config account and campaigns.
+              {schedulerConfig?.accountId ? (
+                <span className="block mt-1" style={{ color: "rgba(255,255,255,0.38)" }}>Account: {schedulerConfig.accountId}</span>
+              ) : (
+                <span className="block mt-1 font-bold" style={{ color: "#F7901E" }}>No account configured — set one in the Scheduler panel first.</span>
+              )}
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => setSkipSync(!skipSync)}
+                className="relative w-9 h-5 rounded-full transition-colors"
+                style={{ background: skipSync ? "rgba(255,255,255,0.15)" : "rgba(26,108,246,0.6)" }}
+              >
+                <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ transform: skipSync ? "translateX(0)" : "translateX(16px)" }} />
+              </div>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.7)" }}>
+                {skipSync ? "Analysis only (skip sync)" : "Sync then analyze"}
+              </span>
+            </label>
+            <button
+              onClick={() => triggerMutation.mutate({ skipSync })}
+              disabled={!canTrigger}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "#1A6CF6", color: "#fff" }}
+            >
+              {triggerMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+              {triggerMutation.isPending ? (skipSync ? "Analyzing…" : "Syncing then analyzing…") : "Run"}
+            </button>
+          </div>
+        </div>
+      )}
       {/* ── View Config Modal ─────────────────────────────────────────────── */}
       {viewConfigOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setViewConfigOpen(false)}>
@@ -580,6 +644,7 @@ export default function AdminCreativeDecay() {
                       <Th> </Th>
                       <Th>Creative</Th>
                       <Th>Assessment</Th>
+                      <Th>Opt. Metric</Th>
                       <Th>Score</Th>
                       <Th>First Detected</Th>
                       <Th>Spend</Th>
@@ -686,6 +751,13 @@ function ResultRows({ rows }: { rows: ResultRow[] }) {
                 <div style={{ color: "rgba(255,255,255,0.34)" }}>{row.campaignName} · {row.adFormat}</div>
               </Td>
               <Td><StatusBadge row={row} /></Td>
+              <Td>
+                {row.optimizationGoal ? (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.55)" }}>
+                    {row.optimizationGoal.replace(/_/g, " ").toLowerCase().replace(/w/g, (c) => c.toUpperCase())}
+                  </span>
+                ) : <span style={{ color: "rgba(255,255,255,0.25)" }}>—</span>}
+              </Td>
               <Td>{row.fatigueScore.toFixed(1)}</Td>
               <Td><FirstDetectedCell row={row} /></Td>
               <Td>{money(row.totalSpend)}</Td>
@@ -697,7 +769,7 @@ function ResultRows({ rows }: { rows: ResultRow[] }) {
             </tr>
             {isExpanded && hasTrend && (
               <tr key={`trend-${row.id}`} style={{ borderTop: "none" }}>
-                <td colSpan={11} style={{ background: "rgba(0,0,0,0.25)", padding: "0 16px 12px 16px" }}>
+                <td colSpan={12} style={{ background: "rgba(0,0,0,0.25)", padding: "0 16px 12px 16px" }}>
                   <FatigueTrendChart data={row.trendData!} adName={row.creativeName} />
                 </td>
               </tr>
