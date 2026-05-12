@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import VideoSelectorModal, { type VideoItem } from './VideoSelectorModalAdmin';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -313,6 +314,8 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId, pix
 }) {
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [saved, setSaved] = useState(false);
+  const [showVideoSelector, setShowVideoSelector] = useState(false);
+  const [selectedVideos, setSelectedVideos] = useState<VideoItem[]>([]);
 
   // ── Live data queries (each only enabled when relevant) ──
   const { data: pixelEventsData, isLoading: pixelEventsLoading } = trpc.adminMeta.getPixelEvents.useQuery(
@@ -438,7 +441,7 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId, pix
       title: 'Video Custom Audience', sections: [
         { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. 75% Video Viewers' },
         { label: 'Engagement', type: 'select', field: 'engagement', options: ['People who watched at least 3 seconds', 'People who watched at least 10 seconds', 'People who watched 25% of your video', 'People who watched 50% of your video', 'People who watched 75% of your video', 'People who watched 95% of your video', 'People who watched ThruPlay'] },
-        { label: 'Videos', type: 'select', field: 'videos', dynamic: true },
+        { label: 'Videos', type: 'video_picker', field: 'videos' },
         { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
       ],
     },
@@ -625,6 +628,39 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId, pix
       );
     }
 
+    if (section.type === 'video_picker') {
+      const pickedVideos = selectedVideos;
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          {pickedVideos.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {pickedVideos.map(v => (
+                <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 5px', borderRadius: 20, background: T.purpleDim, border: `1px solid rgba(167,139,250,0.35)`, fontFamily: T.font, fontSize: 11, color: T.purple, maxWidth: 200 }}>
+                  {v.thumbnailUrl && <img src={v.thumbnailUrl} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || v.id}</span>
+                  <button onClick={() => {
+                    const next = pickedVideos.filter(x => x.id !== v.id);
+                    setSelectedVideos(next);
+                    set(next.map(x => x.id).join(','));
+                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textLo, fontSize: 13, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => setShowVideoSelector(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.borderMid}`, background: T.surface2, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, color: pickedVideos.length > 0 ? T.purple : T.textMid, transition: 'all 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.purple; (e.currentTarget as HTMLButtonElement).style.color = T.purple; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.borderMid; (e.currentTarget as HTMLButtonElement).style.color = pickedVideos.length > 0 ? T.purple : T.textMid; }}
+          >
+            <span style={{ fontSize: 14 }}>🎬</span>
+            {pickedVideos.length > 0 ? `${pickedVideos.length} video${pickedVideos.length > 1 ? 's' : ''} selected — Change` : 'Select Videos'}
+          </button>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -653,11 +689,25 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId, pix
           </Btn>
         </div>
       )}
+      {showVideoSelector && (
+        <VideoSelectorModal
+          accessToken={accessToken}
+          adAccountId={adAccountId}
+          facebookPageId={facebookPageId}
+          instagramUserId={instagramUserId}
+          initialSelected={selectedVideos.map(v => v.id)}
+          onConfirm={(videos) => {
+            setSelectedVideos(videos);
+            setForm(s => ({ ...s, videos: videos.map(v => v.id).join(',') }));
+            setShowVideoSelector(false);
+          }}
+          onClose={() => setShowVideoSelector(false)}
+        />
+      )}
     </div>
   );
 }
-
-// ─── Screen: LAL Builder ──────────────────────────────────────────────────────
+// ─── Screen: LAL Builder ───────────────────────────────────────────────────────
 const COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'Brazil', 'Japan', 'India', 'Mexico', 'Spain', 'Italy', 'Netherlands', 'South Korea', 'Singapore', 'United Arab Emirates', 'South Africa'];
 const COUNTRY_CODES: Record<string, string> = { 'United States': 'US', 'United Kingdom': 'GB', 'Canada': 'CA', 'Australia': 'AU', 'Germany': 'DE', 'France': 'FR', 'Brazil': 'BR', 'Japan': 'JP', 'India': 'IN', 'Mexico': 'MX', 'Spain': 'ES', 'Italy': 'IT', 'Netherlands': 'NL', 'South Korea': 'KR', 'Singapore': 'SG', 'United Arab Emirates': 'AE', 'South Africa': 'ZA' };
 
@@ -790,7 +840,7 @@ const QUICK_BUILD_OPTIONS: QBOption[] = [
     id: 'video_viewers', label: 'Video Viewers (75%+)', icon: '🎬', desc: 'People who watched 75% or more of your videos',
     fields: [
       { label: 'View Threshold', type: 'radio', field: 'threshold', options: [{ value: '25', label: '25% watched' }, { value: '50', label: '50% watched' }, { value: '75', label: '75% watched' }, { value: '95', label: '95% watched' }, { value: 'thruplay', label: 'ThruPlay' }] },
-      { label: 'Videos', type: 'select', field: 'videos', dynamic: true },
+      { label: 'Videos', type: 'video_picker', field: 'videos' },
       { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
     ],
     buildName: (f) => `Video - ${f.threshold ? (f.threshold === 'thruplay' ? 'ThruPlay' : f.threshold + '% Viewers') : '75% Viewers'} (${f.retention || 60} Days)`,
@@ -835,6 +885,8 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId, pixelId, face
   const [nameDirty, setNameDirty] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [showVideoSelector, setShowVideoSelector] = useState(false);
+  const [selectedVideos, setSelectedVideos] = useState<VideoItem[]>([]);
 
   const option = selectedId ? QUICK_BUILD_OPTIONS.find(o => o.id === selectedId) : null;
 
@@ -970,6 +1022,38 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId, pixelId, face
         </div>
       );
     }
+    if (field.type === 'video_picker') {
+      const pickedVideos = selectedVideos;
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label>{field.label}</Label>
+          {pickedVideos.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {pickedVideos.map(v => (
+                <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px 3px 5px', borderRadius: 20, background: T.purpleDim, border: `1px solid rgba(167,139,250,0.35)`, fontFamily: T.font, fontSize: 11, color: T.purple, maxWidth: 200 }}>
+                  {v.thumbnailUrl && <img src={v.thumbnailUrl} alt="" style={{ width: 20, height: 14, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title || v.id}</span>
+                  <button onClick={() => {
+                    const next = pickedVideos.filter(x => x.id !== v.id);
+                    setSelectedVideos(next);
+                    set(next.map(x => x.id).join(','));
+                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textLo, fontSize: 13, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => setShowVideoSelector(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 8, border: `1px solid ${T.borderMid}`, background: T.surface2, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, color: pickedVideos.length > 0 ? T.purple : T.textMid, transition: 'all 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.purple; (e.currentTarget as HTMLButtonElement).style.color = T.purple; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.borderMid; (e.currentTarget as HTMLButtonElement).style.color = pickedVideos.length > 0 ? T.purple : T.textMid; }}
+          >
+            <span style={{ fontSize: 14 }}>🎬</span>
+            {pickedVideos.length > 0 ? `${pickedVideos.length} video${pickedVideos.length > 1 ? 's' : ''} selected — Change` : 'Select Videos'}
+          </button>
+        </div>
+      );
+    }
     return null;
   };
 
@@ -1058,11 +1142,25 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId, pixelId, face
           </Btn>
         </div>
       )}
+      {showVideoSelector && (
+        <VideoSelectorModal
+          accessToken={accessToken}
+          adAccountId={adAccountId}
+          facebookPageId={facebookPageId}
+          instagramUserId={instagramUserId}
+          initialSelected={selectedVideos.map(v => v.id)}
+          onConfirm={(videos) => {
+            setSelectedVideos(videos);
+            setForm(s => ({ ...s, videos: videos.map(v => v.id).join(',') }));
+            setShowVideoSelector(false);
+          }}
+          onClose={() => setShowVideoSelector(false)}
+        />
+      )}
     </div>
   );
 }
-
-// ─── Main Modal ───────────────────────────────────────────────────────────────
+// ─── Main Modall ───────────────────────────────────────────────────────────────
 export default function AudienceBuilderModal({ accessToken, adAccountId, pixelId, facebookPageId, instagramUserId, onCreated, onClose }: Props) {
   const [screen, setScreen] = useState<Screen>('type');
   const [selectedSource, setSelectedSource] = useState<SourceDef | null>(null);

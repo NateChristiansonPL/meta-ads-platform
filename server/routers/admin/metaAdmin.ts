@@ -2862,6 +2862,223 @@ export const metaAdminRouter = router({
       }
     }),
 
+  // ── Video Selector: FB Page Videos ──────────────────────────────────────────
+  getPageVideos: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      pageId: z.string().min(1),
+      limit: z.number().int().min(1).max(100).default(50),
+      after: z.string().optional(),
+      uploadedAfter: z.string().optional(),  // ISO date string
+      uploadedBefore: z.string().optional(), // ISO date string
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, pageId, limit, after, uploadedAfter, uploadedBefore } = input;
+      try {
+        const params: Record<string, string> = {
+          fields: 'id,title,description,thumbnails,length,created_time,place_of_origin,content_tags',
+          limit: String(limit),
+        };
+        if (after) params.after = after;
+        const data = await metaGet(`/${pageId}/videos`, params, accessToken);
+        let videos = (data.data || []) as Array<{
+          id: string;
+          title?: string;
+          description?: string;
+          thumbnails?: { data: { uri: string; width: number; height: number }[] };
+          length?: number;
+          created_time?: string;
+        }>;
+        // Filter by upload date if requested
+        if (uploadedAfter || uploadedBefore) {
+          const afterTs = uploadedAfter ? new Date(uploadedAfter).getTime() : 0;
+          const beforeTs = uploadedBefore ? new Date(uploadedBefore).getTime() : Infinity;
+          videos = videos.filter(v => {
+            if (!v.created_time) return true;
+            const ts = new Date(v.created_time).getTime();
+            return ts >= afterTs && ts <= beforeTs;
+          });
+        }
+        return {
+          videos: videos.map(v => ({
+            id: v.id,
+            title: v.title || v.id,
+            description: v.description,
+            thumbnailUrl: v.thumbnails?.data?.[0]?.uri || '',
+            lengthSeconds: v.length,
+            createdTime: v.created_time,
+            source: 'page' as const,
+          })),
+          paging: data.paging,
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch page videos: ${msg}` });
+      }
+    }),
+
+  // ── Video Selector: IG Account Videos ─────────────────────────────────────────
+  getIGAccountVideos: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      igUserId: z.string().min(1),
+      limit: z.number().int().min(1).max(100).default(50),
+      after: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, igUserId, limit, after } = input;
+      try {
+        const params: Record<string, string> = {
+          fields: 'id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count',
+          limit: String(limit),
+        };
+        if (after) params.after = after;
+        const data = await metaGet(`/${igUserId}/media`, params, accessToken);
+        const items = (data.data || []) as Array<{
+          id: string;
+          caption?: string;
+          media_type?: string;
+          media_url?: string;
+          thumbnail_url?: string;
+          timestamp?: string;
+          like_count?: number;
+          comments_count?: number;
+        }>;
+        // Only return VIDEO items
+        const videos = items.filter(i => i.media_type === 'VIDEO' || i.media_type === 'REELS');
+        return {
+          videos: videos.map(v => ({
+            id: v.id,
+            title: v.caption ? v.caption.substring(0, 80) : v.id,
+            description: v.caption,
+            thumbnailUrl: v.thumbnail_url || v.media_url || '',
+            lengthSeconds: undefined as number | undefined,
+            createdTime: v.timestamp,
+            source: 'instagram' as const,
+          })),
+          paging: data.paging,
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch IG videos: ${msg}` });
+      }
+    }),
+
+  // ── Video Selector: Campaign Videos ───────────────────────────────────────────
+  getCampaignVideos: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      adAccountId: z.string().min(1),
+      campaignId: z.string().min(1),
+      limit: z.number().int().min(1).max(100).default(50),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, adAccountId, campaignId, limit } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+      try {
+        // Get ads in the campaign, then extract unique video IDs from creatives
+        const adsData = await metaGet(
+          `/${campaignId}/ads`,
+          { fields: 'id,name,creative{id,object_story_spec,asset_feed_spec}', limit: String(limit) },
+          accessToken
+        );
+        const videoIds = new Set<string>();
+        const videoMeta: Record<string, { adName: string; adId: string }> = {};
+        for (const ad of (adsData.data || []) as Array<{ id: string; name: string; creative?: { object_story_spec?: Record<string, unknown>; asset_feed_spec?: Record<string, unknown> } }>) {
+          const spec = ad.creative?.object_story_spec;
+          const videoData = (spec?.video_data || spec?.link_data) as Record<string, unknown> | undefined;
+          const videoId = videoData?.video_id as string | undefined;
+          if (videoId) {
+            videoIds.add(videoId);
+            videoMeta[videoId] = { adName: ad.name, adId: ad.id };
+          }
+          const feedSpec = ad.creative?.asset_feed_spec as Record<string, unknown> | undefined;
+          if (feedSpec?.videos) {
+            for (const v of feedSpec.videos as Array<{ video_id?: string }>) {
+              if (v.video_id) {
+                videoIds.add(v.video_id);
+                videoMeta[v.video_id] = { adName: ad.name, adId: ad.id };
+              }
+            }
+          }
+        }
+        // Fetch video details for each unique video ID
+        const videoList = await Promise.all(
+          Array.from(videoIds).map(async (vid) => {
+            try {
+              const v = await metaGet(`/${vid}`, { fields: 'id,title,thumbnails,length,created_time' }, accessToken);
+              return {
+                id: v.id as string,
+                title: (v.title as string) || (videoMeta[vid]?.adName) || vid,
+                thumbnailUrl: ((v.thumbnails as { data: { uri: string }[] } | undefined)?.data?.[0]?.uri) || '',
+                lengthSeconds: v.length as number | undefined,
+                createdTime: v.created_time as string | undefined,
+                source: 'campaign' as const,
+                adName: videoMeta[vid]?.adName,
+                adId: videoMeta[vid]?.adId,
+              };
+            } catch {
+              return null;
+            }
+          })
+        );
+        return { videos: videoList.filter(Boolean) };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch campaign videos: ${msg}` });
+      }
+    }),
+
+  // ── Video Selector: Video Stats (3s views, last used) ─────────────────────────
+  getVideoStats: publicProcedure
+    .input(z.object({
+      accessToken: z.string().min(1),
+      adAccountId: z.string().min(1),
+      videoIds: z.array(z.string()).min(1).max(50),
+    }))
+    .query(async ({ input }) => {
+      const { accessToken, adAccountId, videoIds } = input;
+      const accountId = normalizeAdAccountId(adAccountId);
+      try {
+        // Fetch video insights for 3-second views
+        const statsMap: Record<string, { threeSecViews: number; lastUsed: string | null }> = {};
+        // Initialize all requested IDs
+        for (const vid of videoIds) {
+          statsMap[vid] = { threeSecViews: 0, lastUsed: null };
+        }
+        // Query ad insights filtered by video_id to find last used
+        const insightsData = await metaGet(
+          `/${accountId}/insights`,
+          {
+            fields: 'video_id,video_3_sec_watched_actions,date_start',
+            filtering: JSON.stringify([{ field: 'video_id', operator: 'IN', value: videoIds }]),
+            level: 'ad',
+            time_range: JSON.stringify({ since: '2020-01-01', until: new Date().toISOString().split('T')[0] }),
+            limit: '500',
+          },
+          accessToken
+        ).catch(() => ({ data: [] }));
+        for (const row of (insightsData.data || []) as Array<{
+          video_id?: string;
+          video_3_sec_watched_actions?: Array<{ action_type: string; value: string }>;
+          date_start?: string;
+        }>) {
+          const vid = row.video_id;
+          if (!vid || !statsMap[vid]) continue;
+          const views3s = row.video_3_sec_watched_actions?.find(a => a.action_type === 'video_view');
+          if (views3s) statsMap[vid].threeSecViews += parseInt(views3s.value, 10) || 0;
+          if (row.date_start) {
+            const existing = statsMap[vid].lastUsed;
+            if (!existing || row.date_start > existing) statsMap[vid].lastUsed = row.date_start;
+          }
+        }
+        return { stats: statsMap };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch video stats: ${msg}` });
+      }
+    }),
+
   // ── Lead Gen Forms ────────────────────────────────────────────────────────────
   getLeadGenForms: publicProcedure
     .input(z.object({
