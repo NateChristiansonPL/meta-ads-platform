@@ -120,6 +120,13 @@
       "when": 1778540914366,
       "tag": "0016_fantastic_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1778547476146,
+      "tag": "0017_real_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

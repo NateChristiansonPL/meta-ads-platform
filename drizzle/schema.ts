@@ -95,6 +95,8 @@ export const metaSyncSchedule = mysqlTable("meta_sync_schedule", {
   notifyProbable: boolean("notify_probable").default(true).notNull(),
   // Filters
   onlyLiveAds: boolean("only_live_ads").default(false).notNull(),
+  // Notification owner — the admin user who last saved the analysis scheduler config
+  notifyUserId: int("notify_user_id"),
   // Legacy fields kept for compatibility
   enabled: boolean("enabled").default(false).notNull(),
   utcHour: int("utc_hour").default(6).notNull(),
@@ -450,3 +452,21 @@ export const invitedUsers = mysqlTable("invited_users", {
 
 export type InvitedUser = typeof invitedUsers.$inferSelect;
 export type InsertInvitedUser = typeof invitedUsers.$inferInsert;
+// Logs every notification event sent by the creative decay scheduler.
+// Used to display notification history in the Creative Decay admin tool.
+export const decayNotificationLog = mysqlTable("decay_notification_log", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  accountId: varchar("account_id", { length: 64 }).notNull(),
+  adId: varchar("ad_id", { length: 64 }),
+  adName: text("ad_name"),
+  signalLevel: mysqlEnum("signal_level", ["emerging", "possible", "probable"]).notNull(),
+  fatigueScore: int("fatigue_score"),
+  firstDetectedAt: timestamp("first_detected_at"),
+  notifiedAt: timestamp("notified_at").defaultNow().notNull(),
+  notifyUserId: int("notify_user_id"),
+  dateFrom: varchar("date_from", { length: 16 }),
+  dateTo: varchar("date_to", { length: 16 }),
+}, (table) => ({
+  accountIdx: index("dnl_account_idx").on(table.accountId),
+  notifiedAtIdx: index("dnl_notified_at_idx").on(table.notifiedAt),
+}));

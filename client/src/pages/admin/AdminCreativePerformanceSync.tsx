@@ -243,7 +243,7 @@ export default function AdminCreativePerformanceSync() {
                   Automated Sync Scheduler
                 </h2>
                 <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  Configure a daily sync run. Runs server-side — no browser required.
+                  Configure a daily sync run. Runs server-side &mdash; no browser required.
                 </p>
               </div>
               <button
@@ -356,7 +356,7 @@ export default function AdminCreativePerformanceSync() {
             {schedulerConfig?.lastRunAt && (
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
                 Last sync:{" "}
-                {new Date(schedulerConfig.lastRunAt).toLocaleString()} —{" "}
+                {new Date(schedulerConfig.lastRunAt).toLocaleString()} -{" "}
                 {schedulerConfig.lastRunStatus ?? "unknown"}
               </p>
             )}
@@ -705,12 +705,12 @@ export default function AdminCreativePerformanceSync() {
                       <Td>
                         {h.dateFrom} → {h.dateTo}
                       </Td>
-                      <Td>{h.rowsUpserted?.toLocaleString() ?? "—"}</Td>
-                      <Td>{h.adsProcessed?.toLocaleString() ?? "—"}</Td>
+                      <Td>{h.rowsUpserted?.toLocaleString() ?? "-"}</Td>
+                      <Td>{h.adsProcessed?.toLocaleString() ?? "-"}</Td>
                       <Td>
                         {h.durationMs != null
                           ? `${Math.round(h.durationMs / 1000)}s`
-                          : "—"}
+                          : "-"}
                       </Td>
                       <Td>
                         <span

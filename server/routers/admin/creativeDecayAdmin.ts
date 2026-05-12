@@ -26,6 +26,7 @@ import {
   creativeFatigueResults,
   metaSyncSchedule,
   firstFatigueDetected,
+  decayNotificationLog,
 } from "../../../drizzle/schema";
 import { notifyOwner } from "../../_core/notification";
 
@@ -686,6 +687,24 @@ export const creativeDecayAdminRouter = router({
     );
   }),
 
+  getDecayNotifications: adminProcedure
+    .input(
+      z.object({
+        accountId: z.string().optional(),
+        limit: z.number().int().min(1).max(200).default(50),
+      }).optional(),
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { notifications: [] };
+      const rows = await db
+        .select()
+        .from(decayNotificationLog)
+        .orderBy(desc(decayNotificationLog.notifiedAt))
+        .limit(input?.limit ?? 50);
+      return { notifications: rows };
+    }),
+
   saveAnalysisSchedulerConfig: adminProcedure
     .input(
       z.object({
@@ -785,9 +804,31 @@ export async function startCreativeDecayCron() {
             })
             .join("\n");
           await notifyOwner({
-            title: `[Scheduled] Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+            title: `[Scheduled] Creative Fatigue Alert - ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
             content: `Automated daily analysis (${dateFrom} to ${dateTo}) detected the following fatigue signals:\n\n${lines}`,
           });
+          // Log to decayNotificationLog for UI display (one row per triggered ad)
+          const dbLog = await getDb();
+          if (dbLog) {
+            const logRows = triggered.map((r) => {
+              const lvl =
+                r.fatigueStatus === "URGENT" ? "probable" :
+                r.fatigueStatus === "REFRESH" ? "possible" : "emerging";
+              const firstDate = r.firstDetectedAt?.[lvl as "emerging" | "possible" | "probable"];
+              return {
+                accountId: cleanAccountId(config.accountId),
+                adId: r.creativeId ?? "",
+                adName: r.creativeName ?? "",
+                signalLevel: lvl as "emerging" | "possible" | "probable",
+                fatigueScore: Math.round(r.fatigueScore ?? 0),
+                firstDetectedAt: firstDate ? new Date(firstDate) : undefined,
+                notifiedAt: new Date(),
+                dateFrom,
+                dateTo,
+              };
+            });
+            if (logRows.length) await dbLog.insert(decayNotificationLog).values(logRows);
+          }
         }
         const db = await getDb();
         if (db)

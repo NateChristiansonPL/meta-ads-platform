@@ -628,3 +628,14 @@
 - [x] saveScheduler.mutate now injects tokenId, accountId, and campaignIds from the main page state at save time
 - [x] Scheduler panel shows an info banner: confirms which token/account will be used, or warns if none selected
 - [x] TypeScript: 0 errors
+
+## Creative Decay + Perf Sync — UI Overhaul (May 12 2026)
+- [x] Creative Decay scheduler: removed duplicate ad account/token fields; inject from main page state at save time; info banner shows which account will be used
+- [x] Both pages: compact sizing — p-3 cards, text-xs/text-[11px], tighter gaps (gap-3)
+- [x] Both schedulers: auto-save when Enable toggle is flipped; View Config button opens read-only summary modal
+- [x] Creative Decay: tabbed output area with "Decay Results" tab and "Notifications" tab
+- [x] Creative Decay Notifications tab: shows log of notification events (ad name, account, signal level, fatigue score, sent at)
+- [x] Schema: decayNotificationLog table added (id, accountId, adId, adName, signalLevel, fatigueScore, firstDetectedAt, notifiedAt, notifyUserId, dateFrom, dateTo)
+- [x] Server: getDecayNotifications procedure returns last 100 notifications; cron writes per-ad rows to decayNotificationLog when signals fire
+- [x] Notifications routing: notifyOwner always sends to project owner (admin-only tool); notifications tab shows full log
+- [x] TypeScript: 0 errors; Vite em-dash error fixed in AdminCreativePerformanceSync.tsx
