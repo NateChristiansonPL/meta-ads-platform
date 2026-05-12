@@ -1,16 +1,16 @@
 /**
  * AudienceBuilderModalAdmin
- * Full 4-screen audience builder matching the reference design:
- *   1. TypeSelector  — landing with Custom / Lookalike / Quick Build cards
- *   2. SourcePicker  — YOUR SOURCES + META SOURCES grid
- *   3. CustomConfig  — per-source form with retention slider
- *   4. LALBuilder    — source dropdown, location, size slider + quick buttons
- *   5. QuickBuild    — 12 pre-built templates with auto-naming
+ * Full 5-screen audience builder with LIVE DATA wiring:
+ *   1. TypeSelector    — landing with Custom / Lookalike / Quick Build cards
+ *   2. SourcePicker    — YOUR SOURCES + META SOURCES grid
+ *   3. CustomConfig    — per-source form with LIVE API data (pixels, videos, IG accounts, pages, events, lead forms, catalogs)
+ *   4. LALBuilder      — source dropdown (live custom audiences), location, size slider
+ *   5. QuickBuild      — 12 pre-built templates, all source-dependent fields wired to live API data
  *
  * Design tokens: pageBg #0d0c36 · surface #141349 · card #1a1860 · cyan #00BEEF
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 
@@ -68,186 +68,7 @@ const META_SOURCES = [
   { id: 'on_facebook',   emoji: '📣', label: 'On-Facebook listings',sub: 'Rental & vehicle',      color: T.orangeDim, accent: T.orange },
 ];
 
-const ALL_SOURCES = [...YOUR_SOURCES, ...META_SOURCES];
-
-// ─── Source Config ────────────────────────────────────────────────────────────
-const SOURCE_CONFIG: Record<string, { title: string; sections: SourceSection[] }> = {
-  website: {
-    title: 'Website Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Website Visitors – Last 30 Days' },
-      { label: 'Pixel', type: 'select', field: 'pixel', options: ['Select a Pixel', 'Main Website Pixel', 'Shop Pixel', 'Blog Pixel'] },
-      { label: 'Include people who', type: 'rule_group', field: 'rules', ruleTypes: ['All website visitors', 'People who visited specific web pages', 'Visitors by time spent', 'From your events', 'People who completed a purchase', 'People who added to cart', 'People who initiated checkout', 'People who registered', 'People who searched', 'People who viewed content'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days', hint: 'Include people who matched the criteria within the last N days.' },
-    ],
-  },
-  video: {
-    title: 'Video Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. 75% Video Viewers' },
-      { label: 'Engagement', type: 'select', field: 'engagement', options: ['People who watched at least 3 seconds', 'People who watched at least 10 seconds', 'People who watched 25% of your video', 'People who watched 50% of your video', 'People who watched 75% of your video', 'People who watched 95% of your video', 'People who watched ThruPlay'] },
-      { label: 'Videos', type: 'select', field: 'videos', options: ['All videos', 'Specific video campaigns'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
-    ],
-  },
-  leadform: {
-    title: 'Lead Form Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Lead Form Openers' },
-      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened the form' }, { value: 'opened_not_submitted', label: 'People who opened but didn\'t submit' }, { value: 'submitted', label: 'People who submitted the form' }] },
-      { label: 'Lead Form', type: 'select', field: 'form', options: ['Select a lead form', 'Contact Us Form', 'Get a Quote Form', 'Newsletter Signup'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  instagram: {
-    title: 'Instagram Account Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. IG Profile Visitors' },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your professional account' }, { value: 'visited', label: 'Anyone who visited your profile' }, { value: 'post_cta', label: 'People who engaged with any post or ad' }, { value: 'messaged', label: 'People who sent a message to your account' }, { value: 'saved', label: 'People who saved any post or ad' }] },
-      { label: 'Account', type: 'select', field: 'account', options: ['Select Instagram account', 'Main Brand Account', 'Product Account'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
-    ],
-  },
-  facebook_page: {
-    title: 'Facebook Page Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Page Engagers – 90 Days' },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your Page' }, { value: 'visited', label: 'Anyone who visited your Page' }, { value: 'post', label: 'People who engaged with any post or ad' }, { value: 'cta', label: 'People who clicked any call-to-action button' }, { value: 'messaged', label: 'People who sent a message to your Page' }, { value: 'saved', label: 'People who saved your Page or any post' }] },
-      { label: 'Facebook Page', type: 'select', field: 'page', options: ['Select a Page', 'Main Brand Page', 'Product Page', 'Local Page'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
-    ],
-  },
-  customer_list: {
-    title: 'Customer List Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. CRM Upload – Q4 Buyers' },
-      { label: 'List Type', type: 'radio', field: 'listType', options: [{ value: 'customer_file', label: 'Upload a file that includes customer value' }, { value: 'mailchimp', label: 'Import from Mailchimp' }, { value: 'crm', label: 'Import from CRM' }] },
-      { label: 'Data Format', type: 'select', field: 'format', options: ['CSV or TXT file', 'Hashed CSV', 'Email addresses only', 'Phone numbers only', 'Mixed identifiers'] },
-      { label: 'Upload File', type: 'file_upload', field: 'file', hint: 'Your file should include at least one identifier: email, phone, name, or address.' },
-    ],
-  },
-  offline: {
-    title: 'Offline Activity Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. In-Store Purchasers' },
-      { label: 'Offline Event Set', type: 'select', field: 'event_set', options: ['Select an event set', 'In-Store Purchases', 'Call Center Leads', 'POS Transactions'] },
-      { label: 'Event', type: 'radio', field: 'engagement', options: [{ value: 'purchase', label: 'Purchase' }, { value: 'lead', label: 'Lead' }, { value: 'other', label: 'Other offline event' }] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  shopping: {
-    title: 'Shopping Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Shop Visitors – 30 Days' },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who visited your shop' }, { value: 'viewed', label: 'People who viewed a product' }, { value: 'added', label: 'People who added a product to cart' }, { value: 'purchased', label: 'People who purchased a product' }, { value: 'saved', label: 'People who saved a product' }] },
-      { label: 'Shop', type: 'select', field: 'shop', options: ['Select a Shop', 'Facebook Shop', 'Instagram Shop', 'Combined Shop'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  app: {
-    title: 'App Activity Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. App Purchasers – 30 Days' },
-      { label: 'App', type: 'select', field: 'app', options: ['Select an App', 'iOS App', 'Android App'] },
-      { label: 'Activity', type: 'rule_group', field: 'rules', ruleTypes: ['All app users', 'Most active users by percentile', 'Users by purchase amount', 'Users who completed a specific event', 'Users who opened the app', 'Users who installed the app', 'Users who made an in-app purchase'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  catalog: {
-    title: 'Catalog Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Product Viewers' },
-      { label: 'Catalog', type: 'select', field: 'catalog', options: ['Select a Catalog', 'Main Product Catalog', 'Services Catalog'] },
-      { label: 'Interaction', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed items' }, { value: 'added', label: 'People who added items to cart' }, { value: 'purchased', label: 'People who purchased items' }, { value: 'viewed_not_purchased', label: 'Viewed but not purchased' }] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  events: {
-    title: 'Facebook Events Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Event Responders' },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'People who interacted with any event' }, { value: 'responded_going', label: 'People who responded Going' }, { value: 'responded_interested', label: 'People who responded Interested' }, { value: 'visited', label: 'People who visited event page' }, { value: 'purchased_ticket', label: 'People who purchased a ticket' }] },
-      { label: 'Event', type: 'select', field: 'event', options: ['All events', 'Select specific event'] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
-    ],
-  },
-  instant_exp: {
-    title: 'Instant Experience Custom Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Canvas Engagers – 30 Days' },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened your Instant Experience' }, { value: 'clicked', label: 'People who clicked any link in your Instant Experience' }] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-  on_facebook: {
-    title: 'On-Facebook Listings Audience', sections: [
-      { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Rental Listing Viewers' },
-      { label: 'Listing Type', type: 'radio', field: 'listingType', options: [{ value: 'rental', label: 'Rental property listings' }, { value: 'vehicle', label: 'Vehicle listings' }] },
-      { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed your listings' }, { value: 'inquired', label: 'People who sent an inquiry' }, { value: 'saved', label: 'People who saved your listings' }] },
-      { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-  },
-};
-
-// ─── Quick Build Options ──────────────────────────────────────────────────────
-type QBField = { label: string; type: string; field: string; min?: number; max?: number; defaultVal?: number; unit?: string; placeholder?: string; options?: string[] | { value: string; label: string }[] };
-type QBOption = { id: string; label: string; icon: string; desc: string; fields: QBField[]; buildName: (f: Record<string, unknown>) => string };
-
-const QUICK_BUILD_OPTIONS: QBOption[] = [
-  { id: 'all_visitors', label: 'All Website Visitors', icon: '🌐', desc: 'Everyone who visited your website', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - All Visitors (${f.retention || 30} Days)` },
-  { id: 'page_visitors', label: 'Specific Page Visitors', icon: '📄', desc: 'People who visited a specific URL', fields: [{ label: 'URL Contains', type: 'text', field: 'url', placeholder: 'e.g. /pricing or /checkout' }, { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Page Visitors${f.url ? ` - ${f.url}` : ''} (${f.retention || 30} Days)` },
-  { id: 'purchase_event', label: 'Standard Event: Purchase', icon: '💳', desc: 'People who fired the Purchase pixel event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Purchase (${f.retention || 30} Days)` },
-  { id: 'add_to_cart', label: 'Standard Event: Add to Cart', icon: '🛒', desc: 'People who added an item to cart', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Add to Cart (${f.retention || 30} Days)` },
-  { id: 'lead_event', label: 'Standard Event: Lead', icon: '📋', desc: 'People who completed a Lead event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Lead (${f.retention || 30} Days)` },
-  { id: 'initiate_checkout', label: 'Standard Event: Initiate Checkout', icon: '🏁', desc: 'People who started the checkout process', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Initiate Checkout (${f.retention || 30} Days)` },
-  {
-    id: 'custom_conversion', label: 'Custom Conversion Event', icon: '⚙️', desc: 'People who fired a specific custom conversion',
-    fields: [
-      { label: 'Custom Conversion', type: 'select', field: 'conversion', options: ['Select a custom conversion', 'SAG - Purchase - FB Form Fill', 'SAG - Lead - Contact Page', 'SAG - Lead - Demo Request', 'Brand - Purchase - Checkout Complete', 'Brand - Lead - Newsletter Signup', 'Retargeting - Add to Cart - Abandoned'] },
-      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
-    ],
-    buildName: (f) => { const conv = f.conversion && !(f.conversion as string).startsWith('Select') ? f.conversion as string : 'Custom Event'; return `Website - Event - ${conv} (${f.retention || 30} Days)`; },
-  },
-  { id: 'top_visitors', label: 'Top 25% Time Spent', icon: '⏱️', desc: 'Your most engaged website visitors by time on site', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Top 25% Time Spent (${f.retention || 30} Days)` },
-  {
-    id: 'video_viewers', label: 'Video Viewers (75%+)', icon: '🎬', desc: 'People who watched 75% or more of your videos',
-    fields: [
-      { label: 'View Threshold', type: 'radio', field: 'threshold', options: [{ value: '25', label: '25% watched' }, { value: '50', label: '50% watched' }, { value: '75', label: '75% watched' }, { value: '95', label: '95% watched' }, { value: 'thruplay', label: 'ThruPlay' }] },
-      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
-    ],
-    buildName: (f) => `Video - ${f.threshold ? (f.threshold === 'thruplay' ? 'ThruPlay' : f.threshold + '% Viewers') : '75% Viewers'} (${f.retention || 60} Days)`,
-  },
-  {
-    id: 'ig_engagers', label: 'Instagram Engagers', icon: '📸', desc: 'People who engaged with your Instagram account',
-    fields: [
-      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Profile visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'messaged', label: 'Messaged your account' }] },
-      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
-    ],
-    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Profile Visitors', post: 'Post Engagers', messaged: 'DM Senders' }; return `Instagram - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 60} Days)`; },
-  },
-  {
-    id: 'fb_page_engagers', label: 'Facebook Page Engagers', icon: '👍', desc: 'People who engaged with your Facebook Page',
-    fields: [
-      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Page visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'cta', label: 'CTA button clicks' }] },
-      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
-    ],
-    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Page Visitors', post: 'Post Engagers', cta: 'CTA Clickers' }; return `Facebook Page - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 90} Days)`; },
-  },
-  {
-    id: 'lead_form_submitters', label: 'Lead Form Submitters', icon: '📝', desc: 'People who submitted an Instant Form',
-    fields: [
-      { label: 'Lead Form', type: 'select', field: 'form', options: ['All lead forms', 'Contact Us Form', 'Get a Quote Form', 'Newsletter Signup'] },
-      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
-    ],
-    buildName: (f) => `Lead Form - Submitted${f.form && f.form !== 'All lead forms' ? ` - ${f.form}` : ''} (${f.retention || 30} Days)`,
-  },
-];
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-type SourceSection = {
-  label: string;
-  type: 'text' | 'select' | 'radio' | 'slider' | 'rule_group' | 'file_upload';
-  field: string;
-  placeholder?: string;
-  options?: string[] | { value: string; label: string }[];
-  ruleTypes?: string[];
-  min?: number;
-  max?: number;
-  defaultVal?: number;
-  unit?: string;
-  hint?: string;
-};
-
 type SourceDef = { id: string; emoji: string; label: string; sub: string; color: string; accent: string };
-
 type Screen = 'type' | 'source_picker' | 'custom_config' | 'lal' | 'quick';
 
 interface Props {
@@ -255,6 +76,7 @@ interface Props {
   adAccountId: string;
   pixelId?: string;
   facebookPageId?: string;
+  instagramUserId?: string;
   onCreated: (audience: { id: string; name: string }) => void;
   onClose: () => void;
 }
@@ -294,13 +116,16 @@ function TxtInput({ value, onChange, placeholder }: { value: string; onChange: (
     style={{ ...inputBase, border: `1px solid ${focus ? T.cyan : T.border}`, boxShadow: focus ? `0 0 0 3px ${T.cyanDim}` : 'none' }} />;
 }
 
-function SelInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+function SelInput({ value, onChange, options, loading }: { value: string; onChange: (v: string) => void; options: string[]; loading?: boolean }) {
   const [focus, setFocus] = useState(false);
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-      style={{ ...inputBase, border: `1px solid ${focus ? T.cyan : T.border}`, boxShadow: focus ? `0 0 0 3px ${T.cyanDim}` : 'none', appearance: 'none', cursor: 'pointer', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a8a8c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 13px center', paddingRight: 34 }}>
-      {options.map(o => <option key={o} style={{ background: T.surface2, color: T.textHi }}>{o}</option>)}
-    </select>
+    <div style={{ position: 'relative' }}>
+      <select value={value} onChange={e => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} disabled={loading}
+        style={{ ...inputBase, border: `1px solid ${focus ? T.cyan : T.border}`, boxShadow: focus ? `0 0 0 3px ${T.cyanDim}` : 'none', appearance: 'none', cursor: loading ? 'wait' : 'pointer', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a8a8c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 13px center', paddingRight: 34, opacity: loading ? 0.6 : 1 }}>
+        {options.map(o => <option key={o} style={{ background: T.surface2, color: T.textHi }}>{o}</option>)}
+      </select>
+      {loading && <div style={{ position: 'absolute', right: 36, top: '50%', transform: 'translateY(-50%)', fontFamily: T.font, fontSize: 11, color: T.textLo }}>Loading…</div>}
+    </div>
   );
 }
 
@@ -361,7 +186,7 @@ function RuleGroup({ value, onChange, ruleTypes }: { value: { type: string }[] |
 function FileUpload({ onChange, hint }: { onChange: (f: File | null) => void; hint?: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [drag, setDrag] = useState(false);
-  const ref = useRef<HTMLInputElement>(null);
+  const ref = React.useRef<HTMLInputElement>(null);
   const handle = (f: File) => { setFile(f); onChange(f); };
   return (
     <div>
@@ -379,29 +204,8 @@ function FileUpload({ onChange, hint }: { onChange: (f: File | null) => void; hi
   );
 }
 
-function FormSection({ section, formState, setFormState }: { section: SourceSection; formState: Record<string, unknown>; setFormState: React.Dispatch<React.SetStateAction<Record<string, unknown>>> }) {
-  const val = formState[section.field];
-  const set = (v: unknown) => setFormState(s => ({ ...s, [section.field]: v }));
-  const strOptions = (section.options || []).map(o => typeof o === 'string' ? o : (o as { value: string; label: string }).value);
-  const radioOptions = (section.options || []).filter(o => typeof o !== 'string') as { value: string; label: string }[];
-  return (
-    <div style={{ marginBottom: 18 }}>
-      <Label hint={section.hint}>{section.label}</Label>
-      {section.type === 'text' && <TxtInput value={(val as string) || ''} onChange={set} placeholder={section.placeholder} />}
-      {section.type === 'select' && <SelInput value={(val as string) || (strOptions[0] || '')} onChange={set} options={strOptions} />}
-      {section.type === 'radio' && <RadioGrp options={radioOptions} value={(val as string) || (radioOptions[0]?.value || '')} onChange={set} />}
-      {section.type === 'slider' && <SliderInput value={(val as number) ?? (section.defaultVal ?? section.min ?? 1)} onChange={set} min={section.min ?? 1} max={section.max ?? 180} unit={section.unit || 'days'} />}
-      {section.type === 'rule_group' && <RuleGroup value={val as { type: string }[] | undefined} onChange={set} ruleTypes={section.ruleTypes || []} />}
-      {section.type === 'file_upload' && <FileUpload onChange={set} hint={section.hint} />}
-    </div>
-  );
-}
-
 // ─── Shared Layout Pieces ─────────────────────────────────────────────────────
 const Divider = () => <div style={{ height: 1, background: T.border, margin: '14px 0 0' }} />;
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, color: T.textLo, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>{children}</div>
-);
 const BackBtn = ({ onClick }: { onClick: () => void }) => (
   <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 600, color: T.textLo, display: 'flex', alignItems: 'center', gap: 5, padding: 0, marginBottom: 14, transition: 'color 0.15s' }}
     onMouseEnter={e => (e.currentTarget.style.color = T.cyan)} onMouseLeave={e => (e.currentTarget.style.color = T.textLo)}>
@@ -415,22 +219,6 @@ const SuccessScreen = ({ title, subtitle }: { title: string; subtitle: string })
     <div style={{ fontFamily: T.font, fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{subtitle}</div>
   </div>
 );
-
-// ─── Source Row (for SourcePicker grid) ───────────────────────────────────────
-function SourceRow({ src, selected, onToggle }: { src: SourceDef; selected: string | null; onToggle: (id: string) => void }) {
-  const [hover, setHover] = useState(false);
-  const checked = selected === src.id;
-  return (
-    <div onClick={() => onToggle(src.id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: checked ? src.color : hover ? T.surface2 : 'transparent', border: `1px solid ${checked ? src.accent : 'transparent'}`, transition: 'all 0.14s ease' }}>
-      <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${checked ? src.accent : T.borderMid}`, background: checked ? src.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.14s ease' }}>
-        {checked && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.bg }} />}
-      </div>
-      <div style={{ width: 26, height: 26, borderRadius: 7, background: checked ? 'rgba(255,255,255,0.1)' : T.surface3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{src.emoji}</div>
-      <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: checked ? 600 : 400, color: checked ? T.textHi : T.textMid, lineHeight: 1.2 }}>{src.label}</div>
-    </div>
-  );
-}
 
 // ─── Screen: Type Selector ────────────────────────────────────────────────────
 function TypeSelector({ onSelect }: { onSelect: (t: string) => void }) {
@@ -469,9 +257,27 @@ function TypeSelector({ onSelect }: { onSelect: (t: string) => void }) {
 }
 
 // ─── Screen: Source Picker ────────────────────────────────────────────────────
+function SourceRow({ src, selected, onToggle }: { src: SourceDef; selected: string | null; onToggle: (id: string) => void }) {
+  const [hover, setHover] = useState(false);
+  const checked = selected === src.id;
+  return (
+    <div onClick={() => onToggle(src.id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: checked ? src.color : hover ? T.surface2 : 'transparent', border: `1px solid ${checked ? src.accent : 'transparent'}`, transition: 'all 0.14s ease' }}>
+      <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${checked ? src.accent : T.borderMid}`, background: checked ? src.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.14s ease' }}>
+        {checked && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.bg }} />}
+      </div>
+      <div style={{ width: 26, height: 26, borderRadius: 7, background: checked ? 'rgba(255,255,255,0.1)' : T.surface3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>{src.emoji}</div>
+      <div style={{ fontFamily: T.font, fontSize: 13, fontWeight: checked ? 600 : 400, color: checked ? T.textHi : T.textMid, lineHeight: 1.2 }}>{src.label}</div>
+    </div>
+  );
+}
+
 function SourcePicker({ onSelect, onBack }: { onSelect: (src: SourceDef) => void; onBack: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const handleNext = () => { if (!selected) return; const src = ALL_SOURCES.find(s => s.id === selected); if (src) onSelect(src); };
+  const handleNext = () => {
+    const src = [...YOUR_SOURCES, ...META_SOURCES].find(s => s.id === selected);
+    if (src) onSelect(src);
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '20px 22px 0' }}>
@@ -480,14 +286,14 @@ function SourcePicker({ onSelect, onBack }: { onSelect: (src: SourceDef) => void
         <div style={{ fontFamily: T.font, fontSize: 12, color: T.textMid }}>Choose a source to build your audience from.</div>
       </div>
       <Divider />
-      <div style={{ flex: 1, padding: '14px 22px', overflowY: 'auto' }}>
-        <SectionLabel>Your sources</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, marginBottom: 12 }}>
-          {YOUR_SOURCES.map(src => <SourceRow key={src.id} src={src} selected={selected} onToggle={id => setSelected(prev => prev === id ? null : id)} />)}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 22px' }}>
+        <div style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, color: T.textLo, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>Your Sources</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 14 }}>
+          {YOUR_SOURCES.map(s => <SourceRow key={s.id} src={s} selected={selected} onToggle={setSelected} />)}
         </div>
-        <SectionLabel>Meta sources</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-          {META_SOURCES.map(src => <SourceRow key={src.id} src={src} selected={selected} onToggle={id => setSelected(prev => prev === id ? null : id)} />)}
+        <div style={{ fontFamily: T.font, fontSize: 10, fontWeight: 700, color: T.textLo, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6, paddingLeft: 2 }}>Meta Sources</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+          {META_SOURCES.map(s => <SourceRow key={s.id} src={s} selected={selected} onToggle={setSelected} />)}
         </div>
       </div>
       <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -498,15 +304,236 @@ function SourcePicker({ onSelect, onBack }: { onSelect: (src: SourceDef) => void
   );
 }
 
-// ─── Screen: Custom Config ────────────────────────────────────────────────────
-function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId }: {
+// ─── Screen: Custom Config (FULLY WIRED) ─────────────────────────────────────
+function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId, pixelId, facebookPageId, instagramUserId }: {
   source: SourceDef; onBack: () => void;
   onCreated: (a: { id: string; name: string }) => void;
   accessToken: string; adAccountId: string;
+  pixelId?: string; facebookPageId?: string; instagramUserId?: string;
 }) {
-  const config = SOURCE_CONFIG[source.id];
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [saved, setSaved] = useState(false);
+
+  // ── Live data queries (each only enabled when relevant) ──
+  const { data: pixelEventsData, isLoading: pixelEventsLoading } = trpc.adminMeta.getPixelEvents.useQuery(
+    { accessToken, pixelId: pixelId || '', adAccountId },
+    { enabled: !!accessToken && !!pixelId && (source.id === 'website'), staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: videosData, isLoading: videosLoading } = trpc.adminMeta.getAdVideos.useQuery(
+    { accessToken, adAccountId },
+    { enabled: !!accessToken && !!adAccountId && source.id === 'video', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: igAccountsData, isLoading: igAccountsLoading } = trpc.adminMeta.getPageInstagramAccounts.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && source.id === 'instagram', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: leadFormsData, isLoading: leadFormsLoading } = trpc.adminMeta.getLeadGenForms.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && source.id === 'leadform', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: eventsData, isLoading: eventsLoading } = trpc.adminMeta.getPageEvents.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && source.id === 'events', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: instantExpData, isLoading: instantExpLoading } = trpc.adminMeta.getPageInstantExperiences.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && source.id === 'instant_exp', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: catalogsData, isLoading: catalogsLoading } = trpc.adminMeta.getAdAccountCatalogs.useQuery(
+    { accessToken, adAccountId },
+    { enabled: !!accessToken && !!adAccountId && (source.id === 'catalog' || source.id === 'shopping'), staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: customConversionsData, isLoading: customConversionsLoading } = trpc.adminMeta.getPixelEvents.useQuery(
+    { accessToken, pixelId: pixelId || '', adAccountId },
+    { enabled: !!accessToken && !!pixelId && source.id === 'app', staleTime: 5 * 60 * 1000 }
+  );
+
+  // ── Build dynamic options for each source ──
+  const getDynamicOptions = (sourceId: string, field: string): { options: string[]; loading: boolean } => {
+    switch (sourceId) {
+      case 'website':
+        if (field === 'pixel') {
+          if (!pixelId) return { options: ['No pixel configured in settings'], loading: false };
+          return { options: [`Pixel: ${pixelId}`, ...(pixelEventsData?.events || [])], loading: pixelEventsLoading };
+        }
+        break;
+      case 'video':
+        if (field === 'videos') {
+          const videoOpts = videosData?.videos?.map((v: { id: string; title: string }) => `${v.id}|${v.title}`) || [];
+          return { options: ['All videos', ...videoOpts], loading: videosLoading };
+        }
+        break;
+      case 'instagram':
+        if (field === 'account') {
+          if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+          // Prefer session instagramUserId if available
+          const sessionIG = instagramUserId ? [`${instagramUserId}|Session IG Account`] : [];
+          const apiIG = igAccountsData?.accounts?.map((a: { id: string; username: string }) => `${a.id}|@${a.username}`) || [];
+          const combined = Array.from(new Set([...sessionIG, ...apiIG]));
+          return { options: ['Select Instagram account', ...combined], loading: igAccountsLoading };
+        }
+        break;
+      case 'leadform':
+        if (field === 'form') {
+          if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+          const formOpts = leadFormsData?.forms?.map((f: { id: string; name: string }) => `${f.id}|${f.name}`) || [];
+          return { options: ['Select a lead form', ...formOpts], loading: leadFormsLoading };
+        }
+        break;
+      case 'events':
+        if (field === 'event') {
+          if (!facebookPageId) return { options: ['All events'], loading: false };
+          const eventOpts = eventsData?.events?.map((e: { id: string; name: string }) => `${e.id}|${e.name}`) || [];
+          return { options: ['All events', ...eventOpts], loading: eventsLoading };
+        }
+        break;
+      case 'instant_exp':
+        if (field === 'experience') {
+          if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+          const expOpts = instantExpData?.experiences?.map((e: { id: string; name: string }) => `${e.id}|${e.name}`) || [];
+          return { options: ['Select an Instant Experience', ...expOpts], loading: instantExpLoading };
+        }
+        break;
+      case 'facebook_page':
+        if (field === 'page') {
+          if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+          return { options: [`${facebookPageId}|Session Facebook Page`], loading: false };
+        }
+        break;
+      case 'catalog':
+      case 'shopping':
+        if (field === 'catalog' || field === 'shop') {
+          const catOpts = catalogsData?.catalogs?.map((c: { id: string; name: string }) => `${c.id}|${c.name}`) || [];
+          return { options: ['Select a catalog', ...catOpts], loading: catalogsLoading };
+        }
+        break;
+      case 'app':
+        if (field === 'app') {
+          const appOpts = customConversionsData?.events?.map((e: string) => e) || [];
+          return { options: ['Select an App', ...appOpts], loading: customConversionsLoading };
+        }
+        break;
+    }
+    return { options: [], loading: false };
+  };
+
+  // ── Static source configs with dynamic overrides ──
+  const SOURCE_CONFIG: Record<string, { title: string; sections: Array<{ label: string; type: string; field: string; placeholder?: string; options?: string[] | { value: string; label: string }[]; ruleTypes?: string[]; min?: number; max?: number; defaultVal?: number; unit?: string; hint?: string; dynamic?: boolean }> }> = {
+    website: {
+      title: 'Website Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Website Visitors – Last 30 Days' },
+        { label: 'Pixel', type: 'select', field: 'pixel', dynamic: true },
+        { label: 'Include people who', type: 'rule_group', field: 'rules', ruleTypes: ['All website visitors', 'People who visited specific web pages', 'Visitors by time spent', 'From your events', 'People who completed a purchase', 'People who added to cart', 'People who initiated checkout', 'People who registered', 'People who searched', 'People who viewed content'] },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days', hint: 'Include people who matched the criteria within the last N days.' },
+      ],
+    },
+    video: {
+      title: 'Video Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. 75% Video Viewers' },
+        { label: 'Engagement', type: 'select', field: 'engagement', options: ['People who watched at least 3 seconds', 'People who watched at least 10 seconds', 'People who watched 25% of your video', 'People who watched 50% of your video', 'People who watched 75% of your video', 'People who watched 95% of your video', 'People who watched ThruPlay'] },
+        { label: 'Videos', type: 'select', field: 'videos', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+      ],
+    },
+    leadform: {
+      title: 'Lead Form Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Lead Form Openers' },
+        { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened the form' }, { value: 'opened_not_submitted', label: "People who opened but didn't submit" }, { value: 'submitted', label: 'People who submitted the form' }] },
+        { label: 'Lead Form', type: 'select', field: 'form', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    instagram: {
+      title: 'Instagram Account Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. IG Profile Visitors' },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your professional account' }, { value: 'visited', label: 'Anyone who visited your profile' }, { value: 'post_cta', label: 'People who engaged with any post or ad' }, { value: 'messaged', label: 'People who sent a message to your account' }, { value: 'saved', label: 'People who saved any post or ad' }] },
+        { label: 'Account', type: 'select', field: 'account', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+      ],
+    },
+    facebook_page: {
+      title: 'Facebook Page Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Page Engagers – 90 Days' },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who engaged with your Page' }, { value: 'visited', label: 'Anyone who visited your Page' }, { value: 'post', label: 'People who engaged with any post or ad' }, { value: 'cta', label: 'People who clicked any call-to-action button' }, { value: 'messaged', label: 'People who sent a message to your Page' }, { value: 'saved', label: 'People who saved your Page or any post' }] },
+        { label: 'Facebook Page', type: 'select', field: 'page', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+      ],
+    },
+    customer_list: {
+      title: 'Customer List Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. CRM Upload – Q4 Buyers' },
+        { label: 'List Type', type: 'radio', field: 'listType', options: [{ value: 'customer_file', label: 'Upload a file that includes customer value' }, { value: 'mailchimp', label: 'Import from Mailchimp' }, { value: 'crm', label: 'Import from CRM' }] },
+        { label: 'Data Format', type: 'select', field: 'format', options: ['CSV or TXT file', 'Hashed CSV', 'Email addresses only', 'Phone numbers only', 'Mixed identifiers'] },
+        { label: 'Upload File', type: 'file_upload', field: 'file', hint: 'Your file should include at least one identifier: email, phone, name, or address.' },
+      ],
+    },
+    offline: {
+      title: 'Offline Activity Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. In-Store Purchasers' },
+        { label: 'Offline Event Set', type: 'select', field: 'event_set', options: ['Select an event set', 'In-Store Purchases', 'Call Center Leads', 'POS Transactions'] },
+        { label: 'Event', type: 'radio', field: 'engagement', options: [{ value: 'purchase', label: 'Purchase' }, { value: 'lead', label: 'Lead' }, { value: 'other', label: 'Other offline event' }] },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    shopping: {
+      title: 'Shopping Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Shop Visitors – 30 Days' },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'Everyone who visited your shop' }, { value: 'viewed', label: 'People who viewed a product' }, { value: 'added', label: 'People who added a product to cart' }, { value: 'purchased', label: 'People who purchased a product' }, { value: 'saved', label: 'People who saved a product' }] },
+        { label: 'Shop / Catalog', type: 'select', field: 'shop', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    app: {
+      title: 'App Activity Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. App Purchasers – 30 Days' },
+        { label: 'App', type: 'select', field: 'app', dynamic: true },
+        { label: 'Activity', type: 'rule_group', field: 'rules', ruleTypes: ['All app users', 'Most active users by percentile', 'Users by purchase amount', 'Users who completed a specific event', 'Users who opened the app', 'Users who installed the app', 'Users who made an in-app purchase'] },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    catalog: {
+      title: 'Catalog Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Product Viewers' },
+        { label: 'Catalog', type: 'select', field: 'catalog', dynamic: true },
+        { label: 'Interaction', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed items' }, { value: 'added', label: 'People who added items to cart' }, { value: 'purchased', label: 'People who purchased items' }, { value: 'viewed_not_purchased', label: 'Viewed but not purchased' }] },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    events: {
+      title: 'Facebook Events Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Event Responders' },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'People who interacted with any event' }, { value: 'responded_going', label: 'People who responded Going' }, { value: 'responded_interested', label: 'People who responded Interested' }, { value: 'visited', label: 'People who visited event page' }, { value: 'purchased_ticket', label: 'People who purchased a ticket' }] },
+        { label: 'Event', type: 'select', field: 'event', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+      ],
+    },
+    instant_exp: {
+      title: 'Instant Experience Custom Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Canvas Engagers – 30 Days' },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'opened', label: 'People who opened your Instant Experience' }, { value: 'clicked', label: 'People who clicked any link in your Instant Experience' }] },
+        { label: 'Instant Experience', type: 'select', field: 'experience', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+    on_facebook: {
+      title: 'On-Facebook Listings Audience', sections: [
+        { label: 'Audience Name', type: 'text', field: 'name', placeholder: 'e.g. Rental Listing Viewers' },
+        { label: 'Listing Type', type: 'radio', field: 'listingType', options: [{ value: 'rental', label: 'Rental property listings' }, { value: 'vehicle', label: 'Vehicle listings' }] },
+        { label: 'Engagement', type: 'radio', field: 'engagement', options: [{ value: 'viewed', label: 'People who viewed your listings' }, { value: 'inquired', label: 'People who sent an inquiry' }, { value: 'saved', label: 'People who saved your listings' }] },
+        { label: 'Facebook Page', type: 'select', field: 'page', dynamic: true },
+        { label: 'Retention', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+      ],
+    },
+  };
+
+  const config = SOURCE_CONFIG[source.id];
 
   const createMutation = trpc.adminMeta.createCustomAudience.useMutation({
     onSuccess: (data) => {
@@ -528,6 +555,79 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId }: {
   };
 
   if (!config) return null;
+
+  const renderSection = (section: typeof config.sections[0], i: number) => {
+    const val = form[section.field];
+    const set = (v: unknown) => setForm(s => ({ ...s, [section.field]: v }));
+
+    if (section.type === 'text') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <TxtInput value={(val as string) || ''} onChange={set} placeholder={section.placeholder} />
+        </div>
+      );
+    }
+
+    if (section.type === 'select') {
+      let opts: string[];
+      let loading = false;
+      if (section.dynamic) {
+        const dyn = getDynamicOptions(source.id, section.field);
+        opts = dyn.options;
+        loading = dyn.loading;
+      } else {
+        opts = (section.options as string[]) || [];
+      }
+      const strVal = (val as string) || (opts[0] || '');
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <SelInput value={strVal} onChange={set} options={opts.length ? opts : ['Loading...']} loading={loading} />
+        </div>
+      );
+    }
+
+    if (section.type === 'radio') {
+      const radioOptions = section.options as { value: string; label: string }[];
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <RadioGrp options={radioOptions} value={(val as string) || (radioOptions[0]?.value || '')} onChange={set} />
+        </div>
+      );
+    }
+
+    if (section.type === 'slider') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <SliderInput value={(val as number) ?? (section.defaultVal ?? section.min ?? 1)} onChange={set} min={section.min ?? 1} max={section.max ?? 180} unit={section.unit || 'days'} />
+        </div>
+      );
+    }
+
+    if (section.type === 'rule_group') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <RuleGroup value={val as { type: string }[] | undefined} onChange={set} ruleTypes={section.ruleTypes || []} />
+        </div>
+      );
+    }
+
+    if (section.type === 'file_upload') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label hint={section.hint}>{section.label}</Label>
+          <FileUpload onChange={set} hint={section.hint} />
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '20px 22px 0' }}>
@@ -543,7 +643,7 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId }: {
       <Divider />
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
         {saved ? <SuccessScreen title="Custom Audience Created!" subtitle="Your audience is being populated. It may take up to 24 hours to be ready for use in campaigns." /> :
-          config.sections.map((section, i) => <FormSection key={i} section={section} formState={form} setFormState={setForm} />)}
+          config.sections.map((section, i) => renderSection(section, i))}
       </div>
       {!saved && (
         <div style={{ padding: '12px 22px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between' }}>
@@ -558,6 +658,9 @@ function CustomConfig({ source, onBack, onCreated, accessToken, adAccountId }: {
 }
 
 // ─── Screen: LAL Builder ──────────────────────────────────────────────────────
+const COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'Brazil', 'Japan', 'India', 'Mexico', 'Spain', 'Italy', 'Netherlands', 'South Korea', 'Singapore', 'United Arab Emirates', 'South Africa'];
+const COUNTRY_CODES: Record<string, string> = { 'United States': 'US', 'United Kingdom': 'GB', 'Canada': 'CA', 'Australia': 'AU', 'Germany': 'DE', 'France': 'FR', 'Brazil': 'BR', 'Japan': 'JP', 'India': 'IN', 'Mexico': 'MX', 'Spain': 'ES', 'Italy': 'IT', 'Netherlands': 'NL', 'South Korea': 'KR', 'Singapore': 'SG', 'United Arab Emirates': 'AE', 'South Africa': 'ZA' };
+
 function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
   onBack: () => void; onCreated: (a: { id: string; name: string }) => void;
   accessToken: string; adAccountId: string;
@@ -567,8 +670,6 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
   const [size, setSize] = useState(2);
   const [name, setName] = useState('');
   const [saved, setSaved] = useState(false);
-
-  const COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'Brazil', 'Japan', 'India', 'Mexico', 'Spain', 'Italy', 'Netherlands', 'South Korea', 'Singapore', 'United Arab Emirates', 'South Africa'];
 
   const { data: audiencesData } = trpc.adminMeta.getCustomAudiences.useQuery(
     { accessToken, adAccountId },
@@ -593,7 +694,7 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
       accessToken, adAccountId,
       name: name.trim(),
       originAudienceId: srcAud?.id || '',
-      country: COUNTRIES.indexOf(country) >= 0 ? ['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'BR', 'JP', 'IN', 'MX', 'ES', 'IT', 'NL', 'KR', 'SG', 'AE', 'ZA'][COUNTRIES.indexOf(country)] : 'US',
+      country: COUNTRY_CODES[country] || 'US',
       ratio: size / 100,
     });
   };
@@ -614,7 +715,6 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
         {saved ? <SuccessScreen title="Lookalike Audience Created!" subtitle="Meta is building your audience. This typically takes 1–6 hours." /> : (
           <>
-            {/* Source Audience */}
             <div style={{ marginBottom: 18 }}>
               <Label>Source Audience</Label>
               <SelInput value={source || seedOptions[0]} onChange={setSource} options={seedOptions} />
@@ -624,14 +724,10 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
                 </div>
               )}
             </div>
-
-            {/* Audience Location */}
             <div style={{ marginBottom: 18 }}>
               <Label>Audience Location</Label>
               <SelInput value={country} onChange={setCountry} options={COUNTRIES} />
             </div>
-
-            {/* Audience Size */}
             <div style={{ marginBottom: 18 }}>
               <Label hint="1% = most similar. 10% = larger, less similar.">Audience Size</Label>
               <SliderInput value={size} onChange={setSize} min={1} max={10} unit="%" />
@@ -648,8 +744,6 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
                 Estimated reach: <strong style={{ color: T.cyan }}>{(size * 1.8).toFixed(1)}M – {(size * 2.4).toFixed(1)}M people</strong> in {country}
               </div>
             </div>
-
-            {/* Audience Name */}
             <div style={{ marginBottom: 18 }}>
               <Label>Audience Name</Label>
               <TxtInput value={name} onChange={setName} placeholder={`e.g. Lookalike (${country}, ${size}%) – Source`} />
@@ -669,10 +763,70 @@ function LALBuilder({ onBack, onCreated, accessToken, adAccountId }: {
   );
 }
 
-// ─── Screen: Quick Build ──────────────────────────────────────────────────────
-function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
+// ─── Screen: Quick Build (FULLY WIRED) ───────────────────────────────────────
+type QBOption = {
+  id: string; label: string; icon: string; desc: string;
+  fields: Array<{ label: string; type: string; field: string; min?: number; max?: number; defaultVal?: number; unit?: string; placeholder?: string; options?: string[] | { value: string; label: string }[]; dynamic?: boolean }>;
+  buildName: (f: Record<string, unknown>) => string;
+};
+
+const QUICK_BUILD_OPTIONS: QBOption[] = [
+  { id: 'all_visitors', label: 'All Website Visitors', icon: '🌐', desc: 'Everyone who visited your website', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - All Visitors (${f.retention || 30} Days)` },
+  { id: 'page_visitors', label: 'Specific Page Visitors', icon: '📄', desc: 'People who visited a specific URL', fields: [{ label: 'URL Contains', type: 'text', field: 'url', placeholder: 'e.g. /pricing or /checkout' }, { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Page Visitors${f.url ? ` - ${f.url}` : ''} (${f.retention || 30} Days)` },
+  { id: 'purchase_event', label: 'Standard Event: Purchase', icon: '💳', desc: 'People who fired the Purchase pixel event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Purchase (${f.retention || 30} Days)` },
+  { id: 'add_to_cart', label: 'Standard Event: Add to Cart', icon: '🛒', desc: 'People who added an item to cart', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Add to Cart (${f.retention || 30} Days)` },
+  { id: 'lead_event', label: 'Standard Event: Lead', icon: '📋', desc: 'People who completed a Lead event', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Lead (${f.retention || 30} Days)` },
+  { id: 'initiate_checkout', label: 'Standard Event: Initiate Checkout', icon: '🏁', desc: 'People who started the checkout process', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Event - Initiate Checkout (${f.retention || 30} Days)` },
+  {
+    id: 'custom_conversion', label: 'Custom Conversion Event', icon: '⚙️', desc: 'People who fired a specific custom conversion',
+    fields: [
+      { label: 'Custom Conversion', type: 'select', field: 'conversion', dynamic: true },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' },
+    ],
+    buildName: (f) => { const conv = f.conversion && !(f.conversion as string).startsWith('Select') ? f.conversion as string : 'Custom Event'; return `Website - Event - ${conv} (${f.retention || 30} Days)`; },
+  },
+  { id: 'top_visitors', label: 'Top 25% Time Spent', icon: '⏱️', desc: 'Your most engaged website visitors by time on site', fields: [{ label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 180, defaultVal: 30, unit: 'days' }], buildName: (f) => `Website - Top 25% Time Spent (${f.retention || 30} Days)` },
+  {
+    id: 'video_viewers', label: 'Video Viewers (75%+)', icon: '🎬', desc: 'People who watched 75% or more of your videos',
+    fields: [
+      { label: 'View Threshold', type: 'radio', field: 'threshold', options: [{ value: '25', label: '25% watched' }, { value: '50', label: '50% watched' }, { value: '75', label: '75% watched' }, { value: '95', label: '95% watched' }, { value: 'thruplay', label: 'ThruPlay' }] },
+      { label: 'Videos', type: 'select', field: 'videos', dynamic: true },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+    buildName: (f) => `Video - ${f.threshold ? (f.threshold === 'thruplay' ? 'ThruPlay' : f.threshold + '% Viewers') : '75% Viewers'} (${f.retention || 60} Days)`,
+  },
+  {
+    id: 'ig_engagers', label: 'Instagram Engagers', icon: '📸', desc: 'People who engaged with your Instagram account',
+    fields: [
+      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Profile visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'messaged', label: 'Messaged your account' }] },
+      { label: 'Instagram Account', type: 'select', field: 'ig_account', dynamic: true },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 60, unit: 'days' },
+    ],
+    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Profile Visitors', post: 'Post Engagers', messaged: 'DM Senders' }; return `Instagram - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 60} Days)`; },
+  },
+  {
+    id: 'fb_page_engagers', label: 'Facebook Page Engagers', icon: '👍', desc: 'People who engaged with your Facebook Page',
+    fields: [
+      { label: 'Engagement Type', type: 'radio', field: 'engagement', options: [{ value: 'all', label: 'All engagement' }, { value: 'visited', label: 'Page visitors' }, { value: 'post', label: 'Post/ad engagers' }, { value: 'cta', label: 'CTA button clicks' }] },
+      { label: 'Facebook Page', type: 'select', field: 'fb_page', dynamic: true },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 365, defaultVal: 90, unit: 'days' },
+    ],
+    buildName: (f) => { const lbl: Record<string, string> = { all: 'All Engagers', visited: 'Page Visitors', post: 'Post Engagers', cta: 'CTA Clickers' }; return `Facebook Page - ${lbl[f.engagement as string] || 'All Engagers'} (${f.retention || 90} Days)`; },
+  },
+  {
+    id: 'lead_form_submitters', label: 'Lead Form Submitters', icon: '📝', desc: 'People who submitted an Instant Form',
+    fields: [
+      { label: 'Lead Form', type: 'select', field: 'form', dynamic: true },
+      { label: 'Retention Window', type: 'slider', field: 'retention', min: 1, max: 90, defaultVal: 30, unit: 'days' },
+    ],
+    buildName: (f) => `Lead Form - Submitted${f.form && !(f.form as string).startsWith('Select') && !(f.form as string).startsWith('All') ? ` - ${(f.form as string).split('|')[1] || f.form}` : ''} (${f.retention || 30} Days)`,
+  },
+];
+
+function QuickBuild({ onBack, onCreated, accessToken, adAccountId, pixelId, facebookPageId, instagramUserId }: {
   onBack: () => void; onCreated: (a: { id: string; name: string }) => void;
   accessToken: string; adAccountId: string;
+  pixelId?: string; facebookPageId?: string; instagramUserId?: string;
 }) {
   const [step, setStep] = useState<'pick' | 'config'>('pick');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -683,6 +837,57 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
   const [saved, setSaved] = useState(false);
 
   const option = selectedId ? QUICK_BUILD_OPTIONS.find(o => o.id === selectedId) : null;
+
+  // ── Live data queries for Quick Build templates ──
+  const { data: customConversionsData, isLoading: ccLoading } = trpc.adminMeta.getPixelEvents.useQuery(
+    { accessToken, pixelId: pixelId || '', adAccountId },
+    { enabled: !!accessToken && !!pixelId && selectedId === 'custom_conversion' && step === 'config', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: videosData, isLoading: videosLoading } = trpc.adminMeta.getAdVideos.useQuery(
+    { accessToken, adAccountId },
+    { enabled: !!accessToken && !!adAccountId && selectedId === 'video_viewers' && step === 'config', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: igAccountsData, isLoading: igLoading } = trpc.adminMeta.getPageInstagramAccounts.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && selectedId === 'ig_engagers' && step === 'config', staleTime: 5 * 60 * 1000 }
+  );
+
+  const { data: leadFormsData, isLoading: formsLoading } = trpc.adminMeta.getLeadGenForms.useQuery(
+    { accessToken, pageId: facebookPageId || '' },
+    { enabled: !!accessToken && !!facebookPageId && selectedId === 'lead_form_submitters' && step === 'config', staleTime: 5 * 60 * 1000 }
+  );
+
+  // ── Build dynamic options for Quick Build fields ──
+  const getQBDynamicOptions = (optId: string, field: string): { options: string[]; loading: boolean } => {
+    if (optId === 'custom_conversion' && field === 'conversion') {
+      if (!pixelId) return { options: ['No pixel configured in settings'], loading: false };
+      const events = customConversionsData?.events || [];
+      return { options: ['Select a custom conversion', ...events], loading: ccLoading };
+    }
+    if (optId === 'video_viewers' && field === 'videos') {
+      const videoOpts = videosData?.videos?.map((v: { id: string; title: string }) => `${v.id}|${v.title}`) || [];
+      return { options: ['All videos', ...videoOpts], loading: videosLoading };
+    }
+    if (optId === 'ig_engagers' && field === 'ig_account') {
+      if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+      const sessionIG = instagramUserId ? [`${instagramUserId}|Session IG Account`] : [];
+      const apiIG = igAccountsData?.accounts?.map((a: { id: string; username: string }) => `${a.id}|@${a.username}`) || [];
+      const combined = Array.from(new Set([...sessionIG, ...apiIG]));
+      return { options: ['Select Instagram account', ...combined], loading: igLoading };
+    }
+    if (optId === 'fb_page_engagers' && field === 'fb_page') {
+      if (!facebookPageId) return { options: ['No Facebook Page configured in settings'], loading: false };
+      return { options: [`${facebookPageId}|Session Facebook Page`], loading: false };
+    }
+    if (optId === 'lead_form_submitters' && field === 'form') {
+      if (!facebookPageId) return { options: ['All lead forms'], loading: false };
+      const formOpts = leadFormsData?.forms?.map((f: { id: string; name: string }) => `${f.id}|${f.name}`) || [];
+      return { options: ['All lead forms', ...formOpts], loading: formsLoading };
+    }
+    return { options: [], loading: false };
+  };
 
   // Auto-update name from template when form changes (unless user manually edited)
   useEffect(() => {
@@ -717,6 +922,55 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
       subtype: 'CUSTOM',
       retentionDays: (form.retention as number) || 30,
     });
+  };
+
+  const renderQBField = (field: QBOption['fields'][0], i: number) => {
+    const val = form[field.field];
+    const set = (v: unknown) => setForm(s => ({ ...s, [field.field]: v }));
+
+    if (field.type === 'text') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label>{field.label}</Label>
+          <TxtInput value={(val as string) || ''} onChange={set} placeholder={field.placeholder} />
+        </div>
+      );
+    }
+    if (field.type === 'select') {
+      let opts: string[];
+      let loading = false;
+      if (field.dynamic && selectedId) {
+        const dyn = getQBDynamicOptions(selectedId, field.field);
+        opts = dyn.options;
+        loading = dyn.loading;
+      } else {
+        opts = (field.options as string[]) || [];
+      }
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label>{field.label}</Label>
+          <SelInput value={(val as string) || (opts[0] || '')} onChange={set} options={opts.length ? opts : ['Loading...']} loading={loading} />
+        </div>
+      );
+    }
+    if (field.type === 'radio') {
+      const radioOptions = field.options as { value: string; label: string }[];
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label>{field.label}</Label>
+          <RadioGrp options={radioOptions} value={(val as string) || (radioOptions[0]?.value || '')} onChange={set} />
+        </div>
+      );
+    }
+    if (field.type === 'slider') {
+      return (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <Label>{field.label}</Label>
+          <SliderInput value={(val as number) ?? (field.defaultVal ?? field.min ?? 1)} onChange={set} min={field.min ?? 1} max={field.max ?? 180} unit={field.unit || 'days'} />
+        </div>
+      );
+    }
+    return null;
   };
 
   // ── Pick screen ──
@@ -766,21 +1020,7 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
         {saved ? <SuccessScreen title="Audience Created!" subtitle="Your audience is being populated. It may take up to 24 hours to be ready for use in campaigns." /> : (
           <>
-            {/* Dynamic fields for this template */}
-            {option?.fields.map((section, i) => {
-              const srcSection: SourceSection = {
-                label: section.label,
-                type: section.type as SourceSection['type'],
-                field: section.field,
-                placeholder: section.placeholder,
-                min: section.min,
-                max: section.max,
-                defaultVal: section.defaultVal,
-                unit: section.unit,
-                options: section.options as SourceSection['options'],
-              };
-              return <FormSection key={i} section={srcSection} formState={form} setFormState={setForm} />;
-            })}
+            {option?.fields.map((field, i) => renderQBField(field, i))}
 
             {/* Audience Name with auto-naming template */}
             <div style={{ marginTop: 4 }}>
@@ -823,7 +1063,7 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId }: {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function AudienceBuilderModal({ accessToken, adAccountId, onCreated, onClose }: Props) {
+export default function AudienceBuilderModal({ accessToken, adAccountId, pixelId, facebookPageId, instagramUserId, onCreated, onClose }: Props) {
   const [screen, setScreen] = useState<Screen>('type');
   const [selectedSource, setSelectedSource] = useState<SourceDef | null>(null);
 
@@ -852,13 +1092,30 @@ export default function AudienceBuilderModal({ accessToken, adAccountId, onCreat
           <SourcePicker onSelect={src => { setSelectedSource(src); setScreen('custom_config'); }} onBack={() => setScreen('type')} />
         )}
         {screen === 'custom_config' && selectedSource && (
-          <CustomConfig source={selectedSource} onBack={() => setScreen('source_picker')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
+          <CustomConfig
+            source={selectedSource}
+            onBack={() => setScreen('source_picker')}
+            onCreated={onCreated}
+            accessToken={accessToken}
+            adAccountId={adAccountId}
+            pixelId={pixelId}
+            facebookPageId={facebookPageId}
+            instagramUserId={instagramUserId}
+          />
         )}
         {screen === 'lal' && (
           <LALBuilder onBack={() => setScreen('type')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
         )}
         {screen === 'quick' && (
-          <QuickBuild onBack={() => setScreen('type')} onCreated={onCreated} accessToken={accessToken} adAccountId={adAccountId} />
+          <QuickBuild
+            onBack={() => setScreen('type')}
+            onCreated={onCreated}
+            accessToken={accessToken}
+            adAccountId={adAccountId}
+            pixelId={pixelId}
+            facebookPageId={facebookPageId}
+            instagramUserId={instagramUserId}
+          />
         )}
       </div>
 
@@ -873,3 +1130,6 @@ export default function AudienceBuilderModal({ accessToken, adAccountId, onCreat
     </div>
   );
 }
+
+// ─── React import (needed for useRef in FileUpload) ───────────────────────────
+import React from 'react';

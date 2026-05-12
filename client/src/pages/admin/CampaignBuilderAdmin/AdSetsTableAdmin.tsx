@@ -2012,6 +2012,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
           adAccountId={settings.adAccountId}
           pixelId={settings.pixelId}
           facebookPageId={settings.facebookPageId}
+          instagramUserId={settings.instagramUserId}
           onCreated={(aud) => {
             toast.success(`Audience "${aud.name}" created and ready to use (ID: ${aud.id})`);
           }}
