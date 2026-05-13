@@ -1,0 +1,16 @@
+{
+  "query": "SELECT COUNT(*) as total_rows, MIN(date) as earliest, MAX(date) as latest, LEFT(account_id, 20) as account_sample FROM ad_performance GROUP BY LEFT(account_id, 20) LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT COUNT(*) as total_rows, MIN(date) as earliest, MAX(date) as latest, LEFT(account_id, 20) as account_sample FROM ad_performance GROUP BY LEFT(account_id, 20) LIMIT 10;",
+  "rows": [
+    {
+      "total_rows": "363",
+      "earliest": "2026-04-10",
+      "latest": "2026-05-12",
+      "account_sample": "1607159873330097"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\tearliest\tlatest\taccount_sample\n363\t2026-04-10\t2026-05-12\t1607159873330097\n",
+  "stderr": "",
+  "execution_time_ms": 299
+}
