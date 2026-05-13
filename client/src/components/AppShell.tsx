@@ -18,6 +18,7 @@ import {
   Shield,
   TrendingUp,
   Users,
+  UserCircle2,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -77,6 +78,7 @@ const ADMIN_ITEMS = [
   { label: "Campaign Builder (Admin)", icon: Wrench, path: "/admin/campaign-builder" },
   { label: "Creative Perf. Sync (Admin)", icon: RefreshCw, path: "/admin/creative-performance-sync" },
   { label: "Creative Decay (Admin)", icon: Zap, path: "/admin/creative-decay" },
+  { label: "My Profile", icon: UserCircle2, path: "/admin/profile" },
 ];
 
 /** Returns the set of skillIds that have a currently running task for the logged-in user. */

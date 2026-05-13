@@ -438,6 +438,25 @@ function ScheduleTab() {
                   className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
               </SchedField>
             </div>
+            {/* Schedule conflict warning */}
+            {(() => {
+              const conflicting = schedules.filter(
+                (s) => s.accountId !== accountId && s.analysisEnabled && s.analysisUtcHour === sched.analysisUtcHour
+              );
+              if (conflicting.length === 0) return null;
+              const names = conflicting.map((s) => s.accountId).join(", ");
+              return (
+                <div className="flex items-start gap-3 rounded-xl px-4 py-3"
+                  style={{ background: "rgba(234,179,8,0.12)", border: "1px solid rgba(234,179,8,0.35)" }}>
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" style={{ color: "#EAB308" }} />
+                  <p className="text-xs leading-relaxed" style={{ color: "#FDE68A" }}>
+                    UTC hour <strong>{sched.analysisUtcHour}:00</strong> is already used by{" "}
+                    <strong>{conflicting.length}</strong> other schedule{conflicting.length > 1 ? "s" : ""} —{" "}
+                    {names}. Overlapping schedules may cause resource contention during the cron run.
+                  </p>
+                </div>
+              );
+            })()}
             <div className="flex flex-wrap gap-4">
               {([["notifyProbable", "Notify: Probable"], ["notifyPossible", "Notify: Possible"], ["notifyEmerging", "Notify: Emerging"], ["onlyLiveAds", "Only live ads"], ["alwaysSendReport", "Always save report"]] as const).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer">

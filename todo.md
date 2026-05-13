@@ -643,34 +643,42 @@
 ## Creative Sync + Decay Redesign (Multi-Account, User-Scoped)
 
 ### Schema
-- [ ] Add userId column to metaSyncSchedule (make schedules user-scoped, unique on userId+accountId)
-- [ ] Add decay_reports table (userId, accountId, campaignIds, dateFrom, dateTo, type manual/auto, signalCount, reportJson, createdAt)
-- [ ] Add slackWebhookUrl column to users table
-- [ ] Run SQL migrations for all three schema changes
+- [x] Add userId column to metaSyncSchedule (make schedules user-scoped, unique on userId+accountId)
+- [x] Add decay_reports table (userId, accountId, campaignIds, dateFrom, dateTo, type manual/auto, signalCount, reportJson, createdAt)
+- [x] Add slackWebhookUrl column to users table
+- [x] Run SQL migrations for all three schema changes
 
 ### Backend
-- [ ] Update getSchedulerConfig / saveAnalysisSchedulerConfig to be user-scoped (filter by ctx.user.id)
-- [ ] Add getUserDecaySchedules procedure (returns all schedules for logged-in user across accounts)
-- [ ] Add saveDecayReport procedure (saves serialized report to decay_reports)
-- [ ] Add getDecayReports procedure (returns all reports for logged-in user, sorted by createdAt desc)
-- [ ] Add saveSlackWebhook procedure (saves webhook URL to users.slackWebhookUrl)
-- [ ] Add Slack notification helper (sendSlackNotification) called after auto analysis fires
-- [ ] Update cron to iterate all enabled schedule rows (not just row id=1), fire per-user per-account
-- [ ] Update runDecayChain to save auto report to decay_reports and send Slack notification
-- [ ] Update getAnalysisSchedulerConfig to accept accountId and return user+account specific row
+- [x] Update getSchedulerConfig / saveAnalysisSchedulerConfig to be user-scoped (filter by ctx.user.id)
+- [x] Add getUserDecaySchedules procedure (returns all schedules for logged-in user across accounts)
+- [x] Add saveDecayReport procedure (saves serialized report to decay_reports)
+- [x] Add getDecayReports procedure (returns all reports for logged-in user, sorted by createdAt desc)
+- [x] Add saveSlackWebhook procedure (saves webhook URL to users.slackWebhookUrl)
+- [x] Add Slack notification helper (sendSlackNotification) called after auto analysis fires
+- [x] Update cron to iterate all enabled schedule rows (not just row id=1), fire per-user per-account
+- [x] Update runDecayChain to save auto report to decay_reports and send Slack notification
+- [x] Update getAnalysisSchedulerConfig to accept accountId and return user+account specific row
 
 ### Creative Performance Sync Page Redesign
-- [ ] Remove Database Flow info box
-- [ ] Remove duplicate Campaign Status Filter (keep only in Campaign Scope card)
-- [ ] Combine Automated Sync Scheduler into collapsible panel below manual pull section
-- [ ] Scheduler panel: Enable toggle, UTC Hour, Date Preset only (no separate Campaign Scope for scheduler)
-- [ ] Sync History table stays, cleaned up styling
+- [x] Remove Database Flow info box
+- [x] Remove duplicate Campaign Status Filter (keep only in Campaign Scope card)
+- [x] Combine Automated Sync Scheduler into collapsible panel below manual pull section
+- [x] Scheduler panel: Enable toggle, UTC Hour, Date Preset only (no separate Campaign Scope for scheduler)
+- [x] Sync History table stays, cleaned up styling
 
 ### Creative Decay Page Redesign
-- [ ] Section 1 — Manual Analysis: BM Token, Ad Account, Date Range, Campaign Scope, Run Analysis button
-- [ ] Add Save Report button that appears after analysis runs (saves to decay_reports as type=manual)
-- [ ] Section 2 — Automated Schedule: collapsible panel per account, Enable toggle, UTC Hour, Rolling Days, Always Send Report toggle, notification thresholds, Slack webhook URL input
-- [ ] Section 3 — Reports Library: unified table across all user accounts (Type pill, Date Range, Account, Run Date, Signal Count, View button)
-- [ ] Reports Library View: loads full results output in a drawer/modal
-- [ ] Section 4 — Notifications: existing decay notification log, now user-scoped across all accounts
-- [ ] My Schedules view: shows all active schedules across accounts with enable/disable per row
+- [x] Section 1 — Manual Analysis: BM Token, Ad Account, Date Range, Campaign Scope, Run Analysis button
+- [x] Add Save Report button that appears after analysis runs (saves to decay_reports as type=manual)
+- [x] Section 2 — Automated Schedule: collapsible panel per account, Enable toggle, UTC Hour, Rolling Days, Always Send Report toggle, notification thresholds, Slack webhook URL input
+- [x] Section 3 — Reports Library: unified table across all user accounts (Type pill, Date Range, Account, Run Date, Signal Count, View button)
+- [x] Reports Library View: loads full results output in a drawer/modal
+- [x] Section 4 — Notifications: existing decay notification log, now user-scoped across all accounts
+- [x] My Schedules view: shows all active schedules across accounts with enable/disable per row
+
+## Admin Profile Page + Schedule Conflict Detection
+
+- [x] Add getProfile / saveProfile admin-only tRPC procedures (return/save slackWebhookUrl)
+- [x] Create AdminUserProfile.tsx page with Notification Preferences (Slack webhook URL, test button)
+- [x] Register /admin/profile route in App.tsx
+- [x] Add "My Profile" entry to ADMIN_ITEMS in AppShell.tsx
+- [x] Add schedule conflict detection in AdminCreativeDecay.tsx (warn if UTC hour already used by another schedule)
