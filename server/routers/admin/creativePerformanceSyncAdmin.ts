@@ -119,13 +119,16 @@ function firstText(value: unknown): string | null {
 }
 
 function buildFingerprint(
-  creativeId: string,
+  _creativeId: string,
   imageHash: string | null,
   videoId: string | null,
 ): string {
   const { createHash } = require("node:crypto");
+  // Intentionally excludes creativeId so the same asset reused across
+  // ad sets (which often get different creative IDs on duplication) still
+  // hashes to the same fingerprint and is aggregated together.
   return createHash("sha256")
-    .update(`${creativeId}:${imageHash ?? ""}:${videoId ?? ""}`)
+    .update(`${imageHash ?? ""}:${videoId ?? ""}`)
     .digest("hex")
     .slice(0, 16);
 }

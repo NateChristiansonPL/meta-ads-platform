@@ -684,10 +684,10 @@
 - [x] Add schedule conflict detection in AdminCreativeDecay.tsx (warn if UTC hour already used by another schedule)
 
 ## Sync Engine Improvements (May 13)
-- [ ] Remove publisher_platform breakdown from sync — single insights call with reach/frequency included directly
-- [ ] Add onlyLiveAds filter (ad-level ACTIVE status check via Meta API) to syncPerformance procedure, scheduled config schema/DB, cron runner, and UI
-- [ ] Implement async Meta Insights job polling for large accounts (detect job_id response, poll async_status until complete)
-- [ ] Verify cross-adset fingerprint aggregation is working correctly in decay analysis
+- [x] Remove publisher_platform breakdown from sync — single insights call with reach/frequency included directly
+- [x] Add onlyLiveAds filter (ad-level ACTIVE status check via Meta API) to syncPerformance procedure, scheduled config schema/DB, cron runner, and UI
+- [x] Implement async Meta Insights job polling for large accounts (detect job_id response, poll async_status until complete)
+- [x] Verify cross-adset fingerprint aggregation is working correctly in decay analysis
 
 ## Sync Engine Improvements (May 2026)
 - [x] Remove publisher_platform breakdown from sync — single unified insights call, no breakdown
