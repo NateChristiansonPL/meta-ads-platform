@@ -682,3 +682,16 @@
 - [x] Register /admin/profile route in App.tsx
 - [x] Add "My Profile" entry to ADMIN_ITEMS in AppShell.tsx
 - [x] Add schedule conflict detection in AdminCreativeDecay.tsx (warn if UTC hour already used by another schedule)
+
+## Sync Engine Improvements (May 13)
+- [ ] Remove publisher_platform breakdown from sync — single insights call with reach/frequency included directly
+- [ ] Add onlyLiveAds filter (ad-level ACTIVE status check via Meta API) to syncPerformance procedure, scheduled config schema/DB, cron runner, and UI
+- [ ] Implement async Meta Insights job polling for large accounts (detect job_id response, poll async_status until complete)
+- [ ] Verify cross-adset fingerprint aggregation is working correctly in decay analysis
+
+## Sync Engine Improvements (May 2026)
+- [x] Remove publisher_platform breakdown from sync — single unified insights call, no breakdown
+- [x] Reach and frequency now pulled inline in the same call (no longer a separate API call)
+- [x] Add onlyLiveAds filter (ad.effective_status=ACTIVE) to manual sync and scheduled config
+- [x] Implement async Meta Insights job polling (metaInsightsAsync) for large accounts
+- [x] Cross-adset fingerprint aggregation verified — groups by contentFingerprint across all ad sets

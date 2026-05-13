@@ -329,71 +329,118 @@ async function metaGetAll(
   return out;
 }
 
+// Async Meta Insights job polling.
+// For large accounts, Meta may return { report_run_id } instead of inline data.
+// We poll the job status until it completes, then paginate the results.
+async function metaInsightsAsync(
+  accountId: string,
+  params: Record<string, string>,
+  accessToken: string,
+): Promise<unknown[]> {
+  // Step 1: Create the async job
+  let createResp;
+  try {
+    createResp = await axios.post(
+      `${META_BASE}/${actAccountId(accountId)}/insights`,
+      null,
+      {
+        params: { ...params, access_token: accessToken },
+        timeout: 60000,
+      },
+    );
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { data?: { error?: { message?: string; code?: number } } }; message?: string };
+    const metaMsg = axiosErr?.response?.data?.error?.message;
+    const metaCode = axiosErr?.response?.data?.error?.code;
+    const detail = metaMsg
+      ? `Meta async job create error${metaCode ? ` (code ${metaCode})` : ""}: ${metaMsg}`
+      : (axiosErr?.message ?? "Unknown error");
+    throw new Error(detail);
+  }
+  const jobId = (createResp.data as { report_run_id?: string }).report_run_id;
+  if (!jobId) {
+    // Meta returned inline data instead of a job — fall through to normal pagination
+    const data = createResp.data as { data?: unknown[]; paging?: { next?: string } };
+    if (data.data) {
+      // Collect all pages
+      const out: unknown[] = [...(data.data ?? [])];
+      let next = data.paging?.next ?? null;
+      let page = 0;
+      while (next && page < 50) {
+        const r = await axios.get(next, { timeout: 60000 });
+        const d = r.data as { data?: unknown[]; paging?: { next?: string } };
+        out.push(...(d.data ?? []));
+        next = d.paging?.next ?? null;
+        page++;
+      }
+      return out;
+    }
+    return [];
+  }
+  // Step 2: Poll until complete (max 10 min, 15s intervals)
+  const maxAttempts = 40;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((r) => setTimeout(r, 15000));
+    const statusResp = await axios.get(`${META_BASE}/${jobId}`, {
+      params: { access_token: accessToken },
+      timeout: 30000,
+    });
+    const status = statusResp.data as {
+      async_status?: string;
+      async_percent_completion?: number;
+    };
+    console.log(`[PerformanceSync] Async job ${jobId}: ${status.async_status} (${status.async_percent_completion ?? 0}%)`);
+    if (status.async_status === "Job Completed") break;
+    if (status.async_status === "Job Failed" || status.async_status === "Job Skipped") {
+      throw new Error(`Meta async insights job ${status.async_status}: ${jobId}`);
+    }
+  }
+  // Step 3: Paginate the results
+  const out: unknown[] = [];
+  let url: string | null = `${META_BASE}/${jobId}/insights`;
+  let page = 0;
+  while (url && page < 50) {
+    const r = await axios.get(url, {
+      params: page === 0 ? { access_token: accessToken, limit: "500" } : undefined,
+      timeout: 60000,
+    });
+    const d = r.data as { data?: unknown[]; paging?: { next?: string } };
+    out.push(...(d.data ?? []));
+    url = d.paging?.next ?? null;
+    page++;
+  }
+  return out;
+}
+
+// Single unified insights call — no breakdown, so reach/frequency are fully
+// compatible and returned inline. Optional onlyLiveAds flag adds an
+// ad.effective_status=ACTIVE filter so only currently-delivering ads are pulled.
 async function fetchInsights(
   accessToken: string,
   accountId: string,
   dateFrom: string,
   dateTo: string,
   campaignIds: string[],
+  onlyLiveAds = false,
 ) {
-  const filtering = campaignIds.length
-    ? JSON.stringify([
-        { field: "campaign.id", operator: "IN", value: campaignIds },
-      ])
-    : undefined;
-  return (await metaGetAll(
-    `/${actAccountId(accountId)}/insights`,
-    {
-      level: "ad",
-      time_increment: "1",
-      breakdowns: "publisher_platform",
-      time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
-      fields:
-        "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,publisher_platform,impressions,spend,cpm,clicks,ctr,cpc,actions,cost_per_action_type",
-      limit: "500",
-      ...(filtering ? { filtering } : {}),
-    },
-    accessToken,
-  )) as InsightRow[];
-}
-
-// Fetch reach + frequency without any breakdown (they are incompatible with
-// publisher_platform breakdown — Meta returns 400 if combined).
-// Results are keyed by "ad_id|date_start" for merging with the breakdown rows.
-async function fetchReachFrequency(
-  accessToken: string,
-  accountId: string,
-  dateFrom: string,
-  dateTo: string,
-  campaignIds: string[],
-): Promise<Map<string, { reach: string; frequency: string }>> {
-  const filtering = campaignIds.length
-    ? JSON.stringify([
-        { field: "campaign.id", operator: "IN", value: campaignIds },
-      ])
-    : undefined;
-  const rows = (await metaGetAll(
-    `/${actAccountId(accountId)}/insights`,
-    {
-      level: "ad",
-      time_increment: "1",
-      time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
-      fields: "ad_id,date_start,reach,frequency",
-      limit: "500",
-      ...(filtering ? { filtering } : {}),
-    },
-    accessToken,
-  )) as Array<{ ad_id?: string; date_start?: string; reach?: string; frequency?: string }>;
-  const map = new Map<string, { reach: string; frequency: string }>();
-  for (const r of rows) {
-    if (r.ad_id && r.date_start) {
-      map.set(`${r.ad_id}|${r.date_start}`, {
-        reach: r.reach ?? "0",
-        frequency: r.frequency ?? "0",
-      });
-    }
+  const filters: Array<{ field: string; operator: string; value: unknown }> = [];
+  if (campaignIds.length) {
+    filters.push({ field: "campaign.id", operator: "IN", value: campaignIds });
   }
-  return map;
+  if (onlyLiveAds) {
+    filters.push({ field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] });
+  }
+  const filtering = filters.length ? JSON.stringify(filters) : undefined;
+  const insightParams: Record<string, string> = {
+    level: "ad",
+    time_increment: "1",
+    time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
+    fields:
+      "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,impressions,reach,frequency,spend,cpm,clicks,ctr,cpc,actions,cost_per_action_type",
+    limit: "500",
+    ...(filtering ? { filtering } : {}),
+  };
+  return (await metaInsightsAsync(accountId, insightParams, accessToken)) as InsightRow[];
 }
 
 async function fetchCreativeMap(accessToken: string, adIds: string[]) {
@@ -545,6 +592,7 @@ export async function syncMetaPerformanceData(input: {
   dateFrom: string;
   dateTo: string;
   mode?: "manual" | "scheduled";
+  onlyLiveAds?: boolean;
 }) {
   const db = await getDb();
   if (!db)
@@ -561,16 +609,9 @@ export async function syncMetaPerformanceData(input: {
       input.dateFrom,
       input.dateTo,
       input.campaignIds,
+      input.onlyLiveAds ?? false,
     )
   ).filter((row) => num(row.spend) > 0 || num(row.impressions) > 0);
-  // Fetch reach + frequency separately (incompatible with publisher_platform breakdown)
-  const reachFreqMap = await fetchReachFrequency(
-    input.accessToken,
-    input.accountId,
-    input.dateFrom,
-    input.dateTo,
-    input.campaignIds,
-  );
   const adIds = Array.from(
     new Set(rows.map((row) => row.ad_id).filter(Boolean) as string[]),
   );
@@ -640,7 +681,7 @@ export async function syncMetaPerformanceData(input: {
     const values = {
       adId: row.ad_id ?? "unknown",
       date: row.date_start ?? input.dateFrom,
-      publisherPlatform: row.publisher_platform ?? "unknown",
+      publisherPlatform: "all",
       accountId: row.account_id ?? cleanAccountId(input.accountId),
       accountName: row.account_name ?? null,
       campaignId: row.campaign_id ?? null,
@@ -654,8 +695,8 @@ export async function syncMetaPerformanceData(input: {
       imageHash: meta?.imageHash ?? null,
       videoId: meta?.videoId ?? null,
       impressions: Math.round(num(row.impressions)),
-      reach: Math.round(num(reachFreqMap.get(`${row.ad_id}|${row.date_start}`)?.reach ?? row.reach)) || null,
-      frequency: dec(reachFreqMap.get(`${row.ad_id}|${row.date_start}`)?.frequency ?? row.frequency),
+      reach: Math.round(num(row.reach)) || null,
+      frequency: dec(row.frequency),
       spend: dec(row.spend) ?? "0.0000",
       cpm: dec(row.cpm),
       clicks: Math.round(num(row.clicks)) || null,
@@ -753,6 +794,7 @@ export const creativePerformanceSyncAdminRouter = router({
           .default("active"),
         dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        onlyLiveAds: z.boolean().default(false),
       }),
     )
     .mutation(async ({ input }) => {
@@ -768,6 +810,7 @@ export const creativePerformanceSyncAdminRouter = router({
         campaignIds: input.campaignIds,
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
+        onlyLiveAds: input.onlyLiveAds,
         mode: "manual",
       });
     }),
@@ -803,6 +846,7 @@ export const creativePerformanceSyncAdminRouter = router({
         accountId: "",
         campaignIds: null,
         campaignStatusFilter: "active" as const,
+        onlyLiveAds: false,
         lastRunAt: null,
         lastRunStatus: null,
       }
@@ -861,6 +905,7 @@ export const creativePerformanceSyncAdminRouter = router({
           "inactive",
           "all",
         ]),
+        onlyLiveAds: z.boolean().default(false),
       }),
     )
     .mutation(async ({ input }) => {
@@ -923,6 +968,7 @@ export async function startCreativePerformanceSyncCron() {
           campaignIds,
           dateFrom,
           dateTo,
+          onlyLiveAds: config.onlyLiveAds ?? false,
           mode: "scheduled",
         });
         const db = await getDb();

@@ -41,6 +41,7 @@ export default function AdminCreativePerformanceSync() {
   const [campaignSearch, setCampaignSearch] = useState("");
   const [campaignIds, setCampaignIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<CampaignStatusFilter>("active");
+  const [onlyLiveAds, setOnlyLiveAds] = useState(false);
   const [syncRange, setSyncRange] = useState<DateRange | undefined>(
     stringsToDateRange(format(prior, "yyyy-MM-dd"), format(today, "yyyy-MM-dd")),
   );
@@ -54,6 +55,7 @@ export default function AdminCreativePerformanceSync() {
   const [sched, setSched] = useState({
     syncEnabled: false, syncUtcHour: 6, syncRollingDays: 14,
     syncPreset: "rolling" as "rolling" | "yesterday",
+    onlyLiveAds: false,
   });
   useEffect(() => {
     if (schedulerConfig) setSched({
@@ -61,6 +63,7 @@ export default function AdminCreativePerformanceSync() {
       syncUtcHour: schedulerConfig.syncUtcHour,
       syncRollingDays: schedulerConfig.syncRollingDays,
       syncPreset: (schedulerConfig.syncPreset as "rolling" | "yesterday") ?? "rolling",
+      onlyLiveAds: schedulerConfig.onlyLiveAds ?? false,
     });
   }, [schedulerConfig]);
 
@@ -119,7 +122,7 @@ export default function AdminCreativePerformanceSync() {
         <button
           onClick={() => {
             if (!tokenId || !accountId || !syncDates) return;
-            syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, dateFrom: syncDates.from, dateTo: syncDates.to });
+            syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, onlyLiveAds, dateFrom: syncDates.from, dateTo: syncDates.to });
           }}
           disabled={!canSync}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -195,6 +198,19 @@ export default function AdminCreativePerformanceSync() {
               >
                 {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            </div>
+            <div className="flex items-center gap-3 py-1">
+              <button
+                onClick={() => setOnlyLiveAds((v) => !v)}
+                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
+                style={{ background: onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.12)" }}
+              >
+                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                  style={{ left: onlyLiveAds ? "calc(100% - 1.125rem)" : "0.125rem" }} />
+              </button>
+              <span className="text-xs font-semibold" style={{ color: onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.55)" }}>
+                Only pull currently live ads (ACTIVE effective status)
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -357,6 +373,19 @@ export default function AdminCreativePerformanceSync() {
                   </SchedField>
                 )}
               </div>
+              <div className="flex items-center gap-3 py-1">
+                <button
+                  onClick={() => setSched((s) => ({ ...s, onlyLiveAds: !s.onlyLiveAds }))}
+                  className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
+                  style={{ background: sched.onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.12)" }}
+                >
+                  <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    style={{ left: sched.onlyLiveAds ? "calc(100% - 1.125rem)" : "0.125rem" }} />
+                </button>
+                <span className="text-xs font-semibold" style={{ color: sched.onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.55)" }}>
+                  Only pull currently live ads (ACTIVE effective status)
+                </span>
+              </div>
               <div className="rounded-lg px-3 py-2 text-xs"
                 style={{ background: "rgba(26,108,246,0.1)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(26,108,246,0.2)" }}>
                 BM token and ad account are taken from the current page selection when you save.
@@ -374,7 +403,7 @@ export default function AdminCreativePerformanceSync() {
               )}
               <div className="flex justify-end">
                 <button
-                  onClick={() => saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter })}
+                  onClick={() => saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter, onlyLiveAds })}
                   disabled={saveScheduler.isPending}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40"
                   style={{ background: "#1A6CF6", color: "#fff" }}
