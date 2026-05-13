@@ -300,10 +300,24 @@ async function metaGetAll(
   let url: string | null = `${META_BASE}${path}`;
   let page = 0;
   while (url && page < 50) {
-    const response = await axios.get(url, {
-      params: page === 0 ? { ...params, access_token: accessToken } : undefined,
-      timeout: 60000,
-    });
+    let response;
+    try {
+      response = await axios.get(url, {
+        params: page === 0 ? { ...params, access_token: accessToken } : undefined,
+        timeout: 60000,
+      });
+    } catch (err: unknown) {
+      // Surface the real Meta API error message instead of a generic axios 400
+      const axiosErr = err as { response?: { data?: { error?: { message?: string; code?: number; error_subcode?: number } } }; message?: string };
+      const metaMsg = axiosErr?.response?.data?.error?.message;
+      const metaCode = axiosErr?.response?.data?.error?.code;
+      const metaSubcode = axiosErr?.response?.data?.error?.error_subcode;
+      const detail = metaMsg
+        ? `Meta API error${metaCode ? ` (code ${metaCode}${metaSubcode ? `/${metaSubcode}` : ""})` : ""}: ${metaMsg}`
+        : (axiosErr?.message ?? "Unknown error");
+      console.error("[PerformanceSync] Meta API request failed:", detail, "URL:", url.slice(0, 120));
+      throw new Error(detail);
+    }
     const data = response.data as {
       data?: unknown[];
       paging?: { next?: string };
@@ -335,12 +349,51 @@ async function fetchInsights(
       breakdowns: "publisher_platform",
       time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
       fields:
-        "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,publisher_platform,impressions,reach,frequency,spend,cpm,clicks,ctr,cpc,actions,cost_per_action_type",
+        "account_id,account_name,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,date_start,publisher_platform,impressions,spend,cpm,clicks,ctr,cpc,actions,cost_per_action_type",
       limit: "500",
       ...(filtering ? { filtering } : {}),
     },
     accessToken,
   )) as InsightRow[];
+}
+
+// Fetch reach + frequency without any breakdown (they are incompatible with
+// publisher_platform breakdown — Meta returns 400 if combined).
+// Results are keyed by "ad_id|date_start" for merging with the breakdown rows.
+async function fetchReachFrequency(
+  accessToken: string,
+  accountId: string,
+  dateFrom: string,
+  dateTo: string,
+  campaignIds: string[],
+): Promise<Map<string, { reach: string; frequency: string }>> {
+  const filtering = campaignIds.length
+    ? JSON.stringify([
+        { field: "campaign.id", operator: "IN", value: campaignIds },
+      ])
+    : undefined;
+  const rows = (await metaGetAll(
+    `/${actAccountId(accountId)}/insights`,
+    {
+      level: "ad",
+      time_increment: "1",
+      time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
+      fields: "ad_id,date_start,reach,frequency",
+      limit: "500",
+      ...(filtering ? { filtering } : {}),
+    },
+    accessToken,
+  )) as Array<{ ad_id?: string; date_start?: string; reach?: string; frequency?: string }>;
+  const map = new Map<string, { reach: string; frequency: string }>();
+  for (const r of rows) {
+    if (r.ad_id && r.date_start) {
+      map.set(`${r.ad_id}|${r.date_start}`, {
+        reach: r.reach ?? "0",
+        frequency: r.frequency ?? "0",
+      });
+    }
+  }
+  return map;
 }
 
 async function fetchCreativeMap(accessToken: string, adIds: string[]) {
@@ -510,6 +563,14 @@ export async function syncMetaPerformanceData(input: {
       input.campaignIds,
     )
   ).filter((row) => num(row.spend) > 0 || num(row.impressions) > 0);
+  // Fetch reach + frequency separately (incompatible with publisher_platform breakdown)
+  const reachFreqMap = await fetchReachFrequency(
+    input.accessToken,
+    input.accountId,
+    input.dateFrom,
+    input.dateTo,
+    input.campaignIds,
+  );
   const adIds = Array.from(
     new Set(rows.map((row) => row.ad_id).filter(Boolean) as string[]),
   );
@@ -593,8 +654,8 @@ export async function syncMetaPerformanceData(input: {
       imageHash: meta?.imageHash ?? null,
       videoId: meta?.videoId ?? null,
       impressions: Math.round(num(row.impressions)),
-      reach: Math.round(num(row.reach)) || null,
-      frequency: dec(row.frequency),
+      reach: Math.round(num(reachFreqMap.get(`${row.ad_id}|${row.date_start}`)?.reach ?? row.reach)) || null,
+      frequency: dec(reachFreqMap.get(`${row.ad_id}|${row.date_start}`)?.frequency ?? row.frequency),
       spend: dec(row.spend) ?? "0.0000",
       cpm: dec(row.cpm),
       clicks: Math.round(num(row.clicks)) || null,
