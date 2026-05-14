@@ -162,6 +162,13 @@
       "when": 1778713588723,
       "tag": "0022_boring_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1778799037572,
+      "tag": "0023_empty_starbolt",
+      "breakpoints": true
     }
   ]
 }

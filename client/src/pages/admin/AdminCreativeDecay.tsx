@@ -129,8 +129,9 @@ function AnalysisTab() {
   const dates = dateRangeToStrings(dateRange);
   const canRun = !!accountId && !!dates && !runMutation.isPending;
 
-  const signalRows = results?.filter((r) => r.fatigueStatus !== "healthy") ?? [];
-  const healthyRows = results?.filter((r) => r.fatigueStatus === "healthy") ?? [];
+  // fatigueStatus from server is URGENT | REFRESH | MONITOR | HEALTHY | IMPROVING | BLOCKED
+  const signalRows = results?.filter((r) => ["URGENT", "REFRESH", "MONITOR"].includes(r.fatigueStatus)) ?? [];
+  const healthyRows = results?.filter((r) => ["HEALTHY", "IMPROVING"].includes(r.fatigueStatus)) ?? [];
 
   function handleSaveReport() {
     if (!results || !accountId || !dates) return;
@@ -142,9 +143,9 @@ function AnalysisTab() {
       dateTo: dates.to,
       reportType: "manual",
       signalCount: signalRows.length,
-      probableCount: results.filter((r) => r.fatigueStatus === "probable fatigue").length,
-      possibleCount: results.filter((r) => r.fatigueStatus === "possible fatigue").length,
-      emergingCount: results.filter((r) => r.fatigueStatus === "emerging fatigue").length,
+      probableCount: results.filter((r) => r.fatigueStatus === "URGENT").length,
+      possibleCount: results.filter((r) => r.fatigueStatus === "REFRESH").length,
+      emergingCount: results.filter((r) => r.fatigueStatus === "MONITOR").length,
       reportJson: JSON.stringify(results),
       label: saveLabel || undefined,
     });
@@ -249,9 +250,9 @@ function AnalysisTab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <SummaryPill label="Signals" value={signalRows.length} color="#ED135F" />
-              <SummaryPill label="Probable" value={results.filter((r) => r.fatigueStatus === "probable fatigue").length} color="#ED135F" />
-              <SummaryPill label="Possible" value={results.filter((r) => r.fatigueStatus === "possible fatigue").length} color="#F7901E" />
-              <SummaryPill label="Emerging" value={results.filter((r) => r.fatigueStatus === "emerging fatigue").length} color="#F7C948" />
+              <SummaryPill label="Probable" value={results.filter((r) => r.fatigueStatus === "URGENT").length} color="#ED135F" />
+              <SummaryPill label="Possible" value={results.filter((r) => r.fatigueStatus === "REFRESH").length} color="#F7901E" />
+              <SummaryPill label="Emerging" value={results.filter((r) => r.fatigueStatus === "MONITOR").length} color="#F7C948" />
               <SummaryPill label="Healthy" value={healthyRows.length} color="#00B37A" />
             </div>
             <button
@@ -510,7 +511,15 @@ function ReportsTab() {
 
   const detailRows: ResultRow[] = useMemo(() => {
     if (!reportDetail?.reportJson) return [];
-    try { return JSON.parse(reportDetail.reportJson) as ResultRow[]; } catch { return []; }
+    try {
+      // Normalize old saved reports that used adId/adName field names
+      const raw = JSON.parse(reportDetail.reportJson) as Record<string, unknown>[];
+      return raw.map((r) => ({
+        ...r,
+        creativeId: (r.creativeId ?? r.adId ?? "") as string,
+        creativeName: (r.creativeName ?? r.adName ?? "") as string,
+      })) as ResultRow[];
+    } catch { return []; }
   }, [reportDetail]);
 
   return (
@@ -637,20 +646,27 @@ function NotificationsTab() {
 
 // ── Results Table (shared) ────────────────────────────────────────────────────
 type ResultRow = {
-  adId: string; adName: string; campaignName?: string; adsetName?: string;
-  fatigueStatus: string; fatigueLabel: string; fatigueScore: number;
-  cdrPct?: number; ewmaDrop?: number; frequency?: number; impressions?: number;
-  spend?: number; optimizationGoal?: string; convEventLabel?: string;
+  // Server returns creativeId/creativeName (not adId/adName)
+  creativeId: string; creativeName: string;
+  campaignName?: string; adsetName?: string | null; imageUrl?: string | null;
+  // fatigueStatus is the DB enum: URGENT | REFRESH | MONITOR | HEALTHY | IMPROVING | BLOCKED
+  fatigueStatus: string; fatigueScore: number;
+  compositeAssessment?: string;
+  cdrPct?: number | null; ewmaDrop?: number; frequency?: number; impressions?: number;
+  spend?: number; optimizationGoal?: string | null; convEventLabel?: string | null;
   ctrDrop?: number; reliability?: string; totalEvents?: number;
-  firstDetectedAt?: string; trendData?: { date: string; ctr: number; cpm: number }[];
+  // firstDetectedAt is an object with level keys, not a flat string
+  firstDetectedAt?: { emerging?: string | null; possible?: string | null; probable?: string | null } | null;
+  trendData?: { date: string; ctr: number; cpm: number }[];
 };
 
 function ResultsTable({ rows, expandedRow, setExpandedRow }: {
   rows: ResultRow[]; expandedRow: string | null; setExpandedRow: (id: string | null) => void;
 }) {
+  // Sort by fatigue severity: URGENT > REFRESH > MONITOR > others
   const sorted = useMemo(() => [...rows].sort((a, b) => {
-    const order = { "probable fatigue": 0, "possible fatigue": 1, "emerging fatigue": 2, "healthy": 3 };
-    return (order[a.fatigueStatus as keyof typeof order] ?? 4) - (order[b.fatigueStatus as keyof typeof order] ?? 4);
+    const order: Record<string, number> = { URGENT: 0, REFRESH: 1, MONITOR: 2, IMPROVING: 3, HEALTHY: 4, BLOCKED: 5 };
+    return (order[a.fatigueStatus] ?? 6) - (order[b.fatigueStatus] ?? 6);
   }), [rows]);
 
   return (
@@ -664,36 +680,48 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
           </thead>
           <tbody>
             {sorted.map((r) => {
-              const isExpanded = expandedRow === r.adId;
+              const isExpanded = expandedRow === r.creativeId;
+              // Derive the first-detected date from the level-keyed object
+              const level = r.fatigueStatus === "URGENT" ? "probable" : r.fatigueStatus === "REFRESH" ? "possible" : r.fatigueStatus === "MONITOR" ? "emerging" : null;
+              const firstDetectedStr = level ? r.firstDetectedAt?.[level] : null;
               return (
                 <>
-                  <tr key={r.adId}
-                    onClick={() => setExpandedRow(isExpanded ? null : r.adId)}
+                  <tr key={r.creativeId}
+                    onClick={() => setExpandedRow(isExpanded ? null : r.creativeId)}
                     className="cursor-pointer"
                     style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.72)", background: isExpanded ? "rgba(26,108,246,0.05)" : "transparent" }}>
                     <Td>{isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}</Td>
-                    <Td><span className="font-medium" style={{ color: "#FAFAFA" }}>{r.adName}</span></Td>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        {r.imageUrl && (
+                          <img src={r.imageUrl} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0"
+                            style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        )}
+                        <span className="font-medium" style={{ color: "#FAFAFA" }}>{r.creativeName}</span>
+                      </div>
+                    </Td>
                     <Td className="max-w-[180px] truncate">{r.campaignName ?? "\u2014"}</Td>
                     <Td className="max-w-[180px] truncate">{r.adsetName ?? "\u2014"}</Td>
                     <Td><FatiguePill level={r.fatigueStatus} /></Td>
-                    <Td><span style={{ color: r.fatigueScore > 0.6 ? "#ED135F" : r.fatigueScore > 0.3 ? "#F7901E" : "#00B37A" }}>{r.fatigueScore.toFixed(2)}</span></Td>
+                    <Td><span style={{ color: r.fatigueScore >= 70 ? "#ED135F" : r.fatigueScore >= 50 ? "#F7901E" : r.fatigueScore >= 30 ? "#F7C948" : "#00B37A" }}>{r.fatigueScore.toFixed(1)}</span></Td>
                     <Td><span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}>{r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"}</span></Td>
-                    <Td>{r.spend != null ? `$${r.spend.toFixed(2)}` : "\u2014"}</Td>
-                    <Td>{r.frequency != null ? r.frequency.toFixed(2) : "\u2014"}</Td>
-                    <Td>{r.impressions != null ? r.impressions.toLocaleString() : "\u2014"}</Td>
+                    <Td>{r.spend != null ? `$${Number(r.spend).toFixed(2)}` : "\u2014"}</Td>
+                    <Td>{r.frequency != null ? Number(r.frequency).toFixed(2) : "\u2014"}</Td>
+                    <Td>{r.impressions != null ? Number(r.impressions).toLocaleString() : "\u2014"}</Td>
                   </tr>
                   {isExpanded && (
-                    <tr key={`${r.adId}-exp`} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                    <tr key={`${r.creativeId}-exp`} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                       <td colSpan={10} className="px-6 py-4" style={{ background: "rgba(26,108,246,0.04)" }}>
                         <div className="flex flex-wrap gap-3">
-                          <EvidencePill label="CDR Drop" value={r.cdrPct != null ? `${r.cdrPct.toFixed(1)}%` : "\u2014"} />
-                          <EvidencePill label="EWMA Drop" value={r.ewmaDrop != null ? `${r.ewmaDrop.toFixed(1)}%` : "\u2014"} />
-                          <EvidencePill label="CTR Drop" value={r.ctrDrop != null ? `${r.ctrDrop.toFixed(1)}%` : "\u2014"} />
-                          <EvidencePill label="Frequency" value={r.frequency != null ? r.frequency.toFixed(2) : "\u2014"} />
-                          <EvidencePill label="Total Events" value={r.totalEvents != null ? r.totalEvents.toLocaleString() : "\u2014"} />
-                          <EvidencePill label="Reliability" value={r.reliability ?? "\u2014"} />
+                          <EvidencePill label="CDR Drop" value={r.cdrPct != null ? `${Number(r.cdrPct).toFixed(1)}%` : "\u2014"} />
+                          <EvidencePill label="EWMA Drop" value={r.ewmaDrop != null ? `${(Number(r.ewmaDrop) * 100).toFixed(1)}%` : "\u2014"} />
+                          <EvidencePill label="CTR Drop" value={r.ctrDrop != null ? `${(Number(r.ctrDrop) * 100).toFixed(1)}%` : "\u2014"} />
+                          <EvidencePill label="Frequency" value={r.frequency != null ? Number(r.frequency).toFixed(2) : "\u2014"} />
+                          <EvidencePill label="Total Events" value={r.totalEvents != null ? Number(r.totalEvents).toLocaleString() : "\u2014"} />
+                          <EvidencePill label="Reliability" value={r.reliability != null ? `${(Number(r.reliability) * 100).toFixed(0)}%` : "\u2014"} />
                           <EvidencePill label="Scored Metric" value={r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"} highlight />
-                          {r.firstDetectedAt && <EvidencePill label="First Detected" value={new Date(r.firstDetectedAt).toLocaleDateString()} />}
+                          {firstDetectedStr && <EvidencePill label="First Detected" value={new Date(firstDetectedStr).toLocaleDateString()} />}
                         </div>
                       </td>
                     </tr>
@@ -741,14 +769,22 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
   return <td className={`px-4 py-3 align-top whitespace-nowrap ${className ?? ""}`}>{children}</td>;
 }
 function FatiguePill({ level }: { level: string }) {
-  const map: Record<string, { bg: string; col: string }> = {
-    "probable fatigue": { bg: "rgba(237,19,95,0.18)", col: "#ED135F" },
-    "possible fatigue": { bg: "rgba(247,144,30,0.18)", col: "#F7901E" },
-    "emerging fatigue": { bg: "rgba(247,201,72,0.18)", col: "#F7C948" },
-    "healthy": { bg: "rgba(0,179,122,0.16)", col: "#00B37A" },
+  const map: Record<string, { bg: string; col: string; label: string }> = {
+    // Server-side enum values
+    "URGENT":   { bg: "rgba(237,19,95,0.18)",   col: "#ED135F", label: "Probable Fatigue" },
+    "REFRESH":  { bg: "rgba(247,144,30,0.18)",  col: "#F7901E", label: "Possible Fatigue" },
+    "MONITOR":  { bg: "rgba(247,201,72,0.18)",  col: "#F7C948", label: "Emerging Fatigue" },
+    "HEALTHY":  { bg: "rgba(0,179,122,0.16)",   col: "#00B37A", label: "Healthy" },
+    "IMPROVING":{ bg: "rgba(0,179,122,0.12)",   col: "#00B37A", label: "Improving" },
+    "BLOCKED":  { bg: "rgba(255,255,255,0.07)", col: "rgba(255,255,255,0.5)", label: "Weak Signal" },
+    // Legacy lowercase values (for saved reports)
+    "probable fatigue": { bg: "rgba(237,19,95,0.18)",   col: "#ED135F", label: "Probable Fatigue" },
+    "possible fatigue": { bg: "rgba(247,144,30,0.18)",  col: "#F7901E", label: "Possible Fatigue" },
+    "emerging fatigue": { bg: "rgba(247,201,72,0.18)",  col: "#F7C948", label: "Emerging Fatigue" },
+    "healthy":          { bg: "rgba(0,179,122,0.16)",   col: "#00B37A", label: "Healthy" },
   };
-  const s = map[level] ?? { bg: "rgba(255,255,255,0.07)", col: "rgba(255,255,255,0.5)" };
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold capitalize" style={{ background: s.bg, color: s.col }}>{level}</span>;
+  const s = map[level] ?? { bg: "rgba(255,255,255,0.07)", col: "rgba(255,255,255,0.5)", label: level };
+  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: s.bg, color: s.col }}>{s.label}</span>;
 }
 function TypePill({ type }: { type: string }) {
   return (

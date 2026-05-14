@@ -259,6 +259,8 @@ export const creativeFatigueResults = mysqlTable("creative_fatigue_results", {
   // e.g. "Offsite Conversions", "Link Clicks", "Custom: 123456789"
   convEventLabel: varchar("conv_event_label", { length: 256 }),
   mediaType: varchar("media_type", { length: 32 }),
+  adsetName: text("adset_name"),
+  imageUrl: text("image_url"),
   eligible: boolean("eligible").default(false).notNull(),
   totalSpend: decimal("total_spend", { precision: 14, scale: 4 }),
   totalImpressions: bigint("total_impressions", { mode: "number" }),

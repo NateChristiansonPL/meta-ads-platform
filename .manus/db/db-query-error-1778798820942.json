@@ -1,0 +1,8 @@
+{
+  "query": "SELECT \n  COUNT(*) as total_rows,\n  COUNT(content_fingerprint) as has_fingerprint,\n  COUNT(creative_id) as has_creative_id,\n  COUNT(image_url) as has_image_url,\n  COUNT(reach) as has_reach,\n  COUNT(frequency) as has_frequency,\n  COUNT(impressions) as has_impressions,\n  COUNT(spend) as has_spend,\n  COUNT(adset_name) as has_adset_name,\n  MIN(date) as earliest_date,\n  MAX(date) as latest_date\nFROM ad_performance;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT \n  COUNT(*) as total_rows,\n  COUNT(content_fingerprint) as has_fingerprint,\n  COUNT(creative_id) as has_creative_id,\n  COUNT(image_url) as has_image_url,\n  COUNT(reach) as has_reach,\n  COUNT(frequency) as has_frequency,\n  COUNT(impressions) as has_impressions,\n  COUNT(spend) as has_spend,\n  COUNT(adset_name) as has_adset_name,\n  MIN(date) as earliest_date,\n  MAX(date) as latest_date\nFROM ad_performance;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'image_url' in ''"
+  ]
+}

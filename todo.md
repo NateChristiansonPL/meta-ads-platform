@@ -695,3 +695,18 @@
 - [x] Add onlyLiveAds filter (ad.effective_status=ACTIVE) to manual sync and scheduled config
 - [x] Implement async Meta Insights job polling (metaInsightsAsync) for large accounts
 - [x] Cross-adset fingerprint aggregation verified — groups by contentFingerprint across all ad sets
+
+## Creative Decay UI Display Fixes (May 14 2026)
+- [x] Add adset_name and image_url columns to creative_fatigue_results DB table (schema + migration)
+- [x] Populate adsetName in analyzeStoredPerformance result record (from group rows)
+- [x] Populate imageUrl in analyzeStoredPerformance result record (join adSourceDetails by contentFingerprint)
+- [x] Flatten evidence fields (ewmaDrop, ctrDrop, frequency, totalEvents, reliability, spend, impressions) to top-level in mapResult()
+- [x] Fix ResultRow type to use creativeId/creativeName (matching server response) instead of adId/adName
+- [x] Fix fatigueStatus comparisons in UI to use server enum values (URGENT/REFRESH/MONITOR/HEALTHY)
+- [x] Fix FatiguePill to display human-readable labels for server enum values
+- [x] Fix "Invalid Date" — firstDetectedAt is an object {emerging, possible, probable}, not a flat string
+- [x] Fix score color thresholds (was 0-1 scale, now correctly 0-100)
+- [x] Add creative thumbnail rendering in Creative column (img with onError fallback)
+- [x] Fix EWMA Drop and CTR Drop display to show as percentages (multiply by 100)
+- [x] Fix Reliability display to show as percentage
+- [x] Add backward-compat normalization for old saved reports (adId→creativeId, adName→creativeName)

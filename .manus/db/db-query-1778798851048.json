@@ -1,0 +1,39 @@
+{
+  "query": "SELECT ad_id, creative_id, media_type, image_url, video_id, destination_url FROM ad_source_details LIMIT 3;\nSELECT ad_id, adset_name, content_fingerprint, impressions, reach, frequency, ctr, spend FROM ad_performance LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT ad_id, creative_id, media_type, image_url, video_id, destination_url FROM ad_source_details LIMIT 3;\nSELECT ad_id, adset_name, content_fingerprint, impressions, reach, frequency, ctr, spend FROM ad_performance LIMIT 3;",
+  "rows": [
+    {
+      "ad_id": "120246920174370709",
+      "creative_id": "1184395423712403",
+      "media_type": "image",
+      "image_url": "https://scontent-sof1-2.xx.fbcdn.net/v/t45.1600-4/687580105_3393818710786195_7729831275124737335_n.jpg?_nc_cat=109&ccb=1-7&_nc_ohc=fs9Z9ZTvH9IQ7kNvwGFe9EC&_nc_oc=Adq7jRH5H93-FVfQxTwz_iqxgmbmVfA7xIDCdQgTiHfUv1i6ANarcVgmeEpvwerGRgIS8LjxvTZKvl_NWoimoVRs&_nc_zt=1&_nc_ht=scontent-sof1-2.xx&edm=AAwGEdEEAAAA&_nc_gid=GJnZXop3rLCEdYYrlfbFOQ&_nc_tpa=Q5bMBQHtfSdLguwtceI9H-I7UruRMDLqJY-iPZUl5eY0GXxp6-fGdMlCT5uf5AkR47M72Xz190f0z0DI&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=52f3c4&_nc_sid=58080a&oh=00_Af7jGlZXMGohqrgyeY3nu6VPmcvHpXxhh3OESGaLHA9QSg&oe=6A0C1360",
+      "video_id": "NULL",
+      "destination_url": "NULL"
+    },
+    {
+      "ad_id": "120246509592120709",
+      "creative_id": "1230014388970493",
+      "media_type": "video",
+      "image_url": "https://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&ccb=1-7&_nc_ohc=1VHeO3u693EQ7kNvwGd4UWM&_nc_oc=Ado1tqf2GquidxughzOhs90FsnHeVDAd6_fvv3krleRBPO7jEX25-zvv4DtcZONuZWmJs3sxZqPPV7xTIJpkycty&_nc_zt=23&_nc_ht=scontent-sof1-2.xx&edm=AAwGEdEEAAAA&_nc_gid=DSoS9dUVDkzQN9OlH5slng&_nc_tpa=Q5bMBQFOZQUfA5yBTsQmjp-Xg4P9o-6df95B5Qf75R-L0UX5aABsYhYWMWJrtg-5YmG5YCnBHOiZKLya&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=070a5f&_nc_sid=58080a&oh=00_Af42OKeCbNA7QLCfdtBBOnSJ1dcEnmtiI1SBzqpljnK03A&oe=6A0C2C2F",
+      "video_id": "NULL",
+      "destination_url": "NULL"
+    },
+    {
+      "ad_id": "120246919018180709",
+      "creative_id": "1273242414965272",
+      "media_type": "image",
+      "image_url": "https://scontent-sof1-1.xx.fbcdn.net/v/t45.1600-4/691533183_3393826787452054_2311871434654143015_n.jpg?_nc_cat=100&ccb=1-7&_nc_ohc=c4VgAvYXG3AQ7kNvwFwBQMz&_nc_oc=AdobAx6rQedomyZUdRMOFCgkAYPi8vAmzFS92nIZ1BukF0nvwUKEhYWQfEOScnvXuXMOhFxQ1X8Z-KQAG2B3OlAt&_nc_zt=1&_nc_ht=scontent-sof1-1.xx&edm=AAwGEdEEAAAA&_nc_gid=sFISIIooRddx9RxNw02k6A&_nc_tpa=Q5bMBQGg5UEVrdQ6XFB4KnxYlx7aaewhIJyZY5q4uH1b0ppYG545yhfxsRiFJn-lh8fNSRHA9zxQzt4w&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=52f3c4&_nc_sid=58080a&oh=00_Af5o4wFE2YT5GF4pB1JOoUMm2WgF1XmdSr2Z28gXmzdwwQ&oe=6A0C1551",
+      "video_id": "NULL",
+      "destination_url": "NULL"
+    }
+  ],
+  "messages": [
+    "ad_id\tadset_name\tcontent_fingerprint\timpressions\treach\tfrequency\tctr\tspend",
+    "120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t159\t112\t1.4196\t0.018868\t3.9400",
+    "120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t497\t396\t1.2551\t0.010060\t17.9200",
+    "120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t797\t607\t1.3130\t0.017566\t34.3300"
+  ],
+  "stdout": "ad_id\tcreative_id\tmedia_type\timage_url\tvideo_id\tdestination_url\n120246920174370709\t1184395423712403\timage\thttps://scontent-sof1-2.xx.fbcdn.net/v/t45.1600-4/687580105_3393818710786195_7729831275124737335_n.jpg?_nc_cat=109&ccb=1-7&_nc_ohc=fs9Z9ZTvH9IQ7kNvwGFe9EC&_nc_oc=Adq7jRH5H93-FVfQxTwz_iqxgmbmVfA7xIDCdQgTiHfUv1i6ANarcVgmeEpvwerGRgIS8LjxvTZKvl_NWoimoVRs&_nc_zt=1&_nc_ht=scontent-sof1-2.xx&edm=AAwGEdEEAAAA&_nc_gid=GJnZXop3rLCEdYYrlfbFOQ&_nc_tpa=Q5bMBQHtfSdLguwtceI9H-I7UruRMDLqJY-iPZUl5eY0GXxp6-fGdMlCT5uf5AkR47M72Xz190f0z0DI&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=52f3c4&_nc_sid=58080a&oh=00_Af7jGlZXMGohqrgyeY3nu6VPmcvHpXxhh3OESGaLHA9QSg&oe=6A0C1360\tNULL\tNULL\n120246509592120709\t1230014388970493\tvideo\thttps://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&ccb=1-7&_nc_ohc=1VHeO3u693EQ7kNvwGd4UWM&_nc_oc=Ado1tqf2GquidxughzOhs90FsnHeVDAd6_fvv3krleRBPO7jEX25-zvv4DtcZONuZWmJs3sxZqPPV7xTIJpkycty&_nc_zt=23&_nc_ht=scontent-sof1-2.xx&edm=AAwGEdEEAAAA&_nc_gid=DSoS9dUVDkzQN9OlH5slng&_nc_tpa=Q5bMBQFOZQUfA5yBTsQmjp-Xg4P9o-6df95B5Qf75R-L0UX5aABsYhYWMWJrtg-5YmG5YCnBHOiZKLya&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=070a5f&_nc_sid=58080a&oh=00_Af42OKeCbNA7QLCfdtBBOnSJ1dcEnmtiI1SBzqpljnK03A&oe=6A0C2C2F\tNULL\tNULL\n120246919018180709\t1273242414965272\timage\thttps://scontent-sof1-1.xx.fbcdn.net/v/t45.1600-4/691533183_3393826787452054_2311871434654143015_n.jpg?_nc_cat=100&ccb=1-7&_nc_ohc=c4VgAvYXG3AQ7kNvwFwBQMz&_nc_oc=AdobAx6rQedomyZUdRMOFCgkAYPi8vAmzFS92nIZ1BukF0nvwUKEhYWQfEOScnvXuXMOhFxQ1X8Z-KQAG2B3OlAt&_nc_zt=1&_nc_ht=scontent-sof1-1.xx&edm=AAwGEdEEAAAA&_nc_gid=sFISIIooRddx9RxNw02k6A&_nc_tpa=Q5bMBQGg5UEVrdQ6XFB4KnxYlx7aaewhIJyZY5q4uH1b0ppYG545yhfxsRiFJn-lh8fNSRHA9zxQzt4w&stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6&ur=52f3c4&_nc_sid=58080a&oh=00_Af5o4wFE2YT5GF4pB1JOoUMm2WgF1XmdSr2Z28gXmzdwwQ&oe=6A0C1551\tNULL\tNULL\nad_id\tadset_name\tcontent_fingerprint\timpressions\treach\tfrequency\tctr\tspend\n120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t159\t112\t1.4196\t0.018868\t3.9400\n120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t497\t396\t1.2551\t0.010060\t17.9200\n120246509591720709\tNecoa - Meta - DFW - Sales - Retargeting - May 2026\te7ac0786668e0ff0\t797\t607\t1.3130\t0.017566\t34.3300\n",
+  "stderr": "",
+  "execution_time_ms": 267
+}

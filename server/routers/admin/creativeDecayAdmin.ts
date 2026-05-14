@@ -24,6 +24,7 @@ import { getDb } from "../../db";
 import { getTokenById } from "../../db";
 import {
   adPerformance,
+  adSourceDetails,
   creativeFatigueResults,
   metaSyncSchedule,
   firstFatigueDetected,
@@ -236,6 +237,21 @@ async function analyzeStoredPerformance(input: {
     );
   }
 
+  // Build a fingerprint → imageUrl map from adSourceDetails
+  const allFingerprints = Array.from(groups.keys());
+  const imageUrlMap = new Map<string, string>();
+  if (allFingerprints.length) {
+    const sourceRows = await db
+      .select({ contentFingerprint: adSourceDetails.contentFingerprint, imageUrl: adSourceDetails.imageUrl })
+      .from(adSourceDetails)
+      .where(inArray(adSourceDetails.contentFingerprint, allFingerprints));
+    for (const sr of sourceRows) {
+      if (sr.contentFingerprint && sr.imageUrl && !imageUrlMap.has(sr.contentFingerprint)) {
+        imageUrlMap.set(sr.contentFingerprint, sr.imageUrl);
+      }
+    }
+  }
+
   const analysisRunId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const inserted: Array<typeof creativeFatigueResults.$inferInsert & { id?: number }> = [];
 
@@ -345,6 +361,8 @@ async function analyzeStoredPerformance(input: {
       optimizationGoal:
         group.find((row) => row.optimizationGoal)?.optimizationGoal ?? null,
       mediaType: group.find((row) => row.adType)?.adType ?? null,
+      adsetName: group.find((row) => row.adsetName)?.adsetName ?? null,
+      imageUrl: imageUrlMap.get(fingerprint) ?? null,
       eligible: totalImpressions >= 100,
       totalSpend: totalSpend.toFixed(4),
       totalImpressions,
@@ -627,6 +645,16 @@ function mapResult(
     fatigueScore: score,
     optimizationGoal: row.optimizationGoal ?? null,
     convEventLabel: row.convEventLabel ?? null,
+    adsetName: row.adsetName ?? null,
+    imageUrl: row.imageUrl ?? null,
+    // Flat evidence fields (also kept in evidence sub-object for backwards compat)
+    ewmaDrop: num(row.ewmaDrop),
+    ctrDrop: num(row.ctrDrop),
+    frequency: num(row.avgFrequency),
+    totalEvents: num(row.totalEvents),
+    reliability: num(row.reliability).toFixed(2),
+    spend: num(row.totalSpend),
+    impressions: num(row.totalImpressions),
     evidence: {
       avgCtr: num(row.avgCtr),
       avgFrequency: num(row.avgFrequency),
