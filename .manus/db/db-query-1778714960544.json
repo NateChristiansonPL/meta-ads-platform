@@ -1,0 +1,25 @@
+{
+  "query": "SELECT ad_id, ad_name, account_id FROM ad_performance LIMIT 3;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT ad_id, ad_name, account_id FROM ad_performance LIMIT 3;",
+  "rows": [
+    {
+      "ad_id": "120245160373680709",
+      "ad_name": "Necoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026",
+      "account_id": "1607159873330097"
+    },
+    {
+      "ad_id": "120245160373680709",
+      "ad_name": "Necoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026",
+      "account_id": "1607159873330097"
+    },
+    {
+      "ad_id": "120245160373680709",
+      "ad_name": "Necoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026",
+      "account_id": "1607159873330097"
+    }
+  ],
+  "messages": [],
+  "stdout": "ad_id\tad_name\taccount_id\n120245160373680709\tNecoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026\t1607159873330097\n120245160373680709\tNecoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026\t1607159873330097\n120245160373680709\tNecoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - April 2026\t1607159873330097\n",
+  "stderr": "",
+  "execution_time_ms": 260
+}

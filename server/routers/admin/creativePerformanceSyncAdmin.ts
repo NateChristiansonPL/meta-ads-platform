@@ -461,7 +461,11 @@ async function fetchInsights(
     limit: "500",
     ...(filtering ? { filtering } : {}),
   };
-  return (await metaInsightsAsync(accountId, insightParams, accessToken)) as InsightRow[];
+  return (await metaGetAll(
+    `/${actAccountId(accountId)}/insights`,
+    insightParams,
+    accessToken,
+  )) as InsightRow[];
 }
 
 async function fetchCreativeMap(accessToken: string, adIds: string[]) {

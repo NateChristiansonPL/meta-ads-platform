@@ -1,0 +1,17 @@
+{
+  "query": "SELECT \n  COUNT(*) as total_rows,\n  COUNT(content_fingerprint) as rows_with_fingerprint,\n  COUNT(creative_id) as rows_with_creative_id,\n  MIN(date) as earliest_date,\n  MAX(date) as latest_date\nFROM ad_performance;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT \n  COUNT(*) as total_rows,\n  COUNT(content_fingerprint) as rows_with_fingerprint,\n  COUNT(creative_id) as rows_with_creative_id,\n  MIN(date) as earliest_date,\n  MAX(date) as latest_date\nFROM ad_performance;",
+  "rows": [
+    {
+      "total_rows": "363",
+      "rows_with_fingerprint": "0",
+      "rows_with_creative_id": "0",
+      "earliest_date": "2026-04-10",
+      "latest_date": "2026-05-12"
+    }
+  ],
+  "messages": [],
+  "stdout": "total_rows\trows_with_fingerprint\trows_with_creative_id\tearliest_date\tlatest_date\n363\t0\t0\t2026-04-10\t2026-05-12\n",
+  "stderr": "",
+  "execution_time_ms": 255
+}

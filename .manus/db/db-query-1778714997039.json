@@ -1,0 +1,40 @@
+{
+  "query": "SELECT id, label, LEFT(accessToken, 20) as token_preview, tokenExpiresAt FROM token_vault LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT id, label, LEFT(accessToken, 20) as token_preview, tokenExpiresAt FROM token_vault LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "label": "Iluminere BM",
+      "token_preview": "EAAJaTpmDZB2YBRBEjWZ",
+      "tokenExpiresAt": "NULL"
+    },
+    {
+      "id": "2",
+      "label": "LumenAd BM",
+      "token_preview": "EAAJaTpmDZB2YBRCDtvX",
+      "tokenExpiresAt": "NULL"
+    },
+    {
+      "id": "30001",
+      "label": "LumenAd BM",
+      "token_preview": "EAAJaTpmDZB2YBRCDtvX",
+      "tokenExpiresAt": "NULL"
+    },
+    {
+      "id": "30002",
+      "label": "Iluminere BM",
+      "token_preview": "EAAJaTpmDZB2YBRBEjWZ",
+      "tokenExpiresAt": "NULL"
+    },
+    {
+      "id": "60001",
+      "label": "MediaData BM",
+      "token_preview": "EAAJaTpmDZB2YBRWz9IT",
+      "tokenExpiresAt": "NULL"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tlabel\ttoken_preview\ttokenExpiresAt\n1\tIluminere BM\tEAAJaTpmDZB2YBRBEjWZ\tNULL\n2\tLumenAd BM\tEAAJaTpmDZB2YBRCDtvX\tNULL\n30001\tLumenAd BM\tEAAJaTpmDZB2YBRCDtvX\tNULL\n30002\tIluminere BM\tEAAJaTpmDZB2YBRBEjWZ\tNULL\n60001\tMediaData BM\tEAAJaTpmDZB2YBRWz9IT\tNULL\n",
+  "stderr": "",
+  "execution_time_ms": 254
+}
