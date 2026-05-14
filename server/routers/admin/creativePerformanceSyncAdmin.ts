@@ -13,6 +13,7 @@
  * Also exports startCreativePerformanceSyncCron() for server startup.
  */
 
+import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import axios from "axios";
 import { desc, eq, isNotNull, isNull, and } from "drizzle-orm";
@@ -123,7 +124,6 @@ function buildFingerprint(
   imageHash: string | null,
   videoId: string | null,
 ): string {
-  const { createHash } = require("node:crypto");
   // Intentionally excludes creativeId so the same asset reused across
   // ad sets (which often get different creative IDs on duplication) still
   // hashes to the same fingerprint and is aggregated together.
@@ -753,7 +753,6 @@ export async function syncMetaPerformanceData(input: {
     // so ad_performance never has NULL contentFingerprint when an ad_id is present.
     let contentFingerprint = meta?.contentFingerprint ?? null;
     if (!contentFingerprint && (meta?.creativeId ?? row.ad_id)) {
-      const { createHash } = require("node:crypto");
       const fallbackKey = meta?.creativeId ?? row.ad_id ?? "unknown";
       contentFingerprint = createHash("sha256")
         .update(`fallback:${fallbackKey}`)
