@@ -204,12 +204,36 @@ async function analyzeStoredPerformance(input: {
   }
 
   const groups = new Map<string, VisionRow[]>();
+  let skippedRowsCount = 0;
+
   for (const row of rows) {
     const key =
       row.contentFingerprint ||
       (row.creativeId ? `creative:${row.creativeId}` : null);
-    if (!key) continue;
+    if (!key) {
+      skippedRowsCount++;
+      continue;
+    }
     groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  if (skippedRowsCount > 0) {
+    const skippedPercentage = ((skippedRowsCount / rows.length) * 100).toFixed(1);
+    console.warn(
+      `[DecayAnalysis] WARNING: Skipped ${skippedRowsCount}/${rows.length} (${skippedPercentage}%) rows due to ` +
+      `missing contentFingerprint and creativeId. Decay analysis will be incomplete. ` +
+      `Ensure sync is writing contentFingerprint correctly.`,
+    );
+  }
+
+  if (groups.size === 0) {
+    console.error(
+      `[DecayAnalysis] ERROR: No creative groups formed. This means: ` +
+      `(1) No performance data in date range, OR ` +
+      `(2) All rows have NULL contentFingerprint and NULL creativeId (sync issue), OR ` +
+      `(3) Selected date range is invalid. ` +
+      `Check metaSyncHistory warnings for sync status.`,
+    );
   }
 
   const analysisRunId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;

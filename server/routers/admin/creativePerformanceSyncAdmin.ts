@@ -127,8 +127,15 @@ function buildFingerprint(
   // Intentionally excludes creativeId so the same asset reused across
   // ad sets (which often get different creative IDs on duplication) still
   // hashes to the same fingerprint and is aggregated together.
+  const input = `${imageHash ?? ""}:${videoId ?? ""}`;
+  if (input === ":") {
+    console.warn(
+      `[PerformanceSync] buildFingerprint() called with both imageHash and videoId null/empty. ` +
+      `This may indicate missing creative metadata.`,
+    );
+  }
   return createHash("sha256")
-    .update(`${imageHash ?? ""}:${videoId ?? ""}`)
+    .update(input)
     .digest("hex")
     .slice(0, 16);
 }
@@ -138,7 +145,10 @@ function parseCreative(
   adData: Record<string, unknown>,
 ): CreativeMeta | null {
   const creative = adData.creative as Record<string, unknown> | undefined;
-  if (!creative) return null;
+  if (!creative) {
+    console.warn(`[PerformanceSync] Ad ${adId}: No creative object in response`);
+    return null;
+  }
   const creativeId = String(creative.id ?? adId);
   const spec = creative.object_story_spec as Record<string, unknown> | undefined;
   const feed = creative.asset_feed_spec as Record<string, unknown> | undefined;
@@ -155,6 +165,14 @@ function parseCreative(
         (spec?.video_id as string | undefined) ??
         "",
     ) || null;
+  // Warn if we have neither image nor video — fingerprint will be a hash of empty strings
+  if (!imageHash && !videoId) {
+    console.warn(
+      `[PerformanceSync] Creative ${creativeId} (ad ${adId}): Has no imageHash or videoId. ` +
+      `buildFingerprint() will generate empty-hash. Media type detection: ${String(creative.object_type)}`,
+    );
+  }
+
   const objectType = String(creative.object_type ?? "").toUpperCase();
   const mediaType =
     objectType === "VIDEO" || videoId
@@ -448,6 +466,8 @@ async function fetchInsights(
 
 async function fetchCreativeMap(accessToken: string, adIds: string[]) {
   const map = new Map<string, CreativeMeta>();
+  const failed: Array<{ adId: string; reason: string; isParseFailure?: boolean }> = [];
+
   for (const adId of adIds) {
     try {
       const response = await axios.get(`${META_BASE}/${adId}`, {
@@ -462,15 +482,35 @@ async function fetchCreativeMap(accessToken: string, adIds: string[]) {
         adId,
         response.data as Record<string, unknown>,
       );
-      if (parsed) map.set(adId, parsed);
-    } catch (error) {
-      console.warn(
-        `[PerformanceSync] Creative lookup failed for ad ${adId}`,
-        error,
+      if (parsed) {
+        map.set(adId, parsed);
+      } else {
+        failed.push({ adId, reason: "parseCreative returned null", isParseFailure: true });
+        console.warn(
+          `[PerformanceSync] Creative parse failed for ad ${adId}: object_story_spec or creative data is invalid`,
+        );
+      }
+    } catch (error: unknown) {
+      const axErr = error as { response?: { status?: number; data?: unknown }; message?: string };
+      const status = axErr?.response?.status;
+      const body = axErr?.response?.data;
+      const reason = `HTTP ${status ?? "N/A"}: ${axErr?.message ?? String(error)}`;
+      failed.push({ adId, reason });
+      console.error(
+        `[PerformanceSync] Creative lookup FAILED for ad ${adId} — ${reason}`,
+        body ? JSON.stringify(body).slice(0, 300) : "",
       );
     }
   }
-  return map;
+
+  if (failed.length > 0) {
+    console.warn(
+      `[PerformanceSync] Creative fetch summary: ${map.size}/${adIds.length} succeeded, ${failed.length} failed. ` +
+      `First 5 failures: ${failed.slice(0, 5).map((f) => `${f.adId}(${f.reason})`).join(", ")}`,
+    );
+  }
+
+  return { map, failed };
 }
 
 /**
@@ -618,11 +658,34 @@ export async function syncMetaPerformanceData(input: {
   const adIds = Array.from(
     new Set(rows.map((row) => row.ad_id).filter(Boolean) as string[]),
   );
-  const creativeMap = await fetchCreativeMap(input.accessToken, adIds);
-  if (creativeMap.size < adIds.length)
+  const { map: creativeMap, failed: failedCreatives } = await fetchCreativeMap(input.accessToken, adIds);
+  console.log(`[PerformanceSync] Creative fetch: ${creativeMap.size}/${adIds.length} ads resolved`);
+  if (creativeMap.size < adIds.length) {
+    const failureCount = adIds.length - creativeMap.size;
     warnings.push(
-      `${adIds.length - creativeMap.size} ads had performance but no resolved creative metadata.`,
+      `${failureCount} ads had performance but no resolved creative metadata.`,
     );
+    const parseFailureCount = failedCreatives.filter((f) => f.isParseFailure).length;
+    const fetchFailureCount = failedCreatives.length - parseFailureCount;
+    console.warn(
+      `[PerformanceSync] Creative resolution breakdown: ${fetchFailureCount} failed to fetch, ${parseFailureCount} failed to parse.`,
+    );
+  }
+
+  // Predict how many rows will have NULL contentFingerprint
+  const predictedNullFingerprints = rows.filter(
+    (row) => !row.ad_id || !creativeMap.has(row.ad_id),
+  ).length;
+  if (predictedNullFingerprints > 0) {
+    const nullPercentage = ((predictedNullFingerprints / rows.length) * 100).toFixed(1);
+    console.warn(
+      `[PerformanceSync] CRITICAL: ${predictedNullFingerprints}/${rows.length} (${nullPercentage}%) performance rows ` +
+      `will have NULL contentFingerprint. This will prevent decay analysis from grouping creatives!`,
+    );
+    warnings.push(
+      `${predictedNullFingerprints} rows missing creative metadata — decay analysis may fail.`,
+    );
+  }
 
   // ── Fetch ad set optimization goals + promoted_object ──────────────────────
   // Collect unique adset IDs from insight rows, then batch-fetch their
@@ -681,6 +744,30 @@ export async function syncMetaPerformanceData(input: {
 
     const goalMeta = row.adset_id ? adsetGoalMap.get(row.adset_id) ?? null : null;
     const result = resultMetric(row, goalMeta);
+
+    // Generate a deterministic fallback fingerprint if the creative fetch failed,
+    // so ad_performance never has NULL contentFingerprint when an ad_id is present.
+    let contentFingerprint = meta?.contentFingerprint ?? null;
+    if (!contentFingerprint && (meta?.creativeId ?? row.ad_id)) {
+      const { createHash } = require("node:crypto");
+      const fallbackKey = meta?.creativeId ?? row.ad_id ?? "unknown";
+      contentFingerprint = createHash("sha256")
+        .update(`fallback:${fallbackKey}`)
+        .digest("hex")
+        .slice(0, 16);
+      console.warn(
+        `[PerformanceSync] Using fallback fingerprint for ad ${row.ad_id} (creative: ${fallbackKey}). ` +
+        `Original creative fetch may have failed.`,
+      );
+    }
+
+    if (!contentFingerprint) {
+      console.error(
+        `[PerformanceSync] CRITICAL: Performance row has no contentFingerprint AND no ad_id. ` +
+        `This row cannot be grouped by decay analysis. Date: ${row.date_start}, Account: ${row.account_id}`,
+      );
+    }
+
     const values = {
       adId: row.ad_id ?? "unknown",
       date: row.date_start ?? input.dateFrom,
@@ -694,7 +781,7 @@ export async function syncMetaPerformanceData(input: {
       adName: row.ad_name ?? null,
       creativeId: meta?.creativeId ?? null,
       adType: meta?.mediaType ?? null,
-      contentFingerprint: meta?.contentFingerprint ?? null,
+      contentFingerprint,
       imageHash: meta?.imageHash ?? null,
       videoId: meta?.videoId ?? null,
       impressions: Math.round(num(row.impressions)),
