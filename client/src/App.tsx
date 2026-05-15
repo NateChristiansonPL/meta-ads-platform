@@ -139,9 +139,10 @@ function Router() {
           {/* Legacy admin aliases — keep for backward compat */}
           <Route path="/admin/creative-decay" component={AdminCreativeDecay} />
           <Route path="/admin/creative-performance-sync" component={AdminCreativePerformanceSync} />
-          <Route path="/admin/profile">
-            <AdminRoute component={AdminUserProfile} />
-          </Route>
+          {/* My Profile — accessible to all authenticated users */}
+          <Route path="/profile" component={AdminUserProfile} />
+          {/* Legacy admin alias — keep for backward compat */}
+          <Route path="/admin/profile" component={AdminUserProfile} />
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
           <Route path="/campaign-builder" component={CampaignBuilder} />

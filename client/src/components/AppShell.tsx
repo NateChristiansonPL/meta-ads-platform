@@ -76,7 +76,6 @@ const ADMIN_ITEMS = [
   { label: "Team Members", icon: Users, path: "/admin/team-members" },
   { label: "Usage & Tallies", icon: BarChart2, path: "/admin/usage" },
   { label: "Campaign Builder (Admin)", icon: Wrench, path: "/admin/campaign-builder" },
-  { label: "My Profile", icon: UserCircle2, path: "/admin/profile" },
 ];
 
 /** Returns the set of skillIds that have a currently running task for the logged-in user. */
@@ -473,9 +472,22 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
             </button>
           </div>
 
+          {/* My Profile — visible to all authenticated users */}
+          <div className="px-3 pt-2 pb-1">
+            <NavItem
+              icon={UserCircle2}
+              label="My Profile"
+              sub="Notifications & settings"
+              color="#a78bfa"
+              path="/profile"
+              active={location === "/profile" || location === "/admin/profile"}
+              running={false}
+            />
+          </div>
+
           {/* Admin section */}
           {isAdmin && (
-            <div className="px-3 pt-4 pb-4 mt-auto">
+            <div className="px-3 pt-2 pb-4">
               <button
                 className="flex items-center justify-between w-full px-2 py-1.5 rounded-md mb-1"
                 style={{ color: "rgba(255,255,255,0.4)" }}

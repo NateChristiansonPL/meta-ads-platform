@@ -169,6 +169,13 @@
       "when": 1778799037572,
       "tag": "0023_empty_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1778872626661,
+      "tag": "0024_premium_pestilence",
+      "breakpoints": true
     }
   ]
 }

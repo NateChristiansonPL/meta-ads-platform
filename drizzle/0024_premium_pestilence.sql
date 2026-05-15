@@ -1,0 +1,1 @@
+ALTER TABLE `meta_sync_history` ADD `user_id` int;

@@ -668,6 +668,7 @@ export async function syncMetaPerformanceData(input: {
   dateTo: string;
   mode?: "manual" | "scheduled";
   onlyLiveAds?: boolean;
+  userId?: number | null;
 }) {
   const db = await getDb();
   if (!db)
@@ -864,6 +865,7 @@ export async function syncMetaPerformanceData(input: {
   }
 
   await db.insert(metaSyncHistory).values({
+    userId: input.userId ?? null,
     mode: input.mode ?? "manual",
     accountId: cleanAccountId(input.accountId),
     campaignFilter: input.campaignIds.length
@@ -918,7 +920,7 @@ export const creativePerformanceSyncAdminRouter = router({
         onlyLiveAds: z.boolean().default(false),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const token = await getTokenById(input.tokenId);
       if (!token?.accessToken)
         throw new TRPCError({
@@ -933,6 +935,7 @@ export const creativePerformanceSyncAdminRouter = router({
         dateTo: input.dateTo,
         onlyLiveAds: input.onlyLiveAds,
         mode: "manual",
+        userId: ctx.user.id,
       });
     }),
 
@@ -942,12 +945,13 @@ export const creativePerformanceSyncAdminRouter = router({
         .object({ limit: z.number().int().min(1).max(50).default(20) })
         .optional(),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return { history: [] };
       const history = await db
         .select()
         .from(metaSyncHistory)
+        .where(eq(metaSyncHistory.userId, ctx.user.id))
         .orderBy(desc(metaSyncHistory.createdAt))
         .limit(input?.limit ?? 20);
       return { history };

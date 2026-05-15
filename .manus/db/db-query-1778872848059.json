@@ -1,0 +1,146 @@
+{
+  "query": "SHOW COLUMNS FROM meta_sync_history;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SHOW COLUMNS FROM meta_sync_history;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "bigint",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "user_id",
+      "Type": "int",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "mode",
+      "Type": "enum('manual','scheduled','csv','breakdown')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "account_id",
+      "Type": "varchar(64)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "campaign_filter",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "history_campaign_status_filter",
+      "Type": "enum('active','active_30d','inactive','all')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "sync_type",
+      "Type": "enum('sync','analysis','combined')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "combined",
+      "Extra": ""
+    },
+    {
+      "Field": "date_from",
+      "Type": "date",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "date_to",
+      "Type": "date",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "rows_upserted",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "ads_processed",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "adsets_processed",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "duration_ms",
+      "Type": "int",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('success','partial','error')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "error_message",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "warnings",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "created_at",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "MUL",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tbigint\tNO\tPRI\tNULL\tauto_increment\nuser_id\tint\tYES\t\tNULL\t\nmode\tenum('manual','scheduled','csv','breakdown')\tNO\t\tNULL\t\naccount_id\tvarchar(64)\tYES\t\tNULL\t\ncampaign_filter\ttext\tYES\t\tNULL\t\nhistory_campaign_status_filter\tenum('active','active_30d','inactive','all')\tYES\t\tNULL\t\nsync_type\tenum('sync','analysis','combined')\tYES\t\tcombined\t\ndate_from\tdate\tYES\t\tNULL\t\ndate_to\tdate\tYES\t\tNULL\t\nrows_upserted\tint\tNO\t\t0\t\nads_processed\tint\tNO\t\t0\t\nadsets_processed\tint\tNO\t\t0\t\nduration_ms\tint\tNO\t\t0\t\nstatus\tenum('success','partial','error')\tNO\t\tNULL\t\nerror_message\ttext\tYES\t\tNULL\t\nwarnings\tjson\tYES\t\tNULL\t\ncreated_at\ttimestamp\tNO\tMUL\tCURRENT_TIMESTAMP\t\n",
+  "stderr": "",
+  "execution_time_ms": 259
+}

@@ -131,6 +131,8 @@ export const firstFatigueDetected = mysqlTable("first_fatigue_detected", {
 
 export const metaSyncHistory = mysqlTable("meta_sync_history", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  /** The user who triggered this sync run. NULL = legacy rows before user-scoping. */
+  userId: int("user_id"),
   mode: mysqlEnum("mode", ["manual", "scheduled", "csv", "breakdown"]).notNull(),
   accountId: varchar("account_id", { length: 64 }),
   campaignFilter: text("campaign_filter"),

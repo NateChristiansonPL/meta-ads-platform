@@ -746,3 +746,10 @@
 - [x] Update all client-side trpc.adminCreativeDecay.* references to trpc.creativeDecay.* (AdminCreativeDecay.tsx, AdminUserProfile.tsx)
 - [x] Update all client-side trpc.adminCreativePerformanceSync.* references to trpc.creativePerformanceSync.* (AdminCreativePerformanceSync.tsx)
 - [x] TypeScript: 0 errors
+
+## Slack + UX Improvements (May 15 2026)
+- [x] Improve Slack notification message: include account name (config.accountName), user name (look up from users table by userId), emoji per signal level (🔴 Probable, 🟠 Possible, 🟡 Emerging)
+- [x] User-scoped sync history: add userId column to meta_sync_history, write ctx.user.id on syncPerformance, filter getHistory by ctx.user.id
+- [x] Slack webhook onboarding banner on Creative Decay page: dismissible amber banner links to /profile if no slackWebhookUrl set
+- [x] Move My Profile nav item from ADMIN_ITEMS to main sidebar (visible to all authenticated users); /profile route added, /admin/profile kept as alias
+- [x] TypeScript: 0 errors

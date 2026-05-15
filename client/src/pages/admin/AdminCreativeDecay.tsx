@@ -11,9 +11,10 @@ import {
   AlertTriangle, Bell, BookOpen, Calendar, CheckCircle2,
   ChevronDown, ChevronRight, ChevronUp, Clock, Download,
   ExternalLink, Loader2, Play, RefreshCw, Save, Settings2,
-  Slack, Zap,
+  Slack, X, Zap,
 } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
+import { Link } from "wouter";
 import { toast } from "sonner";
 import {
   DateRangePicker, dateRangeToStrings, stringsToDateRange,
@@ -151,8 +152,34 @@ function AnalysisTab() {
     });
   }
 
+  const { data: me } = trpc.auth.me.useQuery();
+  const [slackBannerDismissed, setSlackBannerDismissed] = useState(() => {
+    try { return localStorage.getItem("slackBannerDismissed") === "1"; } catch { return false; }
+  });
+  const showSlackBanner = !slackBannerDismissed && me && !(me as { slackWebhookUrl?: string | null }).slackWebhookUrl;
+
+  function dismissSlackBanner() {
+    setSlackBannerDismissed(true);
+    try { localStorage.setItem("slackBannerDismissed", "1"); } catch { /* ignore */ }
+  }
+
   return (
     <div className="p-6 space-y-5">
+      {/* Slack onboarding banner */}
+      {showSlackBanner && (
+        <div className="flex items-start gap-3 rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(255,190,0,0.10)", border: "1px solid rgba(255,190,0,0.25)" }}>
+          <Slack size={16} className="mt-0.5 shrink-0" style={{ color: "#FFBE00" }} />
+          <div className="flex-1">
+            <span style={{ color: "rgba(255,255,255,0.9)" }}>
+              <strong style={{ color: "#FFBE00" }}>Set up Slack notifications</strong> — get alerted when creative fatigue signals are detected.{" "}
+            </span>
+            <Link href="/profile" className="underline" style={{ color: "#FFBE00" }}>Add your Slack webhook URL in your profile →</Link>
+          </div>
+          <button onClick={dismissSlackBanner} className="shrink-0 opacity-50 hover:opacity-100 transition-opacity" style={{ color: "rgba(255,255,255,0.7)" }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
       {/* Config row */}
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <Panel title="Business Manager Token">

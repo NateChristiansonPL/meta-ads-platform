@@ -807,6 +807,8 @@ async function runDecayChain(config: {
   });
 
   if (triggered.length > 0) {
+    const emojiForLevel = (status: string) =>
+      status === "URGENT" ? "🔴" : status === "REFRESH" ? "🟠" : "🟡";
     const lines = triggered.map((r) => {
       const level = r.fatigueStatus === "URGENT" ? "Probable"
         : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
@@ -823,9 +825,34 @@ async function runDecayChain(config: {
     });
     // Send Slack notification if webhook is configured
     if (config.slackWebhookUrl) {
-      const slackMsg = `*Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected (${config.dateFrom} to ${config.dateTo})\n\n${lines}${
-        syncWarnings.length ? `\n\n_Sync warnings:_\n${syncWarnings.join("\n")}` : ""
-      }`;
+      // Look up the triggering user's name for shared-channel context
+      let userName = "Unknown User";
+      if (config.userId) {
+        const db = await getDb();
+        if (db) {
+          const userRows = await db.select({ name: users.name }).from(users).where(eq(users.id, config.userId)).limit(1);
+          if (userRows[0]?.name) userName = userRows[0].name;
+        }
+      }
+      const accountLabel = config.accountName && config.accountName !== config.accountId
+        ? config.accountName
+        : config.accountId;
+      const slackLines = triggered.map((r) => {
+        const emoji = emojiForLevel(r.fatigueStatus);
+        const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
+        const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
+        return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})${
+          firstDate ? ` — first seen ${new Date(firstDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""
+        }`;
+      }).join("\n");
+      const slackMsg = [
+        `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+        `*Account:* ${accountLabel}`,
+        `*Triggered by:* ${userName}  •  ${config.dateFrom} – ${config.dateTo}`,
+        "",
+        slackLines,
+        ...(syncWarnings.length ? ["", `_Sync warnings:_\n${syncWarnings.join("\n")}`] : []),
+      ].join("\n");
       await sendSlackNotification(config.slackWebhookUrl, slackMsg);
     }
     const dbLog = await getDb();
