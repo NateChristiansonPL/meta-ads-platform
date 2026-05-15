@@ -1,0 +1,18 @@
+{
+  "query": "\nSELECT \n  COUNT(DISTINCT ad_id) AS distinct_ads,\n  COUNT(DISTINCT content_fingerprint) AS distinct_fingerprints,\n  SUM(CASE WHEN image_hash IS NULL AND video_id IS NULL THEN 1 ELSE 0 END) AS rows_no_media_hash\nFROM ad_performance;\n\nSELECT \n  content_fingerprint,\n  COUNT(DISTINCT ad_id) AS ad_count,\n  COUNT(DISTINCT adset_id) AS adset_count,\n  COUNT(DISTINCT campaign_id) AS campaign_count,\n  MIN(ad_name) AS sample_ad_name\nFROM ad_performance\nGROUP BY content_fingerprint\nORDER BY ad_count DESC\nLIMIT 15;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute \nSELECT \n  COUNT(DISTINCT ad_id) AS distinct_ads,\n  COUNT(DISTINCT content_fingerprint) AS distinct_fingerprints,\n  SUM(CASE WHEN image_hash IS NULL AND video_id IS NULL THEN 1 ELSE 0 END) AS rows_no_media_hash\nFROM ad_performance;\n\nSELECT \n  content_fingerprint,\n  COUNT(DISTINCT ad_id) AS ad_count,\n  COUNT(DISTINCT adset_id) AS adset_count,\n  COUNT(DISTINCT campaign_id) AS campaign_count,\n  MIN(ad_name) AS sample_ad_name\nFROM ad_performance\nGROUP BY content_fingerprint\nORDER BY ad_count DESC\nLIMIT 15;\n",
+  "rows": [
+    {
+      "distinct_ads": "50",
+      "distinct_fingerprints": "1",
+      "rows_no_media_hash": "423"
+    }
+  ],
+  "messages": [
+    "content_fingerprint\tad_count\tadset_count\tcampaign_count\tsample_ad_name",
+    "e7ac0786668e0ff0\t50\t9\t6\tNecoa - Austin - Sales - LAL - The Domain On the Go Activation - Static - Mar 2026"
+  ],
+  "stdout": "distinct_ads\tdistinct_fingerprints\trows_no_media_hash\n50\t1\t423\ncontent_fingerprint\tad_count\tadset_count\tcampaign_count\tsample_ad_name\ne7ac0786668e0ff0\t50\t9\t6\tNecoa - Austin - Sales - LAL - The Domain On the Go Activation - Static - Mar 2026\n",
+  "stderr": "",
+  "execution_time_ms": 282
+}

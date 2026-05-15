@@ -156,20 +156,47 @@ function parseCreative(
     | Record<string, unknown>
     | undefined;
   const videoData = spec?.video_data as Record<string, unknown> | undefined;
-  const firstBody = (feed?.bodies as Array<{ text?: unknown }> | undefined)?.[0];
-  const firstTitle = (feed?.titles as Array<{ text?: unknown }> | undefined)?.[0];
-  const imageHash = String(creative.image_hash ?? "") || null;
+  const feedBodies = feed?.bodies as Array<{ text?: unknown }> | undefined;
+  const feedTitles = feed?.titles as Array<{ text?: unknown }> | undefined;
+  const firstBody = feedBodies?.[0];
+  const firstTitle = feedTitles?.[0];
+  // ── image_hash extraction ────────────────────────────────────────────────
+  // Priority order:
+  //   1. creative.image_hash (standard static ads)
+  //   2. object_story_spec.link_data.image_hash (link ads with inline image hash)
+  //   3. asset_feed_spec.images[0].hash (Dynamic Creative / Advantage+ ads)
+  //   4. object_story_spec.photo_data.image_hash (photo post ads)
+  const feedImages = feed?.images as Array<Record<string, unknown>> | undefined;
+  const photoData = spec?.photo_data as Record<string, unknown> | undefined;
+  const imageHash =
+    String(creative.image_hash ?? "") ||
+    String((spec?.link_data as Record<string, unknown> | undefined)?.image_hash ?? "") ||
+    String(feedImages?.[0]?.hash ?? "") ||
+    String(photoData?.image_hash ?? "") ||
+    null;
+
+  // ── video_id extraction ───────────────────────────────────────────────────
+  // Priority order:
+  //   1. object_story_spec.video_data.video_id (standard video ads)
+  //   2. object_story_spec.video_id (older format)
+  //   3. asset_feed_spec.videos[0].video_id (Dynamic Creative video ads)
+  //   4. creative.video_id (top-level fallback)
+  const feedVideos = feed?.videos as Array<Record<string, unknown>> | undefined;
   const videoId =
     String(
       (videoData?.video_id as string | undefined) ??
         (spec?.video_id as string | undefined) ??
+        (feedVideos?.[0]?.video_id as string | undefined) ??
+        (creative.video_id as string | undefined) ??
         "",
     ) || null;
+
   // Warn if we have neither image nor video — fingerprint will be a hash of empty strings
   if (!imageHash && !videoId) {
     console.warn(
-      `[PerformanceSync] Creative ${creativeId} (ad ${adId}): Has no imageHash or videoId. ` +
-      `buildFingerprint() will generate empty-hash. Media type detection: ${String(creative.object_type)}`,
+      `[PerformanceSync] Creative ${creativeId} (ad ${adId}): Has no imageHash or videoId after all extraction paths. ` +
+      `object_type=${String(creative.object_type)}, has_spec=${!!spec}, has_feed=${!!feed}, ` +
+      `feed_images=${feedImages?.length ?? 0}, feed_videos=${feedVideos?.length ?? 0}`,
     );
   }
 
@@ -184,7 +211,13 @@ function parseCreative(
     creativeId,
     mediaType,
     imageUrl:
-      String(creative.thumbnail_url ?? linkData?.picture ?? "") || null,
+      String(
+        creative.thumbnail_url ??
+        linkData?.picture ??
+        feedImages?.[0]?.url ??
+        feedVideos?.[0]?.thumbnail_url ??
+        ""
+      ) || null,
     imageHash,
     videoId,
     contentFingerprint: buildFingerprint(creativeId, imageHash, videoId),
@@ -477,7 +510,7 @@ async function fetchCreativeMap(accessToken: string, adIds: string[]) {
       const response = await axios.get(`${META_BASE}/${adId}`, {
         params: {
           fields:
-            "creative{id,name,object_type,image_hash,thumbnail_url,object_story_spec,asset_feed_spec}",
+            "creative{id,name,object_type,image_hash,video_id,thumbnail_url,object_story_spec{link_data{image_hash,picture,message,name,description,call_to_action,link},video_data{video_id,message,call_to_action},photo_data{image_hash}},asset_feed_spec{images{hash,url},videos{video_id,thumbnail_url},bodies{text},titles{text}}}",
           access_token: accessToken,
         },
         timeout: 30000,

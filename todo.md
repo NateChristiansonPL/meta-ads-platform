@@ -710,3 +710,9 @@
 - [x] Fix EWMA Drop and CTR Drop display to show as percentages (multiply by 100)
 - [x] Fix Reliability display to show as percentage
 - [x] Add backward-compat normalization for old saved reports (adId→creativeId, adName→creativeName)
+
+## Fingerprint Fix (May 15 2026)
+- [x] Expand Meta API creative fields request to include video_id, object_story_spec sub-fields (link_data.image_hash, video_data.video_id, photo_data.image_hash), and asset_feed_spec sub-fields (images.hash, videos.video_id)
+- [x] Fix parseCreative() image_hash extraction: add fallbacks for link_data.image_hash, asset_feed_spec.images[0].hash, photo_data.image_hash
+- [x] Fix parseCreative() video_id extraction: add fallbacks for asset_feed_spec.videos[0].video_id and creative.video_id
+- [x] Fix imageUrl extraction: add fallbacks for asset_feed_spec images[0].url and videos[0].thumbnail_url
