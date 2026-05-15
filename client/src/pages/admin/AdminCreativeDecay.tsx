@@ -701,8 +701,16 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                         <span className="font-medium" style={{ color: "#FAFAFA" }}>{r.creativeName}</span>
                       </div>
                     </Td>
-                    <Td className="max-w-[180px] truncate">{r.campaignName ?? "\u2014"}</Td>
-                    <Td className="max-w-[180px] truncate">{r.adsetName ?? "\u2014"}</Td>
+                    <Td wrap>
+                      <div className="max-w-[220px]" style={{ wordBreak: "break-word", lineHeight: 1.4 }}>
+                        {r.campaignName ?? "\u2014"}
+                      </div>
+                    </Td>
+                    <Td wrap>
+                      <div className="max-w-[220px]" style={{ wordBreak: "break-word", lineHeight: 1.4 }}>
+                        {r.adsetName ?? "\u2014"}
+                      </div>
+                    </Td>
                     <Td><FatiguePill level={r.fatigueStatus} /></Td>
                     <Td><span style={{ color: r.fatigueScore >= 70 ? "#ED135F" : r.fatigueScore >= 50 ? "#F7901E" : r.fatigueScore >= 30 ? "#F7C948" : "#00B37A" }}>{r.fatigueScore.toFixed(1)}</span></Td>
                     <Td><span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}>{r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"}</span></Td>
@@ -765,8 +773,8 @@ function EmptyTxt({ children }: { children: React.ReactNode }) {
 function Th({ children }: { children?: React.ReactNode }) {
   return <th className="text-left font-bold px-4 py-3 whitespace-nowrap">{children}</th>;
 }
-function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 align-top whitespace-nowrap ${className ?? ""}`}>{children}</td>;
+function Td({ children, className, wrap }: { children: React.ReactNode; className?: string; wrap?: boolean }) {
+  return <td className={`px-4 py-3 align-top ${wrap ? "" : "whitespace-nowrap"} ${className ?? ""}`}>{children}</td>;
 }
 function FatiguePill({ level }: { level: string }) {
   const map: Record<string, { bg: string; col: string; label: string }> = {
