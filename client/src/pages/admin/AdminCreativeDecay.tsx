@@ -708,9 +708,33 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
           <tbody>
             {sorted.map((r) => {
               const isExpanded = expandedRow === r.creativeId;
-              // Derive the first-detected date from the level-keyed object
-              const level = r.fatigueStatus === "URGENT" ? "probable" : r.fatigueStatus === "REFRESH" ? "possible" : r.fatigueStatus === "MONITOR" ? "emerging" : null;
-              const firstDetectedStr = level ? r.firstDetectedAt?.[level] : null;
+              // Build escalation timeline from firstDetectedAt
+              const fda = r.firstDetectedAt ?? {};
+              const LEVELS: Array<"emerging" | "possible" | "probable"> = ["emerging", "possible", "probable"];
+              const timelineSteps = LEVELS.filter((l) => fda[l]).map((l) => ({ level: l, date: new Date(fda[l]!) }));
+              const currentLevel = r.fatigueStatus === "URGENT" ? "probable" : r.fatigueStatus === "REFRESH" ? "possible" : r.fatigueStatus === "MONITOR" ? "emerging" : null;
+              const nextLvl = currentLevel === "emerging" ? "possible" : currentLevel === "possible" ? "probable" : null;
+              // Projection: only if next level not yet detected
+              let projectedDate: Date | null = null;
+              let projectedLabel: string | null = null;
+              let projectedFromPeers = false;
+              if (nextLvl && !fda[nextLvl] && timelineSteps.length >= 1) {
+                let velocityDays: number | null = null;
+                if (timelineSteps.length >= 2) {
+                  const gaps: number[] = [];
+                  for (let i = 1; i < timelineSteps.length; i++) {
+                    const g = Math.round((timelineSteps[i].date.getTime() - timelineSteps[i-1].date.getTime()) / 86400000);
+                    if (g > 0) gaps.push(g);
+                  }
+                  if (gaps.length) velocityDays = gaps[gaps.length - 1];
+                }
+                if (velocityDays === null) { velocityDays = 7; projectedFromPeers = true; }
+                velocityDays = Math.min(velocityDays, 60);
+                const anchor = timelineSteps[timelineSteps.length - 1].date;
+                projectedDate = new Date(anchor.getTime() + velocityDays * 86400000);
+                projectedLabel = nextLvl === "possible" ? "Possible" : "Probable";
+              }
+              const fmtD = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
               return (
                 <>
                   <tr key={r.creativeId}
@@ -748,6 +772,39 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                   {isExpanded && (
                     <tr key={`${r.creativeId}-exp`} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                       <td colSpan={10} className="px-6 py-4" style={{ background: "rgba(26,108,246,0.04)" }}>
+                        {/* Escalation timeline + projection */}
+                        {timelineSteps.length > 0 && (
+                          <div className="mb-4">
+                            <div className="text-[10px] font-bold mb-2" style={{ color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Escalation Timeline</div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {timelineSteps.map((s, i) => (
+                                <span key={s.level} className="flex items-center gap-1">
+                                  {i > 0 && <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>→</span>}
+                                  <span className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{
+                                    background: s.level === "probable" ? "rgba(237,19,95,0.15)" : s.level === "possible" ? "rgba(247,144,30,0.15)" : "rgba(247,201,72,0.15)",
+                                    color: s.level === "probable" ? "#ED135F" : s.level === "possible" ? "#F7901E" : "#F7C948",
+                                    border: `1px solid ${s.level === "probable" ? "rgba(237,19,95,0.3)" : s.level === "possible" ? "rgba(247,144,30,0.3)" : "rgba(247,201,72,0.3)"}`
+                                  }}>
+                                    {s.level.charAt(0).toUpperCase() + s.level.slice(1)}: {fmtD(s.date)}
+                                  </span>
+                                </span>
+                              ))}
+                              {projectedDate && projectedLabel && (
+                                <span className="flex items-center gap-1">
+                                  <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>→</span>
+                                  <span className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{
+                                    background: "rgba(255,255,255,0.06)",
+                                    color: "rgba(255,255,255,0.45)",
+                                    border: "1px dashed rgba(255,255,255,0.2)"
+                                  }}>
+                                    ⏱ Est. {projectedLabel}: ~{fmtD(projectedDate)}{projectedFromPeers ? " (est.)" : ""}
+                                  </span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {/* Evidence pills */}
                         <div className="flex flex-wrap gap-3">
                           <EvidencePill label="CDR Drop" value={r.cdrPct != null ? `${Number(r.cdrPct).toFixed(1)}%` : "\u2014"} />
                           <EvidencePill label="EWMA Drop" value={r.ewmaDrop != null ? `${(Number(r.ewmaDrop) * 100).toFixed(1)}%` : "\u2014"} />
@@ -756,7 +813,6 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                           <EvidencePill label="Total Events" value={r.totalEvents != null ? Number(r.totalEvents).toLocaleString() : "\u2014"} />
                           <EvidencePill label="Reliability" value={r.reliability != null ? `${(Number(r.reliability) * 100).toFixed(0)}%` : "\u2014"} />
                           <EvidencePill label="Scored Metric" value={r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"} highlight />
-                          {firstDetectedStr && <EvidencePill label="First Detected" value={new Date(firstDetectedStr).toLocaleDateString()} />}
                         </div>
                       </td>
                     </tr>

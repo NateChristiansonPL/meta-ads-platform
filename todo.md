@@ -763,3 +763,8 @@
 
 ## Disable Email Notifications (May 15 2026)
 - [x] Remove notifyOwner() calls from both runDecayAnalysis and runDecayChain; removed unused import. Slack is now the only notification channel.
+
+## Fatigue Escalation Timeline + Projection (May 15 2026)
+- [x] Build shared utility (fatigueEscalation.ts): buildEscalationTimeline, computePeerVelocities, formatTimelineText, formatProjectionText
+- [x] Update Slack message: each creative now shows full timeline (📅 Emerging: May 3 → Possible: May 9) + projected next level (⏱ Est. Probable: ~May 22)
+- [x] Update analysis results table: expanded row now shows color-coded Escalation Timeline pills + dashed Est. next level pill with projection date

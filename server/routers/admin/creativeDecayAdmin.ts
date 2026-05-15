@@ -33,6 +33,12 @@ import {
   users,
 } from "../../../drizzle/schema";
 import { syncMetaPerformanceData } from "./creativePerformanceSyncAdmin";
+import {
+  buildEscalationTimeline,
+  computePeerVelocities,
+  formatTimelineText,
+  formatProjectionText,
+} from "./fatigueEscalation";
 
 
 
@@ -830,14 +836,18 @@ async function runDecayChain(config: {
       const accountLabel = config.accountName && config.accountName !== config.accountId
         ? config.accountName
         : config.accountId;
+      const peerVelocities = computePeerVelocities(triggered);
       const slackLines = triggered.map((r) => {
         const emoji = emojiForLevel(r.fatigueStatus);
         const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
-        const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
-        return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})${
-          firstDate ? ` — first seen ${new Date(firstDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""
-        }`;
-      }).join("\n");
+        const timeline = buildEscalationTimeline(r.firstDetectedAt, r.fatigueStatus, peerVelocities);
+        const timelineStr = formatTimelineText(timeline);
+        const projectionStr = formatProjectionText(timeline);
+        const lines = [`${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`];
+        if (timelineStr) lines.push(`   📅 ${timelineStr}`);
+        if (projectionStr) lines.push(`   ${projectionStr}`);
+        return lines.join("\n");
+      }).join("\n\n");
       const slackMsg = [
         `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
         `*Account:* ${accountLabel}`,
@@ -946,14 +956,18 @@ export const creativeDecayAdminRouter = router({
             const accountLabel = input.accountName && input.accountName !== input.adAccountId
               ? input.accountName
               : input.adAccountId;
+            const peerVelocities = computePeerVelocities(triggered);
             const slackLines = triggered.map((r) => {
               const emoji = r.fatigueStatus === "URGENT" ? "🔴" : r.fatigueStatus === "REFRESH" ? "🟠" : "🟡";
               const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
-              const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
-              return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})${
-                firstDate ? ` — first seen ${new Date(firstDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""
-              }`;
-            }).join("\n");
+              const timeline = buildEscalationTimeline(r.firstDetectedAt, r.fatigueStatus, peerVelocities);
+              const timelineStr = formatTimelineText(timeline);
+              const projectionStr = formatProjectionText(timeline);
+              const lines = [`${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`];
+              if (timelineStr) lines.push(`   📅 ${timelineStr}`);
+              if (projectionStr) lines.push(`   ${projectionStr}`);
+              return lines.join("\n");
+            }).join("\n\n");
             const slackMsg = [
               `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
               `*Account:* ${accountLabel}`,
