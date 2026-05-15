@@ -208,13 +208,18 @@ async function analyzeStoredPerformance(input: {
   let skippedRowsCount = 0;
 
   for (const row of rows) {
-    const key =
+    const fingerprint =
       row.contentFingerprint ||
       (row.creativeId ? `creative:${row.creativeId}` : null);
-    if (!key) {
+    if (!fingerprint) {
       skippedRowsCount++;
       continue;
     }
+    // Scope grouping within a campaign: the same creative asset running in
+    // different campaigns must be analyzed independently. Using a compound key
+    // of campaignId + fingerprint ensures cross-campaign rows are never merged.
+    const campaignId = row.campaignId ?? "unknown";
+    const key = `${campaignId}::${fingerprint}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
 
@@ -237,14 +242,23 @@ async function analyzeStoredPerformance(input: {
     );
   }
 
-  // Build a fingerprint → imageUrl map from adSourceDetails
-  const allFingerprints = Array.from(groups.keys());
+  // Build a fingerprint → imageUrl map from adSourceDetails.
+  // Groups are keyed as "campaignId::fingerprint" — extract the raw fingerprints
+  // for the DB lookup, then key the imageUrl map by raw fingerprint.
+  const rawFingerprints = Array.from(
+    new Set(
+      Array.from(groups.keys()).map((k) => {
+        const sep = k.indexOf("::");
+        return sep !== -1 ? k.slice(sep + 2) : k;
+      }),
+    ),
+  );
   const imageUrlMap = new Map<string, string>();
-  if (allFingerprints.length) {
+  if (rawFingerprints.length) {
     const sourceRows = await db
       .select({ contentFingerprint: adSourceDetails.contentFingerprint, imageUrl: adSourceDetails.imageUrl })
       .from(adSourceDetails)
-      .where(inArray(adSourceDetails.contentFingerprint, allFingerprints));
+      .where(inArray(adSourceDetails.contentFingerprint, rawFingerprints));
     for (const sr of sourceRows) {
       if (sr.contentFingerprint && sr.imageUrl && !imageUrlMap.has(sr.contentFingerprint)) {
         imageUrlMap.set(sr.contentFingerprint, sr.imageUrl);
@@ -255,7 +269,12 @@ async function analyzeStoredPerformance(input: {
   const analysisRunId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const inserted: Array<typeof creativeFatigueResults.$inferInsert & { id?: number }> = [];
 
-  for (const [fingerprint, group] of Array.from(groups.entries())) {
+  for (const [groupKey, group] of Array.from(groups.entries())) {
+    // groupKey is "campaignId::fingerprint" — extract the raw fingerprint for
+    // use in result records and imageUrl lookups.
+    const sepIdx = groupKey.indexOf("::");
+    const fingerprint = sepIdx !== -1 ? groupKey.slice(sepIdx + 2) : groupKey;
+
     const dates = Array.from(
       new Set(group.map((row: VisionRow) => row.date)),
     ).sort();
@@ -482,7 +501,7 @@ async function analyzeStoredPerformance(input: {
       fatigueScore: number;
     }>
   >();
-  for (const [fingerprint, group] of Array.from(groups.entries())) {
+  for (const [groupKey, group] of Array.from(groups.entries())) {
     const dates = Array.from(
       new Set(group.map((r: VisionRow) => r.date)),
     ).sort() as string[];
@@ -563,7 +582,7 @@ async function analyzeStoredPerformance(input: {
         fatigueScore: parseFloat(dayFatigueScore.toFixed(1)),
       };
     });
-    trendByFingerprint.set(fingerprint, series);
+    trendByFingerprint.set(groupKey, series);
   }
 
   return {
@@ -572,8 +591,14 @@ async function analyzeStoredPerformance(input: {
       .sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore))
       .map((row, index) => ({
         ...mapResult({ ...row, id: index + 1 }, firstDetectedMap),
-        trendData:
-          trendByFingerprint.get(row.contentFingerprint ?? "") ?? [],
+        trendData: (() => {
+          // trendByFingerprint is keyed by "campaignId::fingerprint" compound key.
+          // Reconstruct the key from the result record's campaignIds and contentFingerprint.
+          const fp = row.contentFingerprint ?? "";
+          const cids = (row.campaignIds as string[] | undefined) ?? [];
+          const campaignId = cids[0] ?? "unknown";
+          return trendByFingerprint.get(`${campaignId}::${fp}`) ?? [];
+        })(),
       })),
   };
 }

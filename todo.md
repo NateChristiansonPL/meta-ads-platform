@@ -716,3 +716,10 @@
 - [x] Fix parseCreative() image_hash extraction: add fallbacks for link_data.image_hash, asset_feed_spec.images[0].hash, photo_data.image_hash
 - [x] Fix parseCreative() video_id extraction: add fallbacks for asset_feed_spec.videos[0].video_id and creative.video_id
 - [x] Fix imageUrl extraction: add fallbacks for asset_feed_spec images[0].url and videos[0].thumbnail_url
+
+## Campaign-Scoped Fingerprint Grouping (May 15 2026)
+- [x] Change decay analysis grouping key from contentFingerprint to campaignId::contentFingerprint so same creative in different campaigns is analyzed independently
+- [x] Fix imageUrlMap to extract raw fingerprints from compound keys for DB lookup
+- [x] Fix first for loop to extract raw fingerprint from compound key for result record contentFingerprint field
+- [x] Fix second for loop (trend series) to key trendByFingerprint by compound groupKey
+- [x] Fix trendData lookup in return to reconstruct compound key from campaignIds[0] + contentFingerprint
