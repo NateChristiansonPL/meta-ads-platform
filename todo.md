@@ -768,3 +768,7 @@
 - [x] Build shared utility (fatigueEscalation.ts): buildEscalationTimeline, computePeerVelocities, formatTimelineText, formatProjectionText
 - [x] Update Slack message: each creative now shows full timeline (📅 Emerging: May 3 → Possible: May 9) + projected next level (⏱ Est. Probable: ~May 22)
 - [x] Update analysis results table: expanded row now shows color-coded Escalation Timeline pills + dashed Est. next level pill with projection date
+
+## Revert Escalation Timeline (May 15 2026)
+- [x] Remove timeline/projection lines from Slack message (both runDecayChain and runDecayAnalysis paths)
+- [x] Revert ResultsTable expanded row back to plain evidence pills (remove Escalation Timeline section)
