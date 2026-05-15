@@ -124,8 +124,8 @@ export const appRouter = router({
   sessions: sessionsRouter,
   adminMeta: metaAdminRouter,
   adminSessions: sessionsAdminRouter,
-  adminCreativeDecay: creativeDecayAdminRouter,
-  adminCreativePerformanceSync: creativePerformanceSyncAdminRouter,
+  creativeDecay: creativeDecayAdminRouter,
+  creativePerformanceSync: creativePerformanceSyncAdminRouter,
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),

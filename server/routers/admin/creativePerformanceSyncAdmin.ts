@@ -32,11 +32,6 @@ const META_BASE = "https://graph.facebook.com/v21.0";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin")
-    throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required." });
-  return next({ ctx });
-});
 
 type MetaAction = { action_type: string; value: string };
 type InsightRow = {
@@ -909,7 +904,7 @@ async function getSyncSchedulerConfig() {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const creativePerformanceSyncAdminRouter = router({
-  syncPerformance: adminProcedure
+  syncPerformance: protectedProcedure
     .input(
       z.object({
         tokenId: z.number().int().positive(),
@@ -941,7 +936,7 @@ export const creativePerformanceSyncAdminRouter = router({
       });
     }),
 
-  getHistory: adminProcedure
+  getHistory: protectedProcedure
     .input(
       z
         .object({ limit: z.number().int().min(1).max(50).default(20) })
@@ -958,7 +953,7 @@ export const creativePerformanceSyncAdminRouter = router({
       return { history };
     }),
 
-  getSchedulerConfig: adminProcedure
+  getSchedulerConfig: protectedProcedure
     .input(z.object({ accountId: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
     const config = await getSyncSchedulerConfig();
@@ -979,7 +974,7 @@ export const creativePerformanceSyncAdminRouter = router({
     );
   }),
 
-  getAdsetGoalStats: adminProcedure
+  getAdsetGoalStats: protectedProcedure
     .input(z.object({ accountId: z.string() }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1015,7 +1010,7 @@ export const creativePerformanceSyncAdminRouter = router({
           : null;
       return { total, customConvResolved, standardEvent, noGoal, byGoal, stalestFetchedAt, freshestFetchedAt };
     }),
-  saveSyncSchedulerConfig: adminProcedure
+  saveSyncSchedulerConfig: protectedProcedure
     .input(
       z.object({
         syncEnabled: z.boolean(),

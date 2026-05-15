@@ -112,7 +112,7 @@ function AnalysisTab() {
     return campaigns.filter((c) => !q || c.name.toLowerCase().includes(q));
   }, [campaigns, campaignSearch]);
 
-  const runMutation = trpc.adminCreativeDecay.runDecayAnalysis.useMutation({
+  const runMutation = trpc.creativeDecay.runDecayAnalysis.useMutation({
     onSuccess: (data) => {
       setResults(data.records as unknown as ResultRow[]);
       setAnalysisRunId(data.analysisRunId ?? null);
@@ -121,7 +121,7 @@ function AnalysisTab() {
     onError: (e) => toast.error(e.message || "Analysis failed."),
   });
 
-  const saveReportMutation = trpc.adminCreativeDecay.saveDecayReport.useMutation({
+  const saveReportMutation = trpc.creativeDecay.saveDecayReport.useMutation({
     onSuccess: () => { toast.success("Report saved to Reports Library."); setShowSaveDialog(false); },
     onError: (e) => toast.error(e.message),
   });
@@ -296,7 +296,7 @@ function AnalysisTab() {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 function ScheduleTab() {
-  const { data: schedulesData, refetch: refetchSchedules } = trpc.adminCreativeDecay.getUserDecaySchedules.useQuery();
+  const { data: schedulesData, refetch: refetchSchedules } = trpc.creativeDecay.getUserDecaySchedules.useQuery();
   const schedules = schedulesData?.schedules ?? [];
 
   const { data: tokens = [] } = trpc.tokens.listAll.useQuery();
@@ -319,7 +319,7 @@ function ScheduleTab() {
   const { data: accountData } = trpc.meta.getAdAccountsByTokenId.useQuery({ tokenId: tokenId! }, { enabled: !!tokenId, staleTime: 300_000 });
   const accounts = accountData?.accounts ?? [];
 
-  const { data: existingConfig } = trpc.adminCreativeDecay.getAnalysisSchedulerConfigForAccount.useQuery(
+  const { data: existingConfig } = trpc.creativeDecay.getAnalysisSchedulerConfigForAccount.useQuery(
     { accountId },
     { enabled: !!accountId },
   );
@@ -337,15 +337,15 @@ function ScheduleTab() {
     });
   }, [existingConfig]);
 
-  const { data: slackData, refetch: refetchSlack } = trpc.adminCreativeDecay.getSlackWebhook.useQuery();
+  const { data: slackData, refetch: refetchSlack } = trpc.creativeDecay.getSlackWebhook.useQuery();
   const [slackUrl, setSlackUrl] = useState("");
   useEffect(() => { if (slackData?.webhookUrl) setSlackUrl(slackData.webhookUrl); }, [slackData]);
 
-  const saveSchedule = trpc.adminCreativeDecay.saveAnalysisSchedulerConfig.useMutation({
+  const saveSchedule = trpc.creativeDecay.saveAnalysisSchedulerConfig.useMutation({
     onSuccess: () => { toast.success("Schedule saved."); refetchSchedules(); },
     onError: (e) => toast.error(e.message),
   });
-  const saveSlack = trpc.adminCreativeDecay.saveSlackWebhook.useMutation({
+  const saveSlack = trpc.creativeDecay.saveSlackWebhook.useMutation({
     onSuccess: () => { toast.success("Slack webhook saved."); refetchSlack(); },
     onError: (e) => toast.error(e.message),
   });
@@ -501,10 +501,10 @@ function ScheduleTab() {
 
 // ── Reports Library Tab ───────────────────────────────────────────────────────
 function ReportsTab() {
-  const { data, isLoading, refetch } = trpc.adminCreativeDecay.getDecayReports.useQuery({ limit: 100 });
+  const { data, isLoading, refetch } = trpc.creativeDecay.getDecayReports.useQuery({ limit: 100 });
   const reports = data?.reports ?? [];
   const [selectedReport, setSelectedReport] = useState<number | null>(null);
-  const { data: reportDetail } = trpc.adminCreativeDecay.getDecayReportById.useQuery(
+  const { data: reportDetail } = trpc.creativeDecay.getDecayReportById.useQuery(
     { id: selectedReport! }, { enabled: selectedReport !== null },
   );
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -593,7 +593,7 @@ function ReportsTab() {
 
 // ── Notifications Tab ─────────────────────────────────────────────────────────
 function NotificationsTab() {
-  const { data, isLoading, refetch } = trpc.adminCreativeDecay.getDecayNotifications.useQuery({ limit: 100 });
+  const { data, isLoading, refetch } = trpc.creativeDecay.getDecayNotifications.useQuery({ limit: 100 });
   const notifications = data?.notifications ?? [];
 
   return (

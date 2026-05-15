@@ -733,8 +733,16 @@
 - [x] Keep /admin/* routes as backward-compat aliases (no AdminRoute guard)
 
 ## Scheduler Fixes (May 15 2026)
-- [ ] Fix runDecayChain to accept slackWebhookUrl param and call sendSlackNotification when triggered signals exist
-- [ ] Fix cron to iterate ALL enabled schedule rows (not just id=1) and look up each user's slackWebhookUrl
-- [ ] Fix triggerDecayAnalysis procedure to also send Slack notification when signals are triggered
-- [ ] Remove inline Automated Sync Scheduler accordion from AdminCreativePerformanceSync.tsx
-- [ ] Add Schedule button to AdminCreativePerformanceSync header that opens a schedule config modal
+- [x] Fix runDecayChain to accept slackWebhookUrl param and call sendSlackNotification when triggered signals exist
+- [x] Fix cron to iterate ALL enabled schedule rows (not just id=1) and look up each user's slackWebhookUrl
+- [x] Fix triggerDecayAnalysis procedure to also send Slack notification when signals are triggered
+- [x] Remove inline Automated Sync Scheduler accordion from AdminCreativePerformanceSync.tsx
+- [x] Add Schedule button to AdminCreativePerformanceSync header that opens a schedule config modal
+
+## adminProcedure → protectedProcedure Fix (May 15 2026)
+- [x] Remove adminProcedure guard from creativeDecayAdmin.ts (all 14 procedures now use protectedProcedure)
+- [x] Remove adminProcedure guard from creativePerformanceSyncAdmin.ts (all 5 procedures now use protectedProcedure)
+- [x] Rename router keys in routers.ts: adminCreativeDecay → creativeDecay, adminCreativePerformanceSync → creativePerformanceSync
+- [x] Update all client-side trpc.adminCreativeDecay.* references to trpc.creativeDecay.* (AdminCreativeDecay.tsx, AdminUserProfile.tsx)
+- [x] Update all client-side trpc.adminCreativePerformanceSync.* references to trpc.creativePerformanceSync.* (AdminCreativePerformanceSync.tsx)
+- [x] TypeScript: 0 errors

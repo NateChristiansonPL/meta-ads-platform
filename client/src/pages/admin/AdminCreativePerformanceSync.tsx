@@ -51,7 +51,7 @@ export default function AdminCreativePerformanceSync() {
   const [schedModalOpen, setSchedModalOpen] = useState(false);
 
   const { data: schedulerConfig, refetch: refetchScheduler } =
-    trpc.adminCreativePerformanceSync.getSchedulerConfig.useQuery();
+    trpc.creativePerformanceSync.getSchedulerConfig.useQuery();
   const [sched, setSched] = useState({
     syncEnabled: false, syncUtcHour: 6, syncRollingDays: 14,
     syncPreset: "rolling" as "rolling" | "yesterday",
@@ -67,7 +67,7 @@ export default function AdminCreativePerformanceSync() {
     });
   }, [schedulerConfig]);
 
-  const saveScheduler = trpc.adminCreativePerformanceSync.saveSyncSchedulerConfig.useMutation({
+  const saveScheduler = trpc.creativePerformanceSync.saveSyncSchedulerConfig.useMutation({
     onSuccess: () => { toast.success("Scheduler config saved."); refetchScheduler(); },
     onError: (e) => toast.error(e.message),
   });
@@ -85,15 +85,15 @@ export default function AdminCreativePerformanceSync() {
   const campaigns: Array<{ id: string; name: string; status?: string }> = campaignData?.campaigns ?? [];
 
   const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } =
-    trpc.adminCreativePerformanceSync.getHistory.useQuery({ limit: 20 }, { staleTime: 30_000 });
+    trpc.creativePerformanceSync.getHistory.useQuery({ limit: 20 }, { staleTime: 30_000 });
 
   const { data: goalStats, refetch: refetchGoalStats } =
-    trpc.adminCreativePerformanceSync.getAdsetGoalStats.useQuery(
+    trpc.creativePerformanceSync.getAdsetGoalStats.useQuery(
       accountId ? { accountId } : undefined,
       { enabled: true, staleTime: 60_000 },
     );
 
-  const syncMutation = trpc.adminCreativePerformanceSync.syncPerformance.useMutation({
+  const syncMutation = trpc.creativePerformanceSync.syncPerformance.useMutation({
     onSuccess: (data) => {
       setSyncResult(data); refetchHistory(); refetchGoalStats();
       toast.success(`Sync complete: ${data.rowsUpserted} rows upserted, ${data.adsProcessed} ads processed.`);

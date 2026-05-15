@@ -37,9 +37,9 @@ export default function AdminUserProfile() {
 
   // ── Slack webhook state ───────────────────────────────────────────────────
   const { data: webhookData, isLoading: webhookLoading } =
-    trpc.adminCreativeDecay.getSlackWebhook.useQuery();
-  const saveWebhook = trpc.adminCreativeDecay.saveSlackWebhook.useMutation();
-  const testWebhook = trpc.adminCreativeDecay.testSlackWebhook.useMutation();
+    trpc.creativeDecay.getSlackWebhook.useQuery();
+  const saveWebhook = trpc.creativeDecay.saveSlackWebhook.useMutation();
+  const testWebhook = trpc.creativeDecay.testSlackWebhook.useMutation();
   const utils = trpc.useUtils();
 
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -53,7 +53,7 @@ export default function AdminUserProfile() {
   const handleSaveWebhook = async () => {
     try {
       await saveWebhook.mutateAsync({ webhookUrl: webhookUrl.trim() });
-      utils.adminCreativeDecay.getSlackWebhook.invalidate();
+      utils.creativeDecay.getSlackWebhook.invalidate();
       toast.success("Slack webhook saved.");
     } catch {
       toast.error("Failed to save webhook URL.");
@@ -225,7 +225,7 @@ export default function AdminUserProfile() {
               onClick={async () => {
                 setWebhookUrl("");
                 await saveWebhook.mutateAsync({ webhookUrl: "" });
-                utils.adminCreativeDecay.getSlackWebhook.invalidate();
+                utils.creativeDecay.getSlackWebhook.invalidate();
                 toast.success("Slack webhook removed.");
               }}
               className="text-xs underline"

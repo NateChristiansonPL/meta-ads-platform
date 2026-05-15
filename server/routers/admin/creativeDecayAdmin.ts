@@ -35,13 +35,8 @@ import {
 import { notifyOwner } from "../../_core/notification";
 import { syncMetaPerformanceData } from "./creativePerformanceSyncAdmin";
 
-// ── Admin guard ───────────────────────────────────────────────────────────────
 
-const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "admin")
-    throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required." });
-  return next({ ctx });
-});
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -860,7 +855,7 @@ async function runDecayChain(config: {
 
 export const creativeDecayAdminRouter = router({
   // ── Manual analysis trigger ─────────────────────────────────────────────────
-  runDecayAnalysis: adminProcedure
+  runDecayAnalysis: protectedProcedure
     .input(
       z.object({
         adAccountId: z.string().min(1),
@@ -929,7 +924,7 @@ export const creativeDecayAdminRouter = router({
   // ── On-demand trigger: sync then analysis ───────────────────────────────────
   // Runs the full sync → analysis chain on demand.
   // Reads scheduler config for account/campaigns/date range.
-  triggerDecayAnalysis: adminProcedure
+  triggerDecayAnalysis: protectedProcedure
     .input(
       z.object({
         dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -998,7 +993,7 @@ export const creativeDecayAdminRouter = router({
     }),
 
 
-  getLatestResults: adminProcedure
+  getLatestResults: protectedProcedure
     .input(z.object({ accountId: z.string().optional() }).optional())
     .query(async ({ input }) => {
       const db = await getDb();
@@ -1061,7 +1056,7 @@ export const creativeDecayAdminRouter = router({
     }),
 
   // ── Analysis scheduler config ───────────────────────────────────────────────
-  getAnalysisSchedulerConfig: adminProcedure.query(async () => {
+  getAnalysisSchedulerConfig: protectedProcedure.query(async () => {
     const config = await getAnalysisSchedulerConfig();
     return (
       config ?? {
@@ -1080,7 +1075,7 @@ export const creativeDecayAdminRouter = router({
     );
   }),
 
-  getDecayNotifications: adminProcedure
+  getDecayNotifications: protectedProcedure
     .input(
       z.object({
         accountId: z.string().optional(),
@@ -1098,7 +1093,7 @@ export const creativeDecayAdminRouter = router({
       return { notifications: rows };
     }),
 
-  saveAnalysisSchedulerConfig: adminProcedure
+  saveAnalysisSchedulerConfig: protectedProcedure
     .input(
       z.object({
         analysisEnabled: z.boolean(),
@@ -1134,7 +1129,7 @@ export const creativeDecayAdminRouter = router({
       return { ok: true };
     }),
 
-  getAnalysisSchedulerConfigForAccount: adminProcedure
+  getAnalysisSchedulerConfigForAccount: protectedProcedure
     .input(z.object({ accountId: z.string() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
@@ -1148,7 +1143,7 @@ export const creativeDecayAdminRouter = router({
       return rows[0] ?? null;
     }),
 
-  getUserDecaySchedules: adminProcedure.query(async ({ ctx }) => {
+  getUserDecaySchedules: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return { schedules: [] };
     const rows = await db
@@ -1159,7 +1154,7 @@ export const creativeDecayAdminRouter = router({
     return { schedules: rows };
   }),
 
-  saveDecayReport: adminProcedure
+  saveDecayReport: protectedProcedure
     .input(z.object({
       accountId: z.string(),
       accountName: z.string().optional(),
@@ -1195,7 +1190,7 @@ export const creativeDecayAdminRouter = router({
       return { ok: true, id: Number(result[0].insertId) };
     }),
 
-  getDecayReports: adminProcedure
+  getDecayReports: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }).optional())
     .query(async ({ ctx, input }) => {
       const db = await getDb();
@@ -1223,7 +1218,7 @@ export const creativeDecayAdminRouter = router({
       return { reports: rows };
     }),
 
-  getDecayReportById: adminProcedure
+  getDecayReportById: protectedProcedure
     .input(z.object({ id: z.number().int() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
@@ -1236,7 +1231,7 @@ export const creativeDecayAdminRouter = router({
       return rows[0] ?? null;
     }),
 
-  saveSlackWebhook: adminProcedure
+  saveSlackWebhook: protectedProcedure
     .input(z.object({ webhookUrl: z.string().url().or(z.literal("")) }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -1245,7 +1240,7 @@ export const creativeDecayAdminRouter = router({
       return { ok: true };
     }),
 
-  getSlackWebhook: adminProcedure.query(async ({ ctx }) => {
+  getSlackWebhook: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return { webhookUrl: null };
     const rows = await db.select({ slackWebhookUrl: users.slackWebhookUrl }).from(users).where(eq(users.id, ctx.user.id)).limit(1);
