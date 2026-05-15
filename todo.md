@@ -723,3 +723,11 @@
 - [x] Fix first for loop to extract raw fingerprint from compound key for result record contentFingerprint field
 - [x] Fix second for loop (trend series) to key trendByFingerprint by compound groupKey
 - [x] Fix trendData lookup in return to reconstruct compound key from campaignIds[0] + contentFingerprint
+
+## Move Creative Decay + Sync to Early Detection (May 15 2026)
+- [x] Replace placeholder Creative Decay button in AppShell Early Detection with real NavItem linking to /early-detection/creative-decay
+- [x] Add Creative Performance Sync NavItem to Early Detection section in AppShell
+- [x] Add Early Detection section cards to Dashboard.tsx
+- [x] Change routes from /admin/creative-decay and /admin/creative-performance-sync to /early-detection/creative-decay and /early-detection/creative-performance-sync (accessible to all authenticated users)
+- [x] Remove admin-only framing from AdminCreativePerformanceSync.tsx header text/badge
+- [x] Keep /admin/* routes as backward-compat aliases (no AdminRoute guard)

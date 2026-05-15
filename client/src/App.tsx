@@ -133,12 +133,12 @@ function Router() {
           <Route path="/admin/campaign-builder">
             <AdminRoute component={CampaignBuilderAdmin} />
           </Route>
-          <Route path="/admin/creative-decay">
-            <AdminRoute component={AdminCreativeDecay} />
-          </Route>
-          <Route path="/admin/creative-performance-sync">
-            <AdminRoute component={AdminCreativePerformanceSync} />
-          </Route>
+          {/* Early Detection — accessible to all authenticated users */}
+          <Route path="/early-detection/creative-decay" component={AdminCreativeDecay} />
+          <Route path="/early-detection/creative-performance-sync" component={AdminCreativePerformanceSync} />
+          {/* Legacy admin aliases — keep for backward compat */}
+          <Route path="/admin/creative-decay" component={AdminCreativeDecay} />
+          <Route path="/admin/creative-performance-sync" component={AdminCreativePerformanceSync} />
           <Route path="/admin/profile">
             <AdminRoute component={AdminUserProfile} />
           </Route>

@@ -76,8 +76,6 @@ const ADMIN_ITEMS = [
   { label: "Team Members", icon: Users, path: "/admin/team-members" },
   { label: "Usage & Tallies", icon: BarChart2, path: "/admin/usage" },
   { label: "Campaign Builder (Admin)", icon: Wrench, path: "/admin/campaign-builder" },
-  { label: "Creative Perf. Sync (Admin)", icon: RefreshCw, path: "/admin/creative-performance-sync" },
-  { label: "Creative Decay (Admin)", icon: Zap, path: "/admin/creative-decay" },
   { label: "My Profile", icon: UserCircle2, path: "/admin/profile" },
 ];
 
@@ -392,20 +390,26 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                 </p>
               </div>
 
-              {/* Placeholder: Creative Decay */}
-              <button
-                onClick={() => toast.info("Feature coming soon")}
-                className="flex items-center gap-2.5 w-full px-2 py-2 rounded-lg text-left transition-all"
-                style={{ background: "transparent", border: "none", cursor: "pointer", opacity: 0.5 }}
-              >
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
-                  <Zap size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Creative Decay</p>
-                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
-                </div>
-              </button>
+              {/* Creative Decay — live */}
+              <NavItem
+                icon={Zap}
+                label="Creative Decay"
+                sub="Fatigue detection"
+                color="#F7C948"
+                path="/early-detection/creative-decay"
+                active={location === "/early-detection/creative-decay"}
+                running={false}
+              />
+              {/* Creative Performance Sync — live */}
+              <NavItem
+                icon={RefreshCw}
+                label="Perf. Data Sync"
+                sub="Sync Meta ad data"
+                color="#60a5fa"
+                path="/early-detection/creative-performance-sync"
+                active={location === "/early-detection/creative-performance-sync"}
+                running={false}
+              />
               {/* Placeholder: Audience Saturation */}
               <button
                 onClick={() => toast.info("Feature coming soon")}

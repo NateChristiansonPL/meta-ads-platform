@@ -116,8 +116,8 @@ export default function AdminCreativePerformanceSync() {
   return (
     <AppShell
       title="Creative Performance Sync"
-      subtitle="Admin-only tool for pulling Meta ad performance data into the database."
-      badge="ADMIN ONLY"
+      subtitle="Pull Meta ad performance data into the platform for decay and lifecycle analysis."
+      badge="EARLY DETECTION"
       headerActions={
         <button
           onClick={() => {

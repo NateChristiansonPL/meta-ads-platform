@@ -34,7 +34,7 @@ export default function AdminCreativeDecay() {
     <AppShell
       title="Creative Decay Analysis"
       subtitle="Detect creative fatigue using goal-aware signal detection across your ad accounts."
-      badge="ADMIN ONLY"
+      badge="EARLY DETECTION"
       headerActions={<TabBar tab={tab} setTab={setTab} />}
     >
       <div className="h-full overflow-auto">

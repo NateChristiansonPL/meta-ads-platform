@@ -159,6 +159,54 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Early Detection section */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <h3 className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Early Detection</h3>
+          <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => navigate("/early-detection/creative-decay")}
+            className="text-left rounded-xl p-5 transition-all"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(247,201,72,0.05)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(247,201,72,0.2)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(247,201,72,0.12)", border: "1px solid rgba(247,201,72,0.25)" }}>
+                <Zap size={18} style={{ color: "#F7C948" }} />
+              </div>
+            </div>
+            <h3 className="text-sm font-bold mb-1.5" style={{ color: "#FAFAFA" }}>Creative Decay Analysis</h3>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Goal-aware fatigue detection across your ad creatives using CDR, EWMA, CTR trend, and frequency signals.</p>
+            <div className="mt-4 flex items-center gap-1.5">
+              <span className="text-xs font-semibold" style={{ color: "#F7C948" }}>Run Analysis</span>
+              <span className="text-xs" style={{ color: "#F7C948" }}>→</span>
+            </div>
+          </button>
+          <button
+            onClick={() => navigate("/early-detection/creative-performance-sync")}
+            className="text-left rounded-xl p-5 transition-all"
+            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(96,165,250,0.05)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(96,165,250,0.2)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)" }}>
+                <RefreshCw size={18} style={{ color: "#60a5fa" }} />
+              </div>
+            </div>
+            <h3 className="text-sm font-bold mb-1.5" style={{ color: "#FAFAFA" }}>Creative Performance Sync</h3>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Pull Meta ad performance data into the platform on-demand or on a schedule to power decay and lifecycle analysis.</p>
+            <div className="mt-4 flex items-center gap-1.5">
+              <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>Open Tool</span>
+              <span className="text-xs" style={{ color: "#60a5fa" }}>→</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Credits chart */}
       <div
         className="rounded-xl p-5 mb-8"
