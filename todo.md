@@ -760,3 +760,6 @@
 ## User-Scoping Fixes (May 15 2026)
 - [x] Scope Notifications tab: filter decayNotificationLog by ctx.user.id in getDecayNotifications procedure; also write notifyUserId into log rows on insert
 - [x] Scheduled sync userId passthrough: pass config.userId into syncMetaPerformanceData in both the decay cron and the performance sync cron so scheduled runs appear in each user's Sync History
+
+## Disable Email Notifications (May 15 2026)
+- [x] Remove notifyOwner() calls from both runDecayAnalysis and runDecayChain; removed unused import. Slack is now the only notification channel.

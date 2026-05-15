@@ -32,7 +32,6 @@ import {
   decayReports,
   users,
 } from "../../../drizzle/schema";
-import { notifyOwner } from "../../_core/notification";
 import { syncMetaPerformanceData } from "./creativePerformanceSyncAdmin";
 
 
@@ -817,12 +816,6 @@ async function runDecayChain(config: {
         firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""
       }`;
     }).join("\n");
-    await notifyOwner({
-      title: `Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
-      content: `Analysis (${config.dateFrom} to ${config.dateTo}):\n\n${lines}${
-        syncWarnings.length ? `\n\nSync warnings:\n${syncWarnings.join("\n")}` : ""
-      }`,
-    });
     // Send Slack notification if webhook is configured
     if (config.slackWebhookUrl) {
       // Look up the triggering user's name for shared-channel context
@@ -939,12 +932,7 @@ export const creativeDecayAdminRouter = router({
             return `- ${r.creativeName} (${level} fatigue, score ${r.fatigueScore.toFixed(0)})${firstDate ? ` — first detected ${new Date(firstDate).toLocaleDateString()}` : ""}`;
           })
           .join("\n");
-        await notifyOwner({
-          title: `Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
-          content: `The following creatives triggered fatigue signals in the ${input.dateFrom} to ${input.dateTo} analysis window:\n\n${lines}`,
-        });
-
-        // Fetch the user's Slack webhook URL and send notification
+         // Fetch the user's Slack webhook URL and send notification
         const db = await getDb();
         if (db) {
           const userRows = await db
