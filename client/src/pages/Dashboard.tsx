@@ -179,7 +179,7 @@ export default function Dashboard() {
               </div>
             </div>
             <h3 className="text-sm font-bold mb-1.5" style={{ color: "#FAFAFA" }}>Creative Decay Analysis</h3>
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Goal-aware fatigue detection across your ad creatives using CDR, EWMA, CTR trend, and frequency signals.</p>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Detect goal-aware creative fatigue on-demand or on an automated schedule to detect creative fatigue right as it's beginning with slack notification functionality.</p>
             <div className="mt-4 flex items-center gap-1.5">
               <span className="text-xs font-semibold" style={{ color: "#F7C948" }}>Run Analysis</span>
               <span className="text-xs" style={{ color: "#F7C948" }}>→</span>
@@ -198,7 +198,7 @@ export default function Dashboard() {
               </div>
             </div>
             <h3 className="text-sm font-bold mb-1.5" style={{ color: "#FAFAFA" }}>Creative Performance Sync</h3>
-            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Pull Meta ad performance data into the platform on-demand or on a schedule to power decay and lifecycle analysis.</p>
+            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>Pull Meta ad performance data into the platform on-demand or on an automated schedule to power early detection features like Creative Decay.</p>
             <div className="mt-4 flex items-center gap-1.5">
               <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>Open Tool</span>
               <span className="text-xs" style={{ color: "#60a5fa" }}>→</span>

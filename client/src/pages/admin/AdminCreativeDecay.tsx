@@ -33,7 +33,7 @@ export default function AdminCreativeDecay() {
   return (
     <AppShell
       title="Creative Decay Analysis"
-      subtitle="Detect creative fatigue using goal-aware signal detection across your ad accounts."
+      subtitle="Detect goal-aware creative fatigue on-demand or on an automated schedule to detect creative fatigue right as it's beginning with slack notification functionality."
       badge="EARLY DETECTION"
       headerActions={<TabBar tab={tab} setTab={setTab} />}
     >

@@ -116,7 +116,7 @@ export default function AdminCreativePerformanceSync() {
   return (
     <AppShell
       title="Creative Performance Sync"
-      subtitle="Pull Meta ad performance data into the platform for decay and lifecycle analysis."
+      subtitle="Pull Meta ad performance data into the platform on-demand or on an automated schedule to power early detection features like Creative Decay."
       badge="EARLY DETECTION"
       headerActions={
         <button
