@@ -731,3 +731,10 @@
 - [x] Change routes from /admin/creative-decay and /admin/creative-performance-sync to /early-detection/creative-decay and /early-detection/creative-performance-sync (accessible to all authenticated users)
 - [x] Remove admin-only framing from AdminCreativePerformanceSync.tsx header text/badge
 - [x] Keep /admin/* routes as backward-compat aliases (no AdminRoute guard)
+
+## Scheduler Fixes (May 15 2026)
+- [ ] Fix runDecayChain to accept slackWebhookUrl param and call sendSlackNotification when triggered signals exist
+- [ ] Fix cron to iterate ALL enabled schedule rows (not just id=1) and look up each user's slackWebhookUrl
+- [ ] Fix triggerDecayAnalysis procedure to also send Slack notification when signals are triggered
+- [ ] Remove inline Automated Sync Scheduler accordion from AdminCreativePerformanceSync.tsx
+- [ ] Add Schedule button to AdminCreativePerformanceSync header that opens a schedule config modal

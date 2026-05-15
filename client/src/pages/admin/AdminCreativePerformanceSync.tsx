@@ -4,8 +4,8 @@
  */
 import { trpc } from "@/lib/trpc";
 import {
-  BarChart2, CheckCircle2, ChevronDown, ChevronUp,
-  Clock, Loader2, RefreshCw, Search, Settings2, Upload,
+  BarChart2, Calendar, CheckCircle2, Clock,
+  Loader2, RefreshCw, Search, Upload, X,
 } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -48,7 +48,7 @@ export default function AdminCreativePerformanceSync() {
   const [syncResult, setSyncResult] = useState<{
     rowsUpserted: number; adsProcessed: number; warnings: string[]; durationMs: number;
   } | null>(null);
-  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [schedModalOpen, setSchedModalOpen] = useState(false);
 
   const { data: schedulerConfig, refetch: refetchScheduler } =
     trpc.adminCreativePerformanceSync.getSchedulerConfig.useQuery();
@@ -119,18 +119,28 @@ export default function AdminCreativePerformanceSync() {
       subtitle="Pull Meta ad performance data into the platform on-demand or on an automated schedule to power early detection features like Creative Decay."
       badge="EARLY DETECTION"
       headerActions={
-        <button
-          onClick={() => {
-            if (!tokenId || !accountId || !syncDates) return;
-            syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, onlyLiveAds, dateFrom: syncDates.from, dateTo: syncDates.to });
-          }}
-          disabled={!canSync}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: "#1A6CF6", color: "#fff", boxShadow: "0 8px 24px rgba(26,108,246,0.22)" }}
-        >
-          {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-          Sync Ad Performance
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSchedModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all"
+            style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.75)", border: "1px solid rgba(255,255,255,0.12)" }}
+          >
+            <Calendar size={14} />
+            Schedule
+          </button>
+          <button
+            onClick={() => {
+              if (!tokenId || !accountId || !syncDates) return;
+              syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, onlyLiveAds, dateFrom: syncDates.from, dateTo: syncDates.to });
+            }}
+            disabled={!canSync}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#1A6CF6", color: "#fff", boxShadow: "0 8px 24px rgba(26,108,246,0.22)" }}
+          >
+            {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            Sync Ad Performance
+          </button>
+        </div>
       }
     >
       <div className="h-full overflow-auto p-6 space-y-5">
@@ -315,44 +325,32 @@ export default function AdminCreativePerformanceSync() {
           </section>
         )}
 
-        {/* Automated Sync Scheduler — collapsible */}
-        <section className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <button
-            className="w-full flex items-center justify-between p-4 text-left"
-            style={{ borderBottom: schedulerOpen ? "1px solid rgba(255,255,255,0.07)" : "none" }}
-            onClick={() => setSchedulerOpen(!schedulerOpen)}
-          >
-            <div className="flex items-center gap-2">
-              <Settings2 size={14} style={{ color: "#1A6CF6" }} />
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Automated Sync Scheduler</h2>
-                  {schedulerConfig?.syncEnabled && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                      style={{ background: "rgba(0,179,122,0.15)", color: "#00B37A" }}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400" />Active
-                    </span>
-                  )}
+        {/* Schedule Modal */}
+        {schedModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={(e) => { if (e.target === e.currentTarget) setSchedModalOpen(false); }}>
+            <div className="rounded-2xl p-6 w-full max-w-lg space-y-5" style={{ background: "#0E0D3A", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Automated Sync Schedule</h2>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.42)" }}>Configure a daily sync run. Runs server-side — no browser required.</p>
                 </div>
-                <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.42)" }}>
-                  Configure a daily sync run. Runs server-side \u2014 no browser required.
-                </p>
+                <button onClick={() => setSchedModalOpen(false)} style={{ color: "rgba(255,255,255,0.4)" }}><X size={16} /></button>
               </div>
-            </div>
-            {schedulerOpen
-              ? <ChevronUp size={16} style={{ color: "rgba(255,255,255,0.4)" }} />
-              : <ChevronDown size={16} style={{ color: "rgba(255,255,255,0.4)" }} />}
-          </button>
 
-          {schedulerOpen && (
-            <div className="p-4 space-y-4">
               <div className="flex items-center gap-3">
                 <Toggle value={sched.syncEnabled} onChange={(v) => setSched((s) => ({ ...s, syncEnabled: v }))} />
                 <span className="text-sm font-bold" style={{ color: "#FAFAFA" }}>Enable Daily Sync</span>
-                <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>Pulls ad performance from Meta automatically</span>
+                {schedulerConfig?.syncEnabled && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                    style={{ background: "rgba(0,179,122,0.15)", color: "#00B37A" }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />Active
+                  </span>
+                )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SchedField label="UTC Hour (0\u201323)">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SchedField label="UTC Hour (0–23)">
                   <input type="number" min={0} max={23} value={sched.syncUtcHour}
                     onChange={(e) => setSched((s) => ({ ...s, syncUtcHour: +e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
@@ -373,19 +371,14 @@ export default function AdminCreativePerformanceSync() {
                   </SchedField>
                 )}
               </div>
-              <div className="flex items-center gap-3 py-1">
-                <button
-                  onClick={() => setSched((s) => ({ ...s, onlyLiveAds: !s.onlyLiveAds }))}
-                  className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
-                  style={{ background: sched.onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.12)" }}
-                >
-                  <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    style={{ left: sched.onlyLiveAds ? "calc(100% - 1.125rem)" : "0.125rem" }} />
-                </button>
+
+              <div className="flex items-center gap-3">
+                <Toggle value={sched.onlyLiveAds} onChange={(v) => setSched((s) => ({ ...s, onlyLiveAds: v }))} />
                 <span className="text-xs font-semibold" style={{ color: sched.onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.55)" }}>
                   Only pull currently live ads (ACTIVE effective status)
                 </span>
               </div>
+
               <div className="rounded-lg px-3 py-2 text-xs"
                 style={{ background: "rgba(26,108,246,0.1)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(26,108,246,0.2)" }}>
                 BM token and ad account are taken from the current page selection when you save.
@@ -395,26 +388,36 @@ export default function AdminCreativePerformanceSync() {
                     </span>
                   : <span className="block mt-1" style={{ color: "#F7901E" }}>Select a BM token and ad account above before saving.</span>}
               </div>
+
               {schedulerConfig?.lastRunAt && (
                 <div className="flex items-center gap-1.5 text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
                   <Clock size={11} />
-                  Last sync: {new Date(schedulerConfig.lastRunAt).toLocaleString()} \u2014 {schedulerConfig.lastRunStatus ?? "unknown"}
+                  Last sync: {new Date(schedulerConfig.lastRunAt).toLocaleString()} — {schedulerConfig.lastRunStatus ?? "unknown"}
                 </div>
               )}
-              <div className="flex justify-end">
+
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setSchedModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-bold"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  Cancel
+                </button>
                 <button
-                  onClick={() => saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter, onlyLiveAds })}
+                  onClick={() => {
+                    saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter, onlyLiveAds });
+                    setSchedModalOpen(false);
+                  }}
                   disabled={saveScheduler.isPending}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40"
                   style={{ background: "#1A6CF6", color: "#fff" }}
                 >
-                  {saveScheduler.isPending ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                  Save Scheduler Config
+                  {saveScheduler.isPending ? <Loader2 size={13} className="animate-spin" /> : null}
+                  Save Schedule
                 </button>
               </div>
             </div>
-          )}
-        </section>
+          </div>
+        )}
 
         {/* Sync History */}
         <section className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>

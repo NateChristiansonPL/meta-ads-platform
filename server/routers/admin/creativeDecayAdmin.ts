@@ -759,6 +759,7 @@ async function runDecayChain(config: {
   syncRollingDays?: number | null;
   userId?: number | null;
   alwaysSendReport?: boolean;
+  slackWebhookUrl?: string | null;
 }) {
   const syncWarnings: string[] = [];
 
@@ -825,6 +826,13 @@ async function runDecayChain(config: {
         syncWarnings.length ? `\n\nSync warnings:\n${syncWarnings.join("\n")}` : ""
       }`,
     });
+    // Send Slack notification if webhook is configured
+    if (config.slackWebhookUrl) {
+      const slackMsg = `*Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected (${config.dateFrom} to ${config.dateTo})\n\n${lines}${
+        syncWarnings.length ? `\n\n_Sync warnings:_\n${syncWarnings.join("\n")}` : ""
+      }`;
+      await sendSlackNotification(config.slackWebhookUrl, slackMsg);
+    }
     const dbLog = await getDb();
     if (dbLog) {
       const logRows = triggered.map((r) => {
@@ -929,13 +937,25 @@ export const creativeDecayAdminRouter = router({
         skipSync: z.boolean().default(false),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const config = await getAnalysisSchedulerConfig();
       if (!config?.accountId)
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "No account configured in the analysis scheduler.",
         });
+
+      // Look up the current user's Slack webhook URL
+      const db2 = await getDb();
+      let slackWebhookUrl: string | null = null;
+      if (db2) {
+        const userRows = await db2
+          .select({ slackWebhookUrl: users.slackWebhookUrl })
+          .from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+        slackWebhookUrl = userRows[0]?.slackWebhookUrl ?? null;
+      }
 
       const today = new Date();
       const from = new Date(today);
@@ -958,6 +978,7 @@ export const creativeDecayAdminRouter = router({
         vaultTokenId: input.skipSync ? null : config.vaultTokenId,
         syncPreset: config.syncPreset,
         syncRollingDays: config.syncRollingDays,
+        slackWebhookUrl,
       });
 
       const db = await getDb();
@@ -965,7 +986,7 @@ export const creativeDecayAdminRouter = router({
         await db
           .update(metaSyncSchedule)
           .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "success" })
-          .where(eq(metaSyncSchedule.id, 1));
+          .where(eq(metaSyncSchedule.id, config.id ?? 1));
 
       return {
         analysisRunId: analysis.analysisRunId,
@@ -1238,52 +1259,68 @@ export async function startCreativeDecayCron() {
   const { default: cron } = await import("node-cron");
   cron.schedule("0 * * * *", async () => {
     try {
-      const config = await getAnalysisSchedulerConfig();
-      if (!config?.analysisEnabled || !config.accountId) return;
+      const db = await getDb();
+      if (!db) return;
       const nowUtcHour = new Date().getUTCHours();
-      if (nowUtcHour !== config.analysisUtcHour) return;
 
-      const today = new Date();
-      const from = new Date(today);
-      from.setUTCDate(from.getUTCDate() - (config.analysisRollingDays ?? 14));
-      const dateFrom = from.toISOString().slice(0, 10);
-      const dateTo = today.toISOString().slice(0, 10);
-      const campaignIds = config.campaignIds
-        ? config.campaignIds.split(",").map((s) => s.trim()).filter(Boolean)
-        : [];
+      // Fetch ALL enabled schedule rows (not just the legacy id=1 row)
+      const allConfigs = await db
+        .select()
+        .from(metaSyncSchedule)
+        .where(eq(metaSyncSchedule.analysisEnabled, true));
 
-      try {
-        // runDecayChain handles sync → analysis → notifications in sequence.
-        // Sync is only performed when vaultTokenId is configured (i.e. the
-        // sync scheduler has a token set). This guarantees fresh data before
-        // every automated analysis run.
-        await runDecayChain({
-          accountId: config.accountId,
-          campaignIds,
-          dateFrom,
-          dateTo,
-          onlyLiveAds: config.onlyLiveAds ?? false,
-          notifyEmerging: config.notifyEmerging ?? false,
-          notifyPossible: config.notifyPossible ?? true,
-          notifyProbable: config.notifyProbable ?? true,
-          vaultTokenId: config.vaultTokenId,
-          syncPreset: config.syncPreset,
-          syncRollingDays: config.syncRollingDays,
-        });
-        const db = await getDb();
-        if (db)
+      for (const config of allConfigs) {
+        if (!config.accountId) continue;
+        if (nowUtcHour !== config.analysisUtcHour) continue;
+
+        // Look up the user's Slack webhook URL
+        let slackWebhookUrl: string | null = null;
+        if (config.userId) {
+          const userRows = await db
+            .select({ slackWebhookUrl: users.slackWebhookUrl })
+            .from(users)
+            .where(eq(users.id, config.userId))
+            .limit(1);
+          slackWebhookUrl = userRows[0]?.slackWebhookUrl ?? null;
+        }
+
+        const today = new Date();
+        const from = new Date(today);
+        from.setUTCDate(from.getUTCDate() - (config.analysisRollingDays ?? 14));
+        const dateFrom = from.toISOString().slice(0, 10);
+        const dateTo = today.toISOString().slice(0, 10);
+        const campaignIds = config.campaignIds
+          ? config.campaignIds.split(",").map((s) => s.trim()).filter(Boolean)
+          : [];
+
+        try {
+          // runDecayChain handles sync → analysis → notifications in sequence.
+          // Sync is only performed when vaultTokenId is configured.
+          await runDecayChain({
+            accountId: config.accountId,
+            campaignIds,
+            dateFrom,
+            dateTo,
+            onlyLiveAds: config.onlyLiveAds ?? false,
+            notifyEmerging: config.notifyEmerging ?? false,
+            notifyPossible: config.notifyPossible ?? true,
+            notifyProbable: config.notifyProbable ?? true,
+            vaultTokenId: config.vaultTokenId,
+            syncPreset: config.syncPreset,
+            syncRollingDays: config.syncRollingDays,
+            slackWebhookUrl,
+          });
           await db
             .update(metaSyncSchedule)
             .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "success" })
-            .where(eq(metaSyncSchedule.id, 1));
-      } catch (e) {
-        const db = await getDb();
-        if (db)
+            .where(eq(metaSyncSchedule.id, config.id));
+        } catch (e) {
           await db
             .update(metaSyncSchedule)
             .set({ lastAnalysisAt: new Date(), lastAnalysisStatus: "error" })
-            .where(eq(metaSyncSchedule.id, 1));
-        console.error("[CreativeDecay Cron] Chain failed:", e);
+            .where(eq(metaSyncSchedule.id, config.id));
+          console.error(`[CreativeDecay Cron] Chain failed for account ${config.accountId}:`, e);
+        }
       }
     } catch (e) {
       console.error("[CreativeDecay Cron] Unexpected error:", e);
