@@ -359,6 +359,37 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
             </div>
           </div>
 
+          {/* Early Detection section */}
+          <div className="px-3 pt-4">
+            <div className="flex items-center gap-1.5 mb-2 px-2">
+              <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Early Detection
+              </p>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {/* Creative Decay — live */}
+              <NavItem
+                icon={Zap}
+                label="Creative Decay"
+                sub="Fatigue detection"
+                color="#F7C948"
+                path="/early-detection/creative-decay"
+                active={location === "/early-detection/creative-decay"}
+                running={false}
+              />
+              {/* Performance Data Sync — live */}
+              <NavItem
+                icon={RefreshCw}
+                label="Performance Data Sync"
+                sub="Sync Meta ad data"
+                color="#60a5fa"
+                path="/early-detection/creative-performance-sync"
+                active={location === "/early-detection/creative-performance-sync"}
+                running={false}
+              />
+            </div>
+          </div>
+
           {/* Coming Soon section */}
           <div className="px-3 pt-4">
             <div className="flex items-center gap-1.5 mb-2 px-2">
@@ -382,34 +413,6 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                 active={location === "/campaign-builder"}
                 running={false}
               />
-
-              {/* Early Detection sub-section */}
-              <div className="flex items-center gap-1.5 mt-3 mb-1 px-2">
-                <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.2)", letterSpacing: "0.08em", textTransform: "uppercase", fontSize: "0.6rem" }}>
-                  Early Detection
-                </p>
-              </div>
-
-              {/* Creative Decay — live */}
-              <NavItem
-                icon={Zap}
-                label="Creative Decay"
-                sub="Fatigue detection"
-                color="#F7C948"
-                path="/early-detection/creative-decay"
-                active={location === "/early-detection/creative-decay"}
-                running={false}
-              />
-              {/* Creative Performance Sync — live */}
-              <NavItem
-                icon={RefreshCw}
-                label="Perf. Data Sync"
-                sub="Sync Meta ad data"
-                color="#60a5fa"
-                path="/early-detection/creative-performance-sync"
-                active={location === "/early-detection/creative-performance-sync"}
-                running={false}
-              />
               {/* Placeholder: Audience Saturation */}
               <button
                 onClick={() => toast.info("Feature coming soon")}
@@ -420,8 +423,8 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                   <Users size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Audience Saturation</p>
-                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
+                  <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Audience Saturation</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
                 </div>
               </button>
               {/* Placeholder: Allocation Drift */}
@@ -434,8 +437,8 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                   <TrendingUp size={13} style={{ color: "rgba(255,255,255,0.4)" }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.4)" }}>Allocation Drift</p>
-                  <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
+                  <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>Allocation Drift</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.65rem" }}>Coming soon</p>
                 </div>
               </button>
               <NavItem
