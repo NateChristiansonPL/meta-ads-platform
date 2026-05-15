@@ -314,7 +314,7 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
         <nav
           className="flex flex-col shrink-0 overflow-y-auto"
           style={{
-            width: 220,
+            width: 240,
             background: "rgba(14,13,58,0.95)",
             borderRight: "1px solid rgba(255,255,255,0.07)",
           }}
