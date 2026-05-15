@@ -1251,6 +1251,25 @@ export const creativeDecayAdminRouter = router({
     const rows = await db.select({ slackWebhookUrl: users.slackWebhookUrl }).from(users).where(eq(users.id, ctx.user.id)).limit(1);
     return { webhookUrl: rows[0]?.slackWebhookUrl ?? null };
   }),
+
+  testSlackWebhook: protectedProcedure
+    .input(z.object({ webhookUrl: z.string().url() }))
+    .mutation(async ({ input }) => {
+      try {
+        const res = await fetch(input.webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: "✅ *Pathlabs Intelligence* — Slack webhook test successful. You'll receive creative decay fatigue alerts here.",
+          }),
+        });
+        if (res.ok) return { ok: true };
+        const body = await res.text().catch(() => "");
+        return { ok: false, error: `Slack returned HTTP ${res.status}: ${body}` };
+      } catch (e: unknown) {
+        return { ok: false, error: e instanceof Error ? e.message : "Network error" };
+      }
+    }),
 });
 
 // ── Cron scheduler (analysis only) ───────────────────────────────────────────

@@ -29,22 +29,7 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: "0.06em",
 };
 
-// ── Slack webhook test ────────────────────────────────────────────────────────
-async function testSlackWebhook(url: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: "✅ *Pathlabs Intelligence* — Slack webhook test successful. You'll receive creative decay fatigue alerts here.",
-      }),
-    });
-    if (res.ok) return { ok: true };
-    return { ok: false, error: `Slack returned HTTP ${res.status}` };
-  } catch (e: unknown) {
-    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
-  }
-}
+// ── Slack webhook test is handled server-side via tRPC to avoid CORS ─────────
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminUserProfile() {
@@ -54,6 +39,7 @@ export default function AdminUserProfile() {
   const { data: webhookData, isLoading: webhookLoading } =
     trpc.adminCreativeDecay.getSlackWebhook.useQuery();
   const saveWebhook = trpc.adminCreativeDecay.saveSlackWebhook.useMutation();
+  const testWebhook = trpc.adminCreativeDecay.testSlackWebhook.useMutation();
   const utils = trpc.useUtils();
 
   const [webhookUrl, setWebhookUrl] = useState("");
@@ -79,14 +65,21 @@ export default function AdminUserProfile() {
     if (!url) { toast.error("Enter a webhook URL first."); return; }
     setTestState("testing");
     setTestError(null);
-    const result = await testSlackWebhook(url);
-    if (result.ok) {
-      setTestState("ok");
-      toast.success("Test message sent to Slack.");
-    } else {
+    try {
+      const result = await testWebhook.mutateAsync({ webhookUrl: url });
+      if (result.ok) {
+        setTestState("ok");
+        toast.success("Test message sent to Slack.");
+      } else {
+        setTestState("fail");
+        setTestError(result.error ?? "Unknown error");
+        toast.error(`Slack test failed: ${result.error}`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Network error";
       setTestState("fail");
-      setTestError(result.error ?? "Unknown error");
-      toast.error(`Slack test failed: ${result.error}`);
+      setTestError(msg);
+      toast.error(`Slack test failed: ${msg}`);
     }
     setTimeout(() => setTestState("idle"), 4000);
   };
