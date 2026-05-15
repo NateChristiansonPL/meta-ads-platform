@@ -753,3 +753,6 @@
 - [x] Slack webhook onboarding banner on Creative Decay page: dismissible amber banner links to /profile if no slackWebhookUrl set
 - [x] Move My Profile nav item from ADMIN_ITEMS to main sidebar (visible to all authenticated users); /profile route added, /admin/profile kept as alias
 - [x] TypeScript: 0 errors
+
+## Bug Fix (May 15 2026)
+- [x] Fix runDecayAnalysis (on-demand Analysis tab) to fetch ctx.user.slackWebhookUrl and send Slack notification when signals detected — it was doing its own inline analysis instead of going through runDecayChain, so slackWebhookUrl was never fetched or passed

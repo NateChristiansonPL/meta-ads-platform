@@ -260,7 +260,7 @@ function AnalysisTab() {
         <button
           onClick={() => {
             if (!accountId || !dates) return;
-            runMutation.mutate({ adAccountId: accountId, campaignIds, dateFrom: dates.from, dateTo: dates.to, onlyLiveAds, notifyEmerging, notifyPossible, notifyProbable });
+            runMutation.mutate({ adAccountId: accountId, accountName: selectedAccount?.name, campaignIds, dateFrom: dates.from, dateTo: dates.to, onlyLiveAds, notifyEmerging, notifyPossible, notifyProbable });
           }}
           disabled={!canRun}
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"

@@ -886,6 +886,7 @@ export const creativeDecayAdminRouter = router({
     .input(
       z.object({
         adAccountId: z.string().min(1),
+        accountName: z.string().optional(),
         campaignIds: z.array(z.string()).default([]),
         dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -895,7 +896,7 @@ export const creativeDecayAdminRouter = router({
         notifyProbable: z.boolean().default(false),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const analysis = await analyzeStoredPerformance({
         accountId: input.adAccountId,
         campaignIds: input.campaignIds,
@@ -904,7 +905,7 @@ export const creativeDecayAdminRouter = router({
         onlyLiveAds: input.onlyLiveAds,
       });
 
-      // Send owner notifications for triggered signals
+      // Send owner + Slack notifications for triggered signals
       const triggered = analysis.records.filter((r) => {
         const level =
           r.fatigueStatus === "URGENT"
@@ -941,6 +942,39 @@ export const creativeDecayAdminRouter = router({
           title: `Creative Fatigue Alert — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
           content: `The following creatives triggered fatigue signals in the ${input.dateFrom} to ${input.dateTo} analysis window:\n\n${lines}`,
         });
+
+        // Fetch the user's Slack webhook URL and send notification
+        const db = await getDb();
+        if (db) {
+          const userRows = await db
+            .select({ slackWebhookUrl: users.slackWebhookUrl, name: users.name })
+            .from(users)
+            .where(eq(users.id, ctx.user.id))
+            .limit(1);
+          const slackWebhookUrl = userRows[0]?.slackWebhookUrl ?? null;
+          const userName = userRows[0]?.name ?? "Unknown User";
+          if (slackWebhookUrl) {
+            const accountLabel = input.accountName && input.accountName !== input.adAccountId
+              ? input.accountName
+              : input.adAccountId;
+            const slackLines = triggered.map((r) => {
+              const emoji = r.fatigueStatus === "URGENT" ? "🔴" : r.fatigueStatus === "REFRESH" ? "🟠" : "🟡";
+              const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
+              const firstDate = r.firstDetectedAt?.[level.toLowerCase() as "emerging" | "possible" | "probable"];
+              return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})${
+                firstDate ? ` — first seen ${new Date(firstDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""
+              }`;
+            }).join("\n");
+            const slackMsg = [
+              `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
+              `*Account:* ${accountLabel}`,
+              `*Triggered by:* ${userName}  •  ${input.dateFrom} – ${input.dateTo}`,
+              "",
+              slackLines,
+            ].join("\n");
+            await sendSlackNotification(slackWebhookUrl, slackMsg);
+          }
+        }
       }
 
       return analysis;
