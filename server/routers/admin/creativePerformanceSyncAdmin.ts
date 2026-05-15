@@ -1095,6 +1095,7 @@ export async function startCreativePerformanceSyncCron() {
           dateTo,
           onlyLiveAds: config.onlyLiveAds ?? false,
           mode: "scheduled",
+          userId: config.userId ?? null,
         });
         const db = await getDb();
         if (db)

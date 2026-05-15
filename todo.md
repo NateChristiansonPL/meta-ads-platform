@@ -756,3 +756,7 @@
 
 ## Bug Fix (May 15 2026)
 - [x] Fix runDecayAnalysis (on-demand Analysis tab) to fetch ctx.user.slackWebhookUrl and send Slack notification when signals detected — it was doing its own inline analysis instead of going through runDecayChain, so slackWebhookUrl was never fetched or passed
+
+## User-Scoping Fixes (May 15 2026)
+- [x] Scope Notifications tab: filter decayNotificationLog by ctx.user.id in getDecayNotifications procedure; also write notifyUserId into log rows on insert
+- [x] Scheduled sync userId passthrough: pass config.userId into syncMetaPerformanceData in both the decay cron and the performance sync cron so scheduled runs appear in each user's Sync History

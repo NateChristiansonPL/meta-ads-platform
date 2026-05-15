@@ -871,6 +871,7 @@ async function runDecayChain(config: {
           notifiedAt: new Date(),
           dateFrom: config.dateFrom,
           dateTo: config.dateTo,
+          notifyUserId: config.userId ?? null,
         };
       });
       if (logRows.length) await dbLog.insert(decayNotificationLog).values(logRows);
@@ -1143,12 +1144,13 @@ export const creativeDecayAdminRouter = router({
         limit: z.number().int().min(1).max(200).default(50),
       }).optional(),
     )
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) return { notifications: [] };
       const rows = await db
         .select()
         .from(decayNotificationLog)
+        .where(eq(decayNotificationLog.notifyUserId, ctx.user.id))
         .orderBy(desc(decayNotificationLog.notifiedAt))
         .limit(input?.limit ?? 50);
       return { notifications: rows };
@@ -1383,6 +1385,7 @@ export async function startCreativeDecayCron() {
             vaultTokenId: config.vaultTokenId,
             syncPreset: config.syncPreset,
             syncRollingDays: config.syncRollingDays,
+            userId: config.userId ?? null,
             slackWebhookUrl,
           });
           await db
