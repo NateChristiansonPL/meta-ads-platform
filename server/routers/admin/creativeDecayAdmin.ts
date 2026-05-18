@@ -39,6 +39,7 @@ import {
   formatTimelineText,
   formatProjectionText,
 } from "./fatigueEscalation";
+import { computeCanonicalGroups } from "./adNameCanonical";
 
 
 
@@ -240,6 +241,54 @@ async function analyzeStoredPerformance(input: {
       `(3) Selected date range is invalid. ` +
       `Check metaSyncHistory warnings for sync status.`,
     );
+  }
+
+  // ── Pass 2: Fuzzy name merge ─────────────────────────────────────────────────
+  // For groups that span only a single ad set (hash-based Pass 1 did not merge
+  // them across ad sets), apply the four-pass fuzzy name pipeline to catch
+  // partnership ads and other cases where Meta assigns a unique videoId per ad
+  // even when the underlying creative is identical.
+  //
+  // Only single-ad-set groups are candidates — if a group already spans multiple
+  // ad sets via the hash, we trust the hash and leave it alone.
+  {
+    const singleAdSetKeys = new Set<string>();
+    for (const [key, groupRows] of Array.from(groups.entries())) {
+      const adsetIds = new Set(groupRows.map((r) => r.adsetId ?? "unknown"));
+      if (adsetIds.size === 1) singleAdSetKeys.add(key);
+    }
+
+    if (singleAdSetKeys.size > 1) {
+      // Build groupKey → representative ad names map for the canonical pipeline
+      const nameMap = new Map<string, string[]>();
+      for (const key of Array.from(singleAdSetKeys)) {
+        const groupRows = groups.get(key) ?? [];
+        const names = Array.from(
+          new Set(groupRows.map((r) => r.adName ?? "").filter(Boolean)),
+        );
+        nameMap.set(key, names);
+      }
+
+      const canonicalGroups = computeCanonicalGroups(nameMap);
+      let mergeCount = 0;
+      for (const cg of canonicalGroups) {
+        if (cg.groupKeys.length <= 1) continue;
+        const [primaryKey, ...secondaryKeys] = cg.groupKeys;
+        const primaryRows = groups.get(primaryKey) ?? [];
+        for (const sk of secondaryKeys) {
+          const skRows = groups.get(sk) ?? [];
+          groups.set(primaryKey, [...primaryRows, ...skRows]);
+          groups.delete(sk);
+          mergeCount++;
+        }
+      }
+      if (mergeCount > 0) {
+        console.info(
+          `[DecayAnalysis] Pass 2 fuzzy name merge: collapsed ${mergeCount} single-ad-set ` +
+          `group(s) into existing groups via ad name canonicalization.`,
+        );
+      }
+    }
   }
 
   // Build a fingerprint → imageUrl map from adSourceDetails.

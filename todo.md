@@ -772,3 +772,8 @@
 ## Revert Escalation Timeline (May 15 2026)
 - [x] Remove timeline/projection lines from Slack message (both runDecayChain and runDecayAnalysis paths)
 - [x] Revert ResultsTable expanded row back to plain evidence pills (remove Escalation Timeline section)
+
+## Hybrid Creative Grouping — Fuzzy Name Fallback (May 18 2026)
+- [x] Build adNameCanonical.ts: four-pass fuzzy name canonicalization utility (common prefix strip, audience segment strip, suffix grouping, fuzzy dedup at threshold 94)
+- [x] Integrate Pass 2 into decay analysis grouping: after hash-based Pass 1, merge single-ad-set groups whose canonical ad names match within the same campaign
+- [x] TypeScript: 0 errors
