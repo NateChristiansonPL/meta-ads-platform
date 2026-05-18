@@ -675,6 +675,7 @@ function NotificationsTab() {
 type ResultRow = {
   // Server returns creativeId/creativeName (not adId/adName)
   creativeId: string; creativeName: string;
+  canonicalAdName?: string | null; adSetCount?: number | null;
   campaignName?: string; adsetName?: string | null; imageUrl?: string | null;
   // fatigueStatus is the DB enum: URGENT | REFRESH | MONITOR | HEALTHY | IMPROVING | BLOCKED
   fatigueStatus: string; fatigueScore: number;
@@ -722,7 +723,13 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                             style={{ border: "1px solid rgba(255,255,255,0.12)" }}
                             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                         )}
-                        <span className="font-medium" style={{ color: "#FAFAFA" }}>{r.creativeName}</span>
+                        <span
+                          className="font-medium"
+                          style={{ color: "#FAFAFA" }}
+                          title={r.creativeName}
+                        >
+                          {r.canonicalAdName ?? r.creativeName}
+                        </span>
                       </div>
                     </Td>
                     <Td wrap>
@@ -732,7 +739,17 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                     </Td>
                     <Td wrap>
                       <div className="max-w-[220px]" style={{ wordBreak: "break-word", lineHeight: 1.4 }}>
-                        {r.adsetName ?? "\u2014"}
+                        {(r.adSetCount ?? 1) > 1 ? (
+                          <span
+                            className="font-semibold tracking-wide"
+                            style={{ color: "#00BEEF", fontSize: "0.68rem", letterSpacing: "0.06em" }}
+                            title={`Aggregated across ${r.adSetCount} ad sets`}
+                          >
+                            AGGREGATED
+                          </span>
+                        ) : (
+                          r.adsetName ?? "\u2014"
+                        )}
                       </div>
                     </Td>
                     <Td><FatiguePill level={r.fatigueStatus} /></Td>

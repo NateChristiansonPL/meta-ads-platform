@@ -777,3 +777,9 @@
 - [x] Build adNameCanonical.ts: four-pass fuzzy name canonicalization utility (common prefix strip, audience segment strip, suffix grouping, fuzzy dedup at threshold 94)
 - [x] Integrate Pass 2 into decay analysis grouping: after hash-based Pass 1, merge single-ad-set groups whose canonical ad names match within the same campaign
 - [x] TypeScript: 0 errors
+
+## Creative Name Display + AGGREGATED Ad Set Label (May 18 2026)
+- [x] Add canonicalAdName (stripped display name) and adSetCount fields to the server result mapper
+- [x] Creative column: show canonicalAdName, full raw name on hover tooltip
+- [x] Ad Set column: show actual ad set name when adSetCount === 1, show "AGGREGATED" badge (cyan) when adSetCount > 1
+- [x] TypeScript: 0 errors

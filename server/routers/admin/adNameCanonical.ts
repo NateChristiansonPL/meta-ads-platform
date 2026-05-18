@@ -237,6 +237,34 @@ function fuzzyDedup(
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Given an array of raw ad names that belong to the same creative group,
+ * return the best single display label by running the four-pass pipeline
+ * and picking the shortest / most-concept-like result.
+ *
+ * Falls back to the first name if the array is empty.
+ */
+export function deriveCanonicalAdName(adNames: string[]): string {
+  if (adNames.length === 0) return "";
+  const deduped = Array.from(new Set(adNames));
+  if (deduped.length === 1) return deduped[0];
+  // Pass 1: strip common campaign prefix
+  const pass1 = stripCommonPrefix(deduped);
+  // Pass 2: strip audience/geo segment prefixes
+  const pass2 = stripAudienceSegments(pass1);
+  // Pass 3: find shared trailing suffix
+  const suffixGroups = groupBySuffix(pass2);
+  const conceptForIndex: string[] = [...pass2];
+  for (const [suffix, indices] of Array.from(suffixGroups)) {
+    for (const idx of indices) conceptForIndex[idx] = suffix;
+  }
+  // Pass 4: fuzzy dedup — collect unique canonical labels
+  const canonicalMap = fuzzyDedup(conceptForIndex);
+  const labels = Array.from(new Set(Array.from(canonicalMap.values())));
+  labels.sort((a, b) => a.length - b.length || a.localeCompare(b));
+  return labels[0] ?? pass2[0] ?? adNames[0];
+}
+
 export interface CanonicalGroup {
   /** The canonical creative concept label. */
   canonicalName: string;

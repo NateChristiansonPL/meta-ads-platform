@@ -39,7 +39,7 @@ import {
   formatTimelineText,
   formatProjectionText,
 } from "./fatigueEscalation";
-import { computeCanonicalGroups } from "./adNameCanonical";
+import { computeCanonicalGroups, deriveCanonicalAdName } from "./adNameCanonical";
 
 
 
@@ -721,6 +721,19 @@ function mapResult(
     convEventLabel: row.convEventLabel ?? null,
     adsetName: row.adsetName ?? null,
     imageUrl: row.imageUrl ?? null,
+    canonicalAdName: (() => {
+      const names = (row.adNames as string[] | null) ?? [];
+      if (names.length === 0) return row.representativeName ?? row.contentFingerprint ?? "Unnamed creative";
+      const derived = deriveCanonicalAdName(names);
+      return derived || names[0] || row.representativeName || "Unnamed creative";
+    })(),
+    adSetCount: (() => {
+      // adNames contains one entry per unique ad name; if multiple ad sets contributed
+      // the same creative, adNames will have multiple distinct entries.
+      // We use adNames.length as a proxy: >1 unique name means multiple ad sets.
+      const names = (row.adNames as string[] | null) ?? [];
+      return names.length > 1 ? names.length : 1;
+    })(),
     // Flat evidence fields (also kept in evidence sub-object for backwards compat)
     ewmaDrop: num(row.ewmaDrop),
     ctrDrop: num(row.ctrDrop),
