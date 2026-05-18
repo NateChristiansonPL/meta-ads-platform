@@ -176,6 +176,13 @@
       "when": 1778872626661,
       "tag": "0024_premium_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1779146428716,
+      "tag": "0025_narrow_speed_demon",
+      "breakpoints": true
     }
   ]
 }

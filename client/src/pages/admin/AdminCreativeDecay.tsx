@@ -685,6 +685,27 @@ type ResultRow = {
   // firstDetectedAt is an object with level keys, not a flat string
   firstDetectedAt?: { emerging?: string | null; possible?: string | null; probable?: string | null } | null;
   trendData?: { date: string; ctr: number; cpm: number }[];
+  // Enrichment 1: True Signal Date
+  firstSignalDate?: { emerging?: string | null; possible?: string | null; probable?: string | null } | null;
+  // Enrichment 2: Performance Impact
+  impact?: {
+    cpe?: { expected: number; actual: number; changePct: number } | null;
+    events?: { expected: number; actual: number; changePct: number } | null;
+    cpm?: { expected: number; actual: number; changePct: number } | null;
+    ctr?: { expected: number; actual: number; changePct: number } | null;
+    frequency?: { expected: number; actual: number; changePct: number } | null;
+    confidence: string;
+  } | null;
+  // Enrichment 3: Score-Trajectory Projection
+  projection?: {
+    slope: number;
+    rSquared: number;
+    projectedPossibleDate?: string | null;
+    projectedProbableDate?: string | null;
+  } | null;
+  // Enrichment 4: Decay Velocity
+  decayVelocity?: "fast" | "moderate" | "slow" | null;
+  velocityGuidance?: string | null;
 };
 
 function ResultsTable({ rows, expandedRow, setExpandedRow }: {
@@ -702,7 +723,7 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
         <table className="w-full text-xs">
           <thead>
             <tr style={{ background: "rgba(255,255,255,0.035)", color: "rgba(255,255,255,0.45)" }}>
-              <Th></Th><Th>Creative</Th><Th>Campaign</Th><Th>Ad Set</Th><Th>Status</Th><Th>Score</Th><Th>Opt. Metric</Th><Th>Spend</Th><Th>Freq</Th><Th>Impressions</Th>
+              <Th></Th><Th>Creative</Th><Th>Campaign</Th><Th>Ad Set</Th><Th>Status</Th><Th>Score</Th><Th>Velocity</Th><Th>Opt. Metric</Th><Th>Spend</Th><Th>Freq</Th><Th>Impressions</Th>
             </tr>
           </thead>
           <tbody>
@@ -753,6 +774,7 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                     </Td>
                     <Td><FatiguePill level={r.fatigueStatus} /></Td>
                     <Td><span style={{ color: r.fatigueScore >= 70 ? "#ED135F" : r.fatigueScore >= 50 ? "#F7901E" : r.fatigueScore >= 30 ? "#F7C948" : "#00B37A" }}>{r.fatigueScore.toFixed(1)}</span></Td>
+                    <Td><VelocityBadge velocity={r.decayVelocity ?? null} /></Td>
                     <Td><span className="font-mono text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}>{r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"}</span></Td>
                     <Td>{r.spend != null ? `$${Number(r.spend).toFixed(2)}` : "\u2014"}</Td>
                     <Td>{r.frequency != null ? Number(r.frequency).toFixed(2) : "\u2014"}</Td>
@@ -760,8 +782,9 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                   </tr>
                   {isExpanded && (
                     <tr key={`${r.creativeId}-exp`} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                      <td colSpan={10} className="px-6 py-4" style={{ background: "rgba(26,108,246,0.04)" }}>
-                        <div className="flex flex-wrap gap-3">
+                      <td colSpan={11} className="px-6 py-4" style={{ background: "rgba(26,108,246,0.04)" }}>
+                        {/* Evidence pills */}
+                        <div className="flex flex-wrap gap-3 mb-3">
                           <EvidencePill label="CDR Drop" value={r.cdrPct != null ? `${Number(r.cdrPct).toFixed(1)}%` : "\u2014"} />
                           <EvidencePill label="EWMA Drop" value={r.ewmaDrop != null ? `${(Number(r.ewmaDrop) * 100).toFixed(1)}%` : "\u2014"} />
                           <EvidencePill label="CTR Drop" value={r.ctrDrop != null ? `${(Number(r.ctrDrop) * 100).toFixed(1)}%` : "\u2014"} />
@@ -770,6 +793,28 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                           <EvidencePill label="Reliability" value={r.reliability != null ? `${(Number(r.reliability) * 100).toFixed(0)}%` : "\u2014"} />
                           <EvidencePill label="Scored Metric" value={r.convEventLabel || r.optimizationGoal?.replace(/_/g, " ").toLowerCase() || "\u2014"} highlight />
                         </div>
+                        {/* Signal dates + Projection + Velocity guidance */}
+                        <div className="flex flex-wrap gap-3 mb-3">
+                          {r.firstSignalDate?.emerging && <EvidencePill label="Signal: Emerging" value={r.firstSignalDate.emerging} />}
+                          {r.firstSignalDate?.possible && <EvidencePill label="Signal: Possible" value={r.firstSignalDate.possible} />}
+                          {r.firstSignalDate?.probable && <EvidencePill label="Signal: Probable" value={r.firstSignalDate.probable} />}
+                          {r.projection && (
+                            <>
+                              <EvidencePill label="Slope (pts/day)" value={r.projection.slope.toFixed(2)} />
+                              <EvidencePill label="R\u00b2" value={r.projection.rSquared.toFixed(2)} />
+                              {r.projection.projectedPossibleDate && <EvidencePill label="\u2192 Possible" value={r.projection.projectedPossibleDate} />}
+                              {r.projection.projectedProbableDate && <EvidencePill label="\u2192 Probable" value={r.projection.projectedProbableDate} />}
+                            </>
+                          )}
+                        </div>
+                        {/* Velocity guidance */}
+                        {r.velocityGuidance && (
+                          <div className="text-[11px] px-3 py-2 rounded-lg mb-3" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                            <span className="font-bold" style={{ color: "rgba(255,255,255,0.8)" }}>Guidance: </span>{r.velocityGuidance}
+                          </div>
+                        )}
+                        {/* Expandable Impact panel */}
+                        {r.impact && <ImpactPanel impact={r.impact} />}
                       </td>
                     </tr>
                   )}
@@ -857,5 +902,81 @@ function EvidencePill({ label, value, highlight }: { label: string; value: strin
     </div>
   );
 }
+function VelocityBadge({ velocity }: { velocity: "fast" | "moderate" | "slow" | null }) {
+  if (!velocity) return <span style={{ color: "rgba(255,255,255,0.3)" }}>—</span>;
+  const map: Record<string, { bg: string; col: string; label: string }> = {
+    fast: { bg: "rgba(237,19,95,0.18)", col: "#ED135F", label: "Fast" },
+    moderate: { bg: "rgba(247,144,30,0.18)", col: "#F7901E", label: "Moderate" },
+    slow: { bg: "rgba(26,108,246,0.18)", col: "#7CB9FF", label: "Slow" },
+  };
+  const s = map[velocity];
+  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: s.bg, color: s.col }}>{s.label}</span>;
+}
+
+function ImpactPanel({ impact }: { impact: NonNullable<ResultRow["impact"]> }) {
+  const [open, setOpen] = useState(false);
+  const metrics = [
+    { key: "cpe", label: "Cost per Event" },
+    { key: "events", label: "Events (counterfactual)" },
+    { key: "cpm", label: "CPM" },
+    { key: "ctr", label: "CTR" },
+    { key: "frequency", label: "Frequency" },
+  ] as const;
+  const available = metrics.filter((m) => impact[m.key]);
+  if (available.length === 0) return null;
+  return (
+    <div className="rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-bold"
+        style={{ color: "rgba(255,255,255,0.7)" }}
+      >
+        <span>Performance Impact <span className="font-normal" style={{ color: "rgba(255,255,255,0.4)" }}>({impact.confidence} confidence)</span></span>
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+      {open && (
+        <div className="px-3 pb-3">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr style={{ color: "rgba(255,255,255,0.4)" }}>
+                <th className="text-left py-1 font-bold">Metric</th>
+                <th className="text-right py-1 font-bold">Expected</th>
+                <th className="text-right py-1 font-bold">Actual</th>
+                <th className="text-right py-1 font-bold">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {available.map(({ key, label }) => {
+                const m = impact[key]!;
+                const isNeg = m.changePct < 0;
+                const isCost = key === "cpe" || key === "cpm" || key === "frequency";
+                // For cost metrics, increase is bad (red). For events/CTR, decrease is bad (red).
+                const isBad = isCost ? m.changePct > 0 : m.changePct < 0;
+                return (
+                  <tr key={key} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.72)" }}>
+                    <td className="py-1.5 font-medium">{label}</td>
+                    <td className="py-1.5 text-right font-mono">{formatImpactVal(key, m.expected)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatImpactVal(key, m.actual)}</td>
+                    <td className="py-1.5 text-right font-mono font-bold" style={{ color: isBad ? "#ED135F" : "#00B37A" }}>
+                      {m.changePct >= 0 ? "+" : ""}{m.changePct.toFixed(1)}%
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatImpactVal(key: string, val: number): string {
+  if (key === "cpe" || key === "cpm") return `$${val.toFixed(2)}`;
+  if (key === "ctr") return `${val.toFixed(2)}%`;
+  if (key === "frequency") return val.toFixed(2);
+  return val.toFixed(1);
+}
+
 const inputStyle: React.CSSProperties = { background: "rgba(10,10,40,0.72)", border: "1px solid rgba(255,255,255,0.1)", color: "#FAFAFA" };
 const secondaryBtn: React.CSSProperties = { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.1)" };

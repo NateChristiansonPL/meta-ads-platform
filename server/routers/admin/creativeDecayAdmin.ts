@@ -17,7 +17,7 @@
 
 import { TRPCError } from "@trpc/server";
 import crypto from "node:crypto";
-import { and, between, desc, eq, inArray, isNotNull, or, gt } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNotNull, or, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, router } from "../../_core/trpc";
 import { getDb } from "../../db";
@@ -40,6 +40,7 @@ import {
   formatProjectionText,
 } from "./fatigueEscalation";
 import { computeCanonicalGroups, deriveCanonicalAdName } from "./adNameCanonical";
+import { projectFromSlope, classifyVelocity, velocityGuidance, computeImpact, findFirstCrossings } from "./decayVelocity";
 
 
 
@@ -351,6 +352,16 @@ async function analyzeStoredPerformance(input: {
     const earlyCtr = weightedCtr(early);
     const recentCtr = weightedCtr(recent.length ? recent : early);
     const ctrDrop = earlyCtr ? (earlyCtr - recentCtr) / earlyCtr : 0;
+    const earlyImpressions = Math.round(sum(early, (row) => num(row.impressions)));
+    const recentImpressions = Math.round(sum(recent, (row) => num(row.impressions)));
+    const earlyCpm = earlyImpressions > 0
+      ? sum(early, (r) => num(r.cpm) * num(r.impressions)) / earlyImpressions : 0;
+    const recentCpm = recentImpressions > 0
+      ? sum(recent, (r) => num(r.cpm) * num(r.impressions)) / recentImpressions : 0;
+    const earlyFrequency = earlyImpressions > 0
+      ? sum(early, (r) => num(r.frequency) * num(r.impressions)) / earlyImpressions : 0;
+    const recentFrequency = recentImpressions > 0
+      ? sum(recent, (r) => num(r.frequency) * num(r.impressions)) / recentImpressions : 0;
     const earlySpend = sum(early, (row) => num(row.spend));
     const recentSpend = sum(recent, (row) => num(row.spend));
     const earlyEvents = sum(early, goalEventCount);
@@ -488,7 +499,70 @@ async function analyzeStoredPerformance(input: {
         };
         return GOAL_LABELS[goal] ?? goal.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
       })(),
+      // ── Enrichment 2: Performance Impact ──────────────────────────────────
+      impactCpeExpected: null as string | null,
+      impactCpeActual: null as string | null,
+      impactCpeChangePct: null as string | null,
+      impactEventsExpected: null as string | null,
+      impactEventsActual: null as string | null,
+      impactEventsChangePct: null as string | null,
+      impactCpmExpected: null as string | null,
+      impactCpmActual: null as string | null,
+      impactCpmChangePct: null as string | null,
+      impactCtrExpected: null as string | null,
+      impactCtrActual: null as string | null,
+      impactCtrChangePct: null as string | null,
+      impactFreqExpected: null as string | null,
+      impactFreqActual: null as string | null,
+      impactFreqChangePct: null as string | null,
+      impactConfidence: null as "high" | "medium" | "low" | null,
+      // ── Enrichment 3: Score-Trajectory Projection ────────────────────────
+      dailyScoreSlope: null as string | null,
+      slopeRSquared: null as string | null,
+      projectedPossibleDate: null as string | null,
+      projectedProbableDate: null as string | null,
+      // ── Enrichment 4: Decay Velocity ─────────────────────────────────────
+      decayVelocity: null as "fast" | "moderate" | "slow" | null,
     };
+
+    // Compute Performance Impact (Enrichment 2)
+    const impact = computeImpact({
+      earlyCpe,
+      recentCpe,
+      earlyCpm,
+      recentCpm,
+      earlyCtr,
+      recentCtr,
+      earlyFrequency,
+      recentFrequency,
+      earlyImpressions,
+      recentImpressions,
+      earlyEvents,
+      recentEvents,
+      recentSpend,
+      hasCpe,
+      fatigueStatus: label.status,
+      eligible: totalImpressions >= 100,
+      reliability,
+    });
+    if (impact) {
+      result.impactCpeExpected = impact.cpe?.expected.toFixed(4) ?? null;
+      result.impactCpeActual = impact.cpe?.actual.toFixed(4) ?? null;
+      result.impactCpeChangePct = impact.cpe?.changePct.toFixed(4) ?? null;
+      result.impactEventsExpected = impact.events?.expected.toFixed(4) ?? null;
+      result.impactEventsActual = impact.events?.actual.toFixed(4) ?? null;
+      result.impactEventsChangePct = impact.events?.changePct.toFixed(4) ?? null;
+      result.impactCpmExpected = impact.cpm?.expected.toFixed(4) ?? null;
+      result.impactCpmActual = impact.cpm?.actual.toFixed(4) ?? null;
+      result.impactCpmChangePct = impact.cpm?.changePct.toFixed(4) ?? null;
+      result.impactCtrExpected = impact.ctr?.expected.toFixed(6) ?? null;
+      result.impactCtrActual = impact.ctr?.actual.toFixed(6) ?? null;
+      result.impactCtrChangePct = impact.ctr?.changePct.toFixed(4) ?? null;
+      result.impactFreqExpected = impact.frequency?.expected.toFixed(4) ?? null;
+      result.impactFreqActual = impact.frequency?.actual.toFixed(4) ?? null;
+      result.impactFreqChangePct = impact.frequency?.changePct.toFixed(4) ?? null;
+      result.impactConfidence = impact.confidence;
+    }
     await db
       .insert(creativeFatigueResults)
       .values(result)
@@ -634,21 +708,122 @@ async function analyzeStoredPerformance(input: {
     trendByFingerprint.set(groupKey, series);
   }
 
+  // ── Post-trend enrichments: signal dates, projection, velocity ─────────────
+  // We need the trend series to compute signal dates and slope projections.
+  // Store per-fingerprint signal dates for the firstFatigueDetected update.
+  const signalDateMap = new Map<string, { emerging: string | null; possible: string | null; probable: string | null }>();
+
+  for (const row of inserted) {
+    const fp = row.contentFingerprint ?? "";
+    const cids = (row.campaignIds as string[] | undefined) ?? [];
+    const campaignId = cids[0] ?? "unknown";
+    const trendKey = `${campaignId}::${fp}`;
+    const series = trendByFingerprint.get(trendKey) ?? [];
+
+    // Enrichment 1: True Signal Date — find first threshold crossings in trend series
+    const crossings = findFirstCrossings(series);
+    signalDateMap.set(fp, crossings);
+
+    // Enrichment 3: Score-Trajectory Projection
+    const currentScore = num(row.fatigueScore);
+    const proj = projectFromSlope(series, currentScore);
+    if (proj.slope > 0 && proj.rSquared >= 0.25) {
+      row.dailyScoreSlope = proj.slope.toFixed(4);
+      row.slopeRSquared = proj.rSquared.toFixed(4);
+      row.projectedPossibleDate = proj.projectedPossibleDate;
+      row.projectedProbableDate = proj.projectedProbableDate;
+    }
+
+    // Enrichment 4: Decay Velocity Classification
+    const velocity = classifyVelocity({
+      slope: proj.slope,
+      rSquared: proj.rSquared,
+      emergingDate: crossings.emerging,
+      possibleDate: crossings.possible,
+    });
+    if (velocity) {
+      row.decayVelocity = velocity;
+    }
+
+    // Persist projection + velocity to DB
+    if (row.dailyScoreSlope || row.decayVelocity) {
+      await db
+        .update(creativeFatigueResults)
+        .set({
+          dailyScoreSlope: row.dailyScoreSlope,
+          slopeRSquared: row.slopeRSquared,
+          projectedPossibleDate: row.projectedPossibleDate,
+          projectedProbableDate: row.projectedProbableDate,
+          decayVelocity: row.decayVelocity,
+        })
+        .where(
+          and(
+            eq(creativeFatigueResults.analysisRunId, analysisRunId),
+            eq(creativeFatigueResults.contentFingerprint, fp),
+          ),
+        );
+    }
+  }
+
+  // Enrichment 1: Update firstFatigueDetected rows with signal_date (LEAST semantics)
+  for (const [fp, crossings] of Array.from(signalDateMap.entries())) {
+    const accountIdClean = cleanAccountId(input.accountId);
+    const levels = ["emerging", "possible", "probable"] as const;
+    for (const level of levels) {
+      const signalDate = crossings[level];
+      if (!signalDate) continue;
+      // Only update if signalDate is earlier than existing (or null)
+      await db
+        .update(firstFatigueDetected)
+        .set({ signalDate: sql`LEAST(COALESCE(${firstFatigueDetected.signalDate}, ${signalDate}), ${signalDate})` })
+        .where(
+          and(
+            eq(firstFatigueDetected.accountId, accountIdClean),
+            eq(firstFatigueDetected.contentFingerprint, fp),
+            eq(firstFatigueDetected.level, level),
+          ),
+        );
+    }
+  }
+
+  // Reload firstDetectedMap with signal dates for the response
+  const firstSignalDateMap = new Map<string, { emerging: string | null; possible: string | null; probable: string | null }>();
+  if (fingerprintList.length) {
+    const fdRows2 = await db
+      .select()
+      .from(firstFatigueDetected)
+      .where(
+        and(
+          eq(firstFatigueDetected.accountId, cleanAccountId(input.accountId)),
+          inArray(firstFatigueDetected.contentFingerprint, fingerprintList),
+        ),
+      );
+    for (const fd of fdRows2) {
+      if (!firstSignalDateMap.has(fd.contentFingerprint)) {
+        firstSignalDateMap.set(fd.contentFingerprint, { emerging: null, possible: null, probable: null });
+      }
+      const entry = firstSignalDateMap.get(fd.contentFingerprint)!;
+      entry[fd.level as "emerging" | "possible" | "probable"] = fd.signalDate ?? null;
+    }
+  }
+
   return {
     analysisRunId,
     records: inserted
       .sort((a, b) => num(b.fatigueScore) - num(a.fatigueScore))
-      .map((row, index) => ({
-        ...mapResult({ ...row, id: index + 1 }, firstDetectedMap),
-        trendData: (() => {
-          // trendByFingerprint is keyed by "campaignId::fingerprint" compound key.
-          // Reconstruct the key from the result record's campaignIds and contentFingerprint.
-          const fp = row.contentFingerprint ?? "";
-          const cids = (row.campaignIds as string[] | undefined) ?? [];
-          const campaignId = cids[0] ?? "unknown";
-          return trendByFingerprint.get(`${campaignId}::${fp}`) ?? [];
-        })(),
-      })),
+      .map((row, index) => {
+        const fp = row.contentFingerprint ?? "";
+        const cids = (row.campaignIds as string[] | undefined) ?? [];
+        const campaignId = cids[0] ?? "unknown";
+        const signalDates = firstSignalDateMap.get(fp) ?? { emerging: null, possible: null, probable: null };
+        return {
+          ...mapResult(
+            { ...row, id: index + 1, firstSignalDateEmerging: signalDates.emerging, firstSignalDatePossible: signalDates.possible, firstSignalDateProbable: signalDates.probable } as any,
+            firstDetectedMap,
+          ),
+          trendData: trendByFingerprint.get(`${campaignId}::${fp}`) ?? [],
+        };
+      }),
   };
 }
 
@@ -750,6 +925,53 @@ function mapResult(
       totalEvents: num(row.totalEvents),
     },
     firstDetectedAt,
+    // ── Enrichment 1: True Signal Date ──────────────────────────────────────
+    firstSignalDate: {
+      emerging: (row as any).firstSignalDateEmerging ?? null,
+      possible: (row as any).firstSignalDatePossible ?? null,
+      probable: (row as any).firstSignalDateProbable ?? null,
+    },
+    // ── Enrichment 2: Performance Impact ────────────────────────────────────
+    impact: row.impactConfidence ? {
+      cpe: row.impactCpeExpected ? {
+        expected: num(row.impactCpeExpected),
+        actual: num(row.impactCpeActual),
+        changePct: num(row.impactCpeChangePct),
+      } : null,
+      events: row.impactEventsExpected ? {
+        expected: num(row.impactEventsExpected),
+        actual: num(row.impactEventsActual),
+        changePct: num(row.impactEventsChangePct),
+      } : null,
+      cpm: row.impactCpmExpected ? {
+        expected: num(row.impactCpmExpected),
+        actual: num(row.impactCpmActual),
+        changePct: num(row.impactCpmChangePct),
+      } : null,
+      ctr: row.impactCtrExpected ? {
+        expected: num(row.impactCtrExpected),
+        actual: num(row.impactCtrActual),
+        changePct: num(row.impactCtrChangePct),
+      } : null,
+      frequency: row.impactFreqExpected ? {
+        expected: num(row.impactFreqExpected),
+        actual: num(row.impactFreqActual),
+        changePct: num(row.impactFreqChangePct),
+      } : null,
+      confidence: row.impactConfidence,
+    } : null,
+    // ── Enrichment 3: Score-Trajectory Projection ───────────────────────────
+    projection: row.dailyScoreSlope ? {
+      slope: num(row.dailyScoreSlope),
+      rSquared: num(row.slopeRSquared),
+      projectedPossibleDate: row.projectedPossibleDate ?? null,
+      projectedProbableDate: row.projectedProbableDate ?? null,
+    } : null,
+    // ── Enrichment 4: Decay Velocity ────────────────────────────────────────
+    decayVelocity: row.decayVelocity ?? null,
+    velocityGuidance: row.decayVelocity
+      ? velocityGuidance(row.decayVelocity as "fast" | "moderate" | "slow", row.fatigueStatus ?? "HEALTHY")
+      : null,
   };
 }
 
@@ -901,7 +1123,24 @@ async function runDecayChain(config: {
       const slackLines = triggered.map((r) => {
         const emoji = emojiForLevel(r.fatigueStatus);
         const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
-        return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`;
+        const parts: string[] = [`${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`];
+        // Velocity badge
+        if ((r as any).decayVelocity) parts[0] += ` [${(r as any).decayVelocity}]`;
+        // Impact summary
+        const impact = (r as any).impact;
+        if (impact) {
+          const impactParts: string[] = [];
+          if (impact.cpe) impactParts.push(`CPE ${impact.cpe.changePct >= 0 ? "+" : ""}${impact.cpe.changePct.toFixed(0)}%`);
+          if (impact.events) impactParts.push(`Events ${impact.events.changePct >= 0 ? "+" : ""}${impact.events.changePct.toFixed(0)}%`);
+          if (impact.cpm) impactParts.push(`CPM ${impact.cpm.changePct >= 0 ? "+" : ""}${impact.cpm.changePct.toFixed(0)}%`);
+          if (impact.ctr) impactParts.push(`CTR ${impact.ctr.changePct >= 0 ? "+" : ""}${impact.ctr.changePct.toFixed(0)}%`);
+          if (impactParts.length) parts.push(`    _Impact:_ ${impactParts.join(" | ")}`);
+        }
+        // Projection
+        const proj = (r as any).projection;
+        if (proj?.projectedProbableDate) parts.push(`    _Projected probable:_ ${proj.projectedProbableDate}`);
+        else if (proj?.projectedPossibleDate) parts.push(`    _Projected possible:_ ${proj.projectedPossibleDate}`);
+        return parts.join("\n");
       }).join("\n");
       const slackMsg = [
         `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,
@@ -1014,7 +1253,21 @@ export const creativeDecayAdminRouter = router({
             const slackLines = triggered.map((r) => {
               const emoji = r.fatigueStatus === "URGENT" ? "🔴" : r.fatigueStatus === "REFRESH" ? "🟠" : "🟡";
               const level = r.fatigueStatus === "URGENT" ? "Probable" : r.fatigueStatus === "REFRESH" ? "Possible" : "Emerging";
-              return `${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`;
+              const parts: string[] = [`${emoji} *${r.creativeName}* — ${level} fatigue (score ${r.fatigueScore.toFixed(0)})`];
+              if ((r as any).decayVelocity) parts[0] += ` [${(r as any).decayVelocity}]`;
+              const impact = (r as any).impact;
+              if (impact) {
+                const impactParts: string[] = [];
+                if (impact.cpe) impactParts.push(`CPE ${impact.cpe.changePct >= 0 ? "+" : ""}${impact.cpe.changePct.toFixed(0)}%`);
+                if (impact.events) impactParts.push(`Events ${impact.events.changePct >= 0 ? "+" : ""}${impact.events.changePct.toFixed(0)}%`);
+                if (impact.cpm) impactParts.push(`CPM ${impact.cpm.changePct >= 0 ? "+" : ""}${impact.cpm.changePct.toFixed(0)}%`);
+                if (impact.ctr) impactParts.push(`CTR ${impact.ctr.changePct >= 0 ? "+" : ""}${impact.ctr.changePct.toFixed(0)}%`);
+                if (impactParts.length) parts.push(`    _Impact:_ ${impactParts.join(" | ")}`);
+              }
+              const proj = (r as any).projection;
+              if (proj?.projectedProbableDate) parts.push(`    _Projected probable:_ ${proj.projectedProbableDate}`);
+              else if (proj?.projectedPossibleDate) parts.push(`    _Projected possible:_ ${proj.projectedPossibleDate}`);
+              return parts.join("\n");
             }).join("\n");
             const slackMsg = [
               `*🚨 Creative Fatigue Alert* — ${triggered.length} signal${triggered.length > 1 ? "s" : ""} detected`,

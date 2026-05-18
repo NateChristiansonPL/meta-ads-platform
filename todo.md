@@ -791,3 +791,41 @@
 - [x] Performance Data Sync schedule form: require ≥1 campaign selected (disable Save button + show inline note), removed onlyLiveAds toggle, added "Only active ads are synced" note
 - [x] Server-side: enforce campaignIds.min(1) in runDecayAnalysis; onlyLiveAds defaults to true in both procedures
 - [x] TypeScript: 0 errors
+
+## Creative Decay Enrichments 1-4 (May 2026)
+
+### Enrichment 1 — True Signal Date
+- [x] Add `signal_date` column to `first_fatigue_detected` table in schema
+- [x] Compute signal dates from daily trend series (first date crossing each threshold)
+- [x] Update `firstFatigueDetected` insert to include `signalDate` with LEAST/COALESCE idempotency
+- [x] Update `firstDetectedMap` loader to carry both `observedAt` and `signalDate`
+- [x] Update `mapResult()` to expose both dates per level
+- [ ] Update `fatigueEscalation.ts` to prefer `signalDate` over `observedAt` (deferred)
+
+### Enrichment 2 — Performance Impact (Expected vs Actual vs % Change)
+- [x] Add 16 impact columns to `creative_fatigue_results` table in schema
+- [x] Compute early/recent CPM (impression-weighted) and early/recent frequency (impression-weighted)
+- [x] Implement `computeImpact()` helper function
+- [x] Wire impact computation into result object assembly
+- [x] Expose impact data in `mapResult()` as nested object
+- [x] Add expandable Impact panel in AdminCreativeDecay results table
+
+### Enrichment 3 — Score-Trajectory Projection
+- [x] Create `server/routers/admin/decayVelocity.ts` with `projectFromSlope()` (OLS fit)
+- [x] Add 4 projection columns to `creative_fatigue_results` table in schema
+- [x] Wire slope projection into analysis loop after trend series is built
+- [ ] Update `fatigueEscalation.ts` to prefer slope-based projection over peer-velocity (deferred)
+- [ ] Update `formatProjectionText()` to show slope and R² when available (deferred)
+
+### Enrichment 4 — Decay Velocity Classification
+- [x] Add `classifyVelocity()` and `velocityGuidance()` to `decayVelocity.ts`
+- [x] Add `decay_velocity` enum column to `creative_fatigue_results` table in schema
+- [x] Wire velocity classification into analysis loop
+- [x] Expose `decayVelocity` and `velocityGuidance` in `mapResult()`
+- [x] Add velocity badge to UI results table (colored: red=fast, amber=moderate, blue=slow)
+
+### Cross-cutting
+- [x] Run `pnpm db:push` for all schema changes (single migration)
+- [x] Update Slack notification body with impact, projection, and velocity data
+- [x] Write Vitest tests for `computeImpact`, `projectFromSlope`, `classifyVelocity`, `findFirstCrossings`
+- [x] TypeScript: 0 errors

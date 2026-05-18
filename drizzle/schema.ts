@@ -123,6 +123,9 @@ export const firstFatigueDetected = mysqlTable("first_fatigue_detected", {
   contentFingerprint: varchar("content_fingerprint", { length: 128 }).notNull(),
   level: mysqlEnum("level", ["emerging", "possible", "probable"]).notNull(),
   firstDetectedAt: timestamp("first_detected_at").defaultNow().notNull(),
+  // The actual date in the performance data on which this level threshold was first crossed.
+  // May be earlier than firstDetectedAt (which records when analysis ran).
+  signalDate: date("signal_date", { mode: "string" }),
   representativeName: text("representative_name"),
 }, (table) => ({
   uniqueSignal: uniqueIndex("ffd_account_fp_level_unique").on(table.accountId, table.contentFingerprint, table.level),
@@ -299,6 +302,30 @@ export const creativeFatigueResults = mysqlTable("creative_fatigue_results", {
   badgeFrequency: boolean("badge_frequency").default(false).notNull(),
   notificationSent: boolean("notification_sent").default(false).notNull(),
   notificationLevel: mysqlEnum("notification_level", ["emerging", "possible", "probable"]),
+  // ── Enrichment 2: Performance Impact ──────────────────────────────────────
+  impactCpeExpected: decimal("impact_cpe_expected", { precision: 12, scale: 4 }),
+  impactCpeActual: decimal("impact_cpe_actual", { precision: 12, scale: 4 }),
+  impactCpeChangePct: decimal("impact_cpe_change_pct", { precision: 8, scale: 4 }),
+  impactEventsExpected: decimal("impact_events_expected", { precision: 14, scale: 4 }),
+  impactEventsActual: decimal("impact_events_actual", { precision: 14, scale: 4 }),
+  impactEventsChangePct: decimal("impact_events_change_pct", { precision: 8, scale: 4 }),
+  impactCpmExpected: decimal("impact_cpm_expected", { precision: 10, scale: 4 }),
+  impactCpmActual: decimal("impact_cpm_actual", { precision: 10, scale: 4 }),
+  impactCpmChangePct: decimal("impact_cpm_change_pct", { precision: 8, scale: 4 }),
+  impactCtrExpected: decimal("impact_ctr_expected", { precision: 10, scale: 6 }),
+  impactCtrActual: decimal("impact_ctr_actual", { precision: 10, scale: 6 }),
+  impactCtrChangePct: decimal("impact_ctr_change_pct", { precision: 8, scale: 4 }),
+  impactFreqExpected: decimal("impact_freq_expected", { precision: 8, scale: 4 }),
+  impactFreqActual: decimal("impact_freq_actual", { precision: 8, scale: 4 }),
+  impactFreqChangePct: decimal("impact_freq_change_pct", { precision: 8, scale: 4 }),
+  impactConfidence: mysqlEnum("impact_confidence", ["high", "medium", "low"]),
+  // ── Enrichment 3: Score-Trajectory Projection ─────────────────────────────
+  dailyScoreSlope: decimal("daily_score_slope", { precision: 8, scale: 4 }),
+  slopeRSquared: decimal("slope_r_squared", { precision: 6, scale: 4 }),
+  projectedPossibleDate: date("projected_possible_date", { mode: "string" }),
+  projectedProbableDate: date("projected_probable_date", { mode: "string" }),
+  // ── Enrichment 4: Decay Velocity Classification ───────────────────────────
+  decayVelocity: mysqlEnum("decay_velocity", ["fast", "moderate", "slow"]),
 }, (table) => ({
   runScoreIdx: index("cfr_run_score_idx").on(table.analysisRunId, table.fatigueScore),
   fingerprintRunIdx: index("cfr_fingerprint_run_idx").on(table.contentFingerprint, table.analyzedAt),

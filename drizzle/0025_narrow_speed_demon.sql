@@ -1,0 +1,22 @@
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpe_expected` decimal(12,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpe_actual` decimal(12,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpe_change_pct` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_events_expected` decimal(14,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_events_actual` decimal(14,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_events_change_pct` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpm_expected` decimal(10,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpm_actual` decimal(10,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_cpm_change_pct` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_ctr_expected` decimal(10,6);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_ctr_actual` decimal(10,6);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_ctr_change_pct` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_freq_expected` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_freq_actual` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_freq_change_pct` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `impact_confidence` enum('high','medium','low');--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `daily_score_slope` decimal(8,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `slope_r_squared` decimal(6,4);--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `projected_possible_date` date;--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `projected_probable_date` date;--> statement-breakpoint
+ALTER TABLE `creative_fatigue_results` ADD `decay_velocity` enum('fast','moderate','slow');--> statement-breakpoint
+ALTER TABLE `first_fatigue_detected` ADD `signal_date` date;
