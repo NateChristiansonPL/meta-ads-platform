@@ -111,7 +111,7 @@ export default function AdminCreativePerformanceSync() {
   }, [campaigns, campaignSearch]);
 
   const syncDates = dateRangeToStrings(syncRange);
-  const canSync = !!tokenId && !!accountId && !!syncDates && !syncMutation.isPending;
+  const canSync = !!tokenId && !!accountId && !!syncDates && campaignIds.length > 0 && !syncMutation.isPending;
 
   return (
     <AppShell
@@ -131,7 +131,7 @@ export default function AdminCreativePerformanceSync() {
           <button
             onClick={() => {
               if (!tokenId || !accountId || !syncDates) return;
-              syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, onlyLiveAds, dateFrom: syncDates.from, dateTo: syncDates.to });
+              syncMutation.mutate({ tokenId, adAccountId: accountId, campaignIds, campaignStatusFilter: statusFilter, onlyLiveAds: true, dateFrom: syncDates.from, dateTo: syncDates.to });
             }}
             disabled={!canSync}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -196,7 +196,7 @@ export default function AdminCreativePerformanceSync() {
         </section>
 
         {/* Campaign Scope */}
-        <Panel title="Campaign Scope" description="Optional. Leave empty to pull all campaigns matching the status filter.">
+        <Panel title="Campaign Scope" description="Select at least one campaign to sync performance data.">
           <div className="space-y-3">
             <div>
               <label className="block text-xs mb-1" style={{ color: "rgba(255,255,255,0.42)" }}>Campaign status filter</label>
@@ -209,19 +209,7 @@ export default function AdminCreativePerformanceSync() {
                 {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <div className="flex items-center gap-3 py-1">
-              <button
-                onClick={() => setOnlyLiveAds((v) => !v)}
-                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
-                style={{ background: onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.12)" }}
-              >
-                <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                  style={{ left: onlyLiveAds ? "calc(100% - 1.125rem)" : "0.125rem" }} />
-              </button>
-              <span className="text-xs font-semibold" style={{ color: onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.55)" }}>
-                Only pull currently live ads (ACTIVE effective status)
-              </span>
-            </div>
+
             <div className="flex items-center gap-2">
               <input
                 value={campaignSearch}
@@ -253,11 +241,12 @@ export default function AdminCreativePerformanceSync() {
                     {filteredCampaigns.length === 0 && <EmptyTxt>No campaigns match.</EmptyTxt>}
                   </div>
                 )}
-            <p className="text-xs" style={{ color: "rgba(255,255,255,0.42)" }}>
-              {campaignIds.length
-                ? `${campaignIds.length} campaign${campaignIds.length === 1 ? "" : "s"} selected.`
-                : "No filter \u2014 all matching campaigns will be included."}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs" style={{ color: campaignIds.length === 0 ? "#F7901E" : "rgba(255,255,255,0.42)" }}>
+                {campaignIds.length ? `${campaignIds.length} campaign${campaignIds.length === 1 ? "" : "s"} selected.` : "\u26a0\ufe0f At least one campaign must be selected."}
+              </p>
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Only active ads are synced.</p>
+            </div>
           </div>
         </Panel>
 
@@ -372,12 +361,7 @@ export default function AdminCreativePerformanceSync() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <Toggle value={sched.onlyLiveAds} onChange={(v) => setSched((s) => ({ ...s, onlyLiveAds: v }))} />
-                <span className="text-xs font-semibold" style={{ color: sched.onlyLiveAds ? "#22c55e" : "rgba(255,255,255,0.55)" }}>
-                  Only pull currently live ads (ACTIVE effective status)
-                </span>
-              </div>
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Only active ads are synced.</p>
 
               <div className="rounded-lg px-3 py-2 text-xs"
                 style={{ background: "rgba(26,108,246,0.1)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(26,108,246,0.2)" }}>
@@ -404,10 +388,10 @@ export default function AdminCreativePerformanceSync() {
                 </button>
                 <button
                   onClick={() => {
-                    saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter, onlyLiveAds });
+                    saveScheduler.mutate({ ...sched, vaultTokenId: tokenId, accountId, campaignIds: campaignIds.length ? campaignIds.join(",") : null, campaignStatusFilter: statusFilter, onlyLiveAds: true });
                     setSchedModalOpen(false);
                   }}
-                  disabled={saveScheduler.isPending}
+                  disabled={saveScheduler.isPending || campaignIds.length === 0}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40"
                   style={{ background: "#1A6CF6", color: "#fff" }}
                 >

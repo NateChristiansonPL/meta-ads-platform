@@ -946,10 +946,10 @@ export const creativeDecayAdminRouter = router({
       z.object({
         adAccountId: z.string().min(1),
         accountName: z.string().optional(),
-        campaignIds: z.array(z.string()).default([]),
+        campaignIds: z.array(z.string()).min(1, "At least one campaign must be selected"),
         dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        onlyLiveAds: z.boolean().default(false),
+        onlyLiveAds: z.boolean().default(true),
         notifyEmerging: z.boolean().default(false),
         notifyPossible: z.boolean().default(false),
         notifyProbable: z.boolean().default(false),

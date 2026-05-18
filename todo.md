@@ -783,3 +783,11 @@
 - [x] Creative column: show canonicalAdName, full raw name on hover tooltip
 - [x] Ad Set column: show actual ad set name when adSetCount === 1, show "AGGREGATED" badge (cyan) when adSetCount > 1
 - [x] TypeScript: 0 errors
+
+## Campaign Required + Active-Only Enforcement (May 18 2026)
+- [x] Creative Decay manual analysis: require ≥1 campaign selected (disable Run button + show inline note), removed "Only live ads" toggle, added "Only active ads are analyzed" note
+- [x] Creative Decay schedule form: require ≥1 campaign selected (disable Save button + show inline note), added "Only active ads are analyzed" note
+- [x] Performance Data Sync manual form: require ≥1 campaign selected (disable Sync button + show inline note), removed onlyLiveAds toggle, added "Only active ads are synced" note
+- [x] Performance Data Sync schedule form: require ≥1 campaign selected (disable Save button + show inline note), removed onlyLiveAds toggle, added "Only active ads are synced" note
+- [x] Server-side: enforce campaignIds.min(1) in runDecayAnalysis; onlyLiveAds defaults to true in both procedures
+- [x] TypeScript: 0 errors

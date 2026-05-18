@@ -128,7 +128,7 @@ function AnalysisTab() {
   });
 
   const dates = dateRangeToStrings(dateRange);
-  const canRun = !!accountId && !!dates && !runMutation.isPending;
+  const canRun = !!accountId && !!dates && campaignIds.length > 0 && !runMutation.isPending;
 
   // fatigueStatus from server is URGENT | REFRESH | MONITOR | HEALTHY | IMPROVING | BLOCKED
   const signalRows = results?.filter((r) => ["URGENT", "REFRESH", "MONITOR"].includes(r.fatigueStatus)) ?? [];
@@ -202,7 +202,7 @@ function AnalysisTab() {
       </section>
 
       {/* Campaign Scope */}
-      <Panel title="Campaign Scope" description="Optional. Leave empty to include all campaigns.">
+      <Panel title="Campaign Scope" description="Select at least one campaign to run the analysis.">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "active" | "active_30d" | "all")}
@@ -232,18 +232,17 @@ function AnalysisTab() {
                 })}
             </div>
           )}
-          <p className="text-xs" style={{ color: "rgba(255,255,255,0.42)" }}>
-            {campaignIds.length ? `${campaignIds.length} campaign${campaignIds.length === 1 ? "" : "s"} selected.` : "No filter \u2014 all matching campaigns included."}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs" style={{ color: campaignIds.length === 0 ? "#F7901E" : "rgba(255,255,255,0.42)" }}>
+              {campaignIds.length ? `${campaignIds.length} campaign${campaignIds.length === 1 ? "" : "s"} selected.` : "\u26a0\ufe0f At least one campaign must be selected."}
+            </p>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Only active ads are analyzed.</p>
+          </div>
         </div>
       </Panel>
 
       {/* Options + Run */}
       <div className="flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <Toggle value={onlyLiveAds} onChange={setOnlyLiveAds} />
-          <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>Only live ads</span>
-        </label>
         <label className="flex items-center gap-2 cursor-pointer">
           <Toggle value={notifyProbable} onChange={setNotifyProbable} />
           <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>Notify: Probable</span>
@@ -260,7 +259,7 @@ function AnalysisTab() {
         <button
           onClick={() => {
             if (!accountId || !dates) return;
-            runMutation.mutate({ adAccountId: accountId, accountName: selectedAccount?.name, campaignIds, dateFrom: dates.from, dateTo: dates.to, onlyLiveAds, notifyEmerging, notifyPossible, notifyProbable });
+            runMutation.mutate({ adAccountId: accountId, accountName: selectedAccount?.name, campaignIds, dateFrom: dates.from, dateTo: dates.to, onlyLiveAds: true, notifyEmerging, notifyPossible, notifyProbable });
           }}
           disabled={!canRun}
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
@@ -486,7 +485,7 @@ function ScheduleTab() {
               );
             })()}
             <div className="flex flex-wrap gap-4">
-              {([["notifyProbable", "Notify: Probable"], ["notifyPossible", "Notify: Possible"], ["notifyEmerging", "Notify: Emerging"], ["onlyLiveAds", "Only live ads"], ["alwaysSendReport", "Always save report"]] as const).map(([key, label]) => (
+              {([["notifyProbable", "Notify: Probable"], ["notifyPossible", "Notify: Possible"], ["notifyEmerging", "Notify: Emerging"], ["alwaysSendReport", "Always save report"]] as const).map(([key, label]) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer">
                   <Toggle value={sched[key]} onChange={(v) => setSched((s) => ({ ...s, [key]: v }))} />
                   <span className="text-xs" style={{ color: "rgba(255,255,255,0.65)" }}>{label}</span>
@@ -496,7 +495,7 @@ function ScheduleTab() {
             <div className="flex justify-end">
               <button
                 onClick={() => saveSchedule.mutate({ ...sched, accountId, campaignIds: sched.campaignIds })}
-                disabled={!accountId || saveSchedule.isPending}
+                disabled={!accountId || !sched.campaignIds || saveSchedule.isPending}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold disabled:opacity-40"
                 style={{ background: "#1A6CF6", color: "#fff" }}>
                 {saveSchedule.isPending ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
