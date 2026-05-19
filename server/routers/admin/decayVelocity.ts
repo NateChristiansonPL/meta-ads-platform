@@ -183,7 +183,9 @@ export function computeImpact(args: {
   recentImpressions: number;
   earlyEvents: number;
   recentEvents: number;
+  earlySpend: number;
   recentSpend: number;
+  totalEvents: number;
   hasCpe: boolean;
   fatigueStatus: string;
   eligible: boolean;
@@ -197,21 +199,32 @@ export function computeImpact(args: {
   const pctChange = (expected: number, actual: number) =>
     expected === 0 ? 0 : ((actual - expected) / expected) * 100;
 
-  // CPE — only for goals with a CPE signal
+  // CPE — for conversion goals.
+  // Primary: use early-half CPE when the early half had at least 1 event.
+  // Sparse-event fallback: use full-window average CPE as the baseline when
+  // the early half had 0 events but the full window has events (e.g. 13 total
+  // events concentrated in the recent half). Full-window CPE = (earlySpend +
+  // recentSpend) / totalEvents, which is a neutral baseline that avoids the
+  // misleading "0 events in early half" problem.
   let cpe: ImpactMetric | null = null;
-  if (args.hasCpe && args.earlyCpe && args.recentCpe && args.earlyEvents >= 1) {
+  let effectiveBaselineCpe = args.earlyCpe;
+  if (args.hasCpe && !effectiveBaselineCpe && args.earlyEvents === 0 && args.totalEvents > 0) {
+    const fullWindowSpend = args.earlySpend + args.recentSpend;
+    effectiveBaselineCpe = fullWindowSpend / args.totalEvents;
+  }
+  if (args.hasCpe && effectiveBaselineCpe && args.recentCpe) {
     cpe = {
-      expected: args.earlyCpe,
+      expected: effectiveBaselineCpe,
       actual: args.recentCpe,
-      changePct: pctChange(args.earlyCpe, args.recentCpe),
+      changePct: pctChange(effectiveBaselineCpe, args.recentCpe),
     };
   }
 
   // Events — counterfactual: how many events the recent spend WOULD have
   // purchased at the early-half CPE.
   let events: ImpactMetric | null = null;
-  if (args.hasCpe && args.earlyCpe && args.earlyCpe > 0 && args.earlyEvents >= 1) {
-    const expectedEvents = args.recentSpend / args.earlyCpe;
+  if (args.hasCpe && effectiveBaselineCpe && effectiveBaselineCpe > 0) {
+    const expectedEvents = args.recentSpend / effectiveBaselineCpe;
     events = {
       expected: expectedEvents,
       actual: args.recentEvents,
@@ -229,7 +242,7 @@ export function computeImpact(args: {
     };
   }
 
-  // CTR — universal.
+  // CTR — universal. Does not require conversion events.
   let ctr: ImpactMetric | null = null;
   if (args.earlyCtr > 0 && args.recentImpressions > 0) {
     ctr = {
@@ -239,7 +252,7 @@ export function computeImpact(args: {
     };
   }
 
-  // Frequency — universal.
+  // Frequency — universal. Does not require conversion events.
   let frequency: ImpactMetric | null = null;
   if (args.earlyFrequency > 0) {
     frequency = {
@@ -248,6 +261,10 @@ export function computeImpact(args: {
       changePct: pctChange(args.earlyFrequency, args.recentFrequency),
     };
   }
+
+  // If none of the sub-metrics could be computed, return null rather than an
+  // empty shell — this prevents the UI from showing a confidence badge with no data.
+  if (!cpe && !events && !cpm && !ctr && !frequency) return null;
 
   const confidence: Impact["confidence"] =
     args.reliability >= 0.7 ? "high" : args.reliability >= 0.4 ? "medium" : "low";

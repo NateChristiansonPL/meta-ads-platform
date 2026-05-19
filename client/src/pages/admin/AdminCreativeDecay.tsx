@@ -798,6 +798,21 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                           {r.firstSignalDate?.emerging && <EvidencePill label="Signal: Emerging" value={r.firstSignalDate.emerging} />}
                           {r.firstSignalDate?.possible && <EvidencePill label="Signal: Possible" value={r.firstSignalDate.possible} />}
                           {r.firstSignalDate?.probable && <EvidencePill label="Signal: Probable" value={r.firstSignalDate.probable} />}
+                          {/* Note when multiple signal levels share the same date — score jumped past a threshold in one day */}
+                          {(() => {
+                            const sd = r.firstSignalDate;
+                            if (!sd) return null;
+                            const dates = [sd.emerging, sd.possible, sd.probable].filter(Boolean);
+                            const uniqueDates = new Set(dates);
+                            if (dates.length > 1 && uniqueDates.size < dates.length) {
+                              return (
+                                <div className="w-full text-[10px] px-2 py-1 rounded-md" style={{ background: "rgba(255,200,0,0.07)", color: "rgba(255,200,0,0.75)", border: "1px solid rgba(255,200,0,0.15)" }}>
+                                  ⚠ Multiple signal levels share the same date — the fatigue score jumped past one or more thresholds in a single day, so no intermediate crossing date was observed.
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                           {r.projection && (
                             <>
                               <EvidencePill label="Slope (pts/day)" value={r.projection.slope.toFixed(2)} />
