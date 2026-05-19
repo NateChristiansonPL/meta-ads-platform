@@ -322,6 +322,7 @@ export const creativeFatigueResults = mysqlTable("creative_fatigue_results", {
   // ── Enrichment 3: Score-Trajectory Projection ─────────────────────────────
   dailyScoreSlope: decimal("daily_score_slope", { precision: 8, scale: 4 }),
   slopeRSquared: decimal("slope_r_squared", { precision: 6, scale: 4 }),
+  projectedEmergingDate: date("projected_emerging_date", { mode: "string" }),
   projectedPossibleDate: date("projected_possible_date", { mode: "string" }),
   projectedProbableDate: date("projected_probable_date", { mode: "string" }),
   // ── Enrichment 4: Decay Velocity Classification ───────────────────────────

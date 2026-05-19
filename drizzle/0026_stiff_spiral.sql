@@ -1,0 +1,1 @@
+ALTER TABLE `creative_fatigue_results` ADD `projected_emerging_date` date;

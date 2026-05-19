@@ -18,13 +18,16 @@ export type SlopeProjection = {
   /** R² of the linear fit, 0–1. Used to decide whether to trust the slope. */
   rSquared: number;
   /** Days until score reaches the threshold, or null if slope is too flat/noisy. */
+  daysToEmerging: number | null;
   daysToPossible: number | null;
   daysToProbable: number | null;
   /** Projected calendar dates (null when daysTo* is null). */
+  projectedEmergingDate: string | null;
   projectedPossibleDate: string | null;
   projectedProbableDate: string | null;
 };
 
+const EMERGING_THRESHOLD = 30;
 const POSSIBLE_THRESHOLD = 50;
 const PROBABLE_THRESHOLD = 70;
 const MIN_R_SQUARED = 0.25;
@@ -64,13 +67,19 @@ export function projectFromSlope(
     return {
       slope,
       rSquared,
+      daysToEmerging: null,
       daysToPossible: null,
       daysToProbable: null,
+      projectedEmergingDate: null,
       projectedPossibleDate: null,
       projectedProbableDate: null,
     };
   }
 
+  const daysToEmerging =
+    currentScore >= EMERGING_THRESHOLD
+      ? 0
+      : Math.min(MAX_PROJECTION_DAYS, Math.ceil((EMERGING_THRESHOLD - currentScore) / slope));
   const daysToPossible =
     currentScore >= POSSIBLE_THRESHOLD
       ? 0
@@ -90,8 +99,10 @@ export function projectFromSlope(
   return {
     slope,
     rSquared,
+    daysToEmerging,
     daysToPossible,
     daysToProbable,
+    projectedEmergingDate: daysToEmerging > 0 ? addDays(daysToEmerging) : null,
     projectedPossibleDate: daysToPossible > 0 ? addDays(daysToPossible) : null,
     projectedProbableDate: daysToProbable > 0 ? addDays(daysToProbable) : null,
   };
@@ -101,8 +112,10 @@ function emptyProjection(): SlopeProjection {
   return {
     slope: 0,
     rSquared: 0,
+    daysToEmerging: null,
     daysToPossible: null,
     daysToProbable: null,
+    projectedEmergingDate: null,
     projectedPossibleDate: null,
     projectedProbableDate: null,
   };

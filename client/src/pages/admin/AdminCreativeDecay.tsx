@@ -97,7 +97,12 @@ function AnalysisTab() {
   const [analysisRunId, setAnalysisRunId] = useState<string | null>(null);
   const [saveLabel, setSaveLabel] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const { data: accountData } = trpc.meta.getAdAccountsByTokenId.useQuery({ tokenId: tokenId! }, { enabled: !!tokenId, staleTime: 300_000 });
   const accounts = accountData?.accounts ?? [];
@@ -290,7 +295,7 @@ function AnalysisTab() {
           </div>
 
           {/* Results table */}
-          <ResultsTable rows={results} expandedRow={expandedRow} setExpandedRow={setExpandedRow} />
+          <ResultsTable rows={results} expandedRows={expandedRows} toggleRow={toggleRow} />
         </section>
       )}
 
@@ -533,7 +538,12 @@ function ReportsTab() {
   const { data: reportDetail } = trpc.creativeDecay.getDecayReportById.useQuery(
     { id: selectedReport! }, { enabled: selectedReport !== null },
   );
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setExpandedRows(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const detailRows: ResultRow[] = useMemo(() => {
     if (!reportDetail?.reportJson) return [];
@@ -609,7 +619,7 @@ function ReportsTab() {
             </h2>
           </div>
           <div className="p-4">
-            <ResultsTable rows={detailRows} expandedRow={expandedRow} setExpandedRow={setExpandedRow} />
+            <ResultsTable rows={detailRows} expandedRows={expandedRows} toggleRow={toggleRow} />
           </div>
         </section>
       )}
@@ -700,6 +710,7 @@ type ResultRow = {
   projection?: {
     slope: number;
     rSquared: number;
+    projectedEmergingDate?: string | null;
     projectedPossibleDate?: string | null;
     projectedProbableDate?: string | null;
   } | null;
@@ -708,8 +719,8 @@ type ResultRow = {
   velocityGuidance?: string | null;
 };
 
-function ResultsTable({ rows, expandedRow, setExpandedRow }: {
-  rows: ResultRow[]; expandedRow: string | null; setExpandedRow: (id: string | null) => void;
+function ResultsTable({ rows, expandedRows, toggleRow }: {
+  rows: ResultRow[]; expandedRows: Set<string>; toggleRow: (id: string) => void;
 }) {
   // Sort by fatigue severity: URGENT > REFRESH > MONITOR > others
   const sorted = useMemo(() => [...rows].sort((a, b) => {
@@ -728,11 +739,11 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
           </thead>
           <tbody>
             {sorted.map((r) => {
-              const isExpanded = expandedRow === r.creativeId;
+              const isExpanded = expandedRows.has(r.creativeId);
               return (
                 <>
                   <tr key={r.creativeId}
-                    onClick={() => setExpandedRow(isExpanded ? null : r.creativeId)}
+                    onClick={() => toggleRow(r.creativeId)}
                     className="cursor-pointer"
                     style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.72)", background: isExpanded ? "rgba(26,108,246,0.05)" : "transparent" }}>
                     <Td>{isExpanded ? <ChevronUp size={12} /> : <ChevronRight size={12} />}</Td>
@@ -815,10 +826,11 @@ function ResultsTable({ rows, expandedRow, setExpandedRow }: {
                           })()}
                           {r.projection && (
                             <>
-                              <EvidencePill label="Slope (pts/day)" value={r.projection.slope.toFixed(2)} />
-                              <EvidencePill label="R\u00b2" value={r.projection.rSquared.toFixed(2)} />
-                              {r.projection.projectedPossibleDate && <EvidencePill label="\u2192 Possible" value={r.projection.projectedPossibleDate} />}
-                              {r.projection.projectedProbableDate && <EvidencePill label="\u2192 Probable" value={r.projection.projectedProbableDate} />}
+                                           <EvidencePill label="Slope (pts/day)" value={r.projection.slope.toFixed(2)} />
+                              <EvidencePill label="R²" value={r.projection.rSquared.toFixed(2)} />
+                              {r.projection.projectedEmergingDate && <EvidencePill label="→ Emerging" value={r.projection.projectedEmergingDate} />}
+                              {r.projection.projectedPossibleDate && <EvidencePill label="→ Possible" value={r.projection.projectedPossibleDate} />}
+                              {r.projection.projectedProbableDate && <EvidencePill label="→ Probable" value={r.projection.projectedProbableDate} />}
                             </>
                           )}
                         </div>

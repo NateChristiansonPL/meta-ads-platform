@@ -183,6 +183,13 @@
       "when": 1779146428716,
       "tag": "0025_narrow_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1779150551465,
+      "tag": "0026_stiff_spiral",
+      "breakpoints": true
     }
   ]
 }

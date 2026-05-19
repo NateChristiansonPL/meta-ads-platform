@@ -829,3 +829,9 @@
 - [x] Update Slack notification body with impact, projection, and velocity data
 - [x] Write Vitest tests for `computeImpact`, `projectFromSlope`, `classifyVelocity`, `findFirstCrossings`
 - [x] TypeScript: 0 errors
+
+## Creative Decay Bug Fixes (May 2026 — Round 2)
+
+- [x] Fix expiring Facebook CDN image URLs: skip storing fbcdn.net URLs in ad_source_details.image_url during sync; hide img tag gracefully in UI when URL is a CDN URL
+- [x] Add emerging signal projection: compute projected date for emerging threshold (score ≥ 30) in decayVelocity.ts and display it as a pill alongside possible/probable projections
+- [x] Fix expand collision: change expandedRow state from single string to Set<string> so multiple rows can be expanded independently at the same time

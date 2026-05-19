@@ -202,17 +202,26 @@ function parseCreative(
       : objectType === "SHARE" || linkData
         ? "image"
         : null;
+  // Only store image URLs that are stable (not expiring Facebook CDN URLs).
+  // Facebook CDN URLs (fbcdn.net, scontent-*.xx.fbcdn.net) contain session-bound
+  // parameters (_nc_tpa, _nc_sid, emg0_p64x64, etc.) that expire and cause the
+  // raw URL string to bleed into the UI when the <img> fails to load.
+  const rawImageUrl =
+    String(
+      creative.thumbnail_url ??
+      linkData?.picture ??
+      feedImages?.[0]?.url ??
+      feedVideos?.[0]?.thumbnail_url ??
+      ""
+    ) || null;
+  const isFbcdnUrl = (url: string | null): boolean =>
+    url !== null && (url.includes("fbcdn.net") || url.includes("fb.com/"));
+  const stableImageUrl = isFbcdnUrl(rawImageUrl) ? null : rawImageUrl;
+
   return {
     creativeId,
     mediaType,
-    imageUrl:
-      String(
-        creative.thumbnail_url ??
-        linkData?.picture ??
-        feedImages?.[0]?.url ??
-        feedVideos?.[0]?.thumbnail_url ??
-        ""
-      ) || null,
+    imageUrl: stableImageUrl,
     imageHash,
     videoId,
     contentFingerprint: buildFingerprint(creativeId, imageHash, videoId),

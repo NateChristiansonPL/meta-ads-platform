@@ -1,0 +1,70 @@
+{
+  "query": "SELECT content_fingerprint, ad_name, LENGTH(image_url) as img_len, LEFT(image_url, 120) as img_preview FROM ad_source_details WHERE LENGTH(image_url) > 200 ORDER BY img_len DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT content_fingerprint, ad_name, LENGTH(image_url) as img_len, LEFT(image_url, 120) as img_preview FROM ad_source_details WHERE LENGTH(image_url) > 200 ORDER BY img_len DESC LIMIT 10;",
+  "rows": [
+    {
+      "content_fingerprint": "1ff6896c61de8c86",
+      "ad_name": "Necoa - Meta - Sales - LAL - Influencer - Maria Sanchez - Video - April 26",
+      "img_len": "560",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&cc"
+    },
+    {
+      "content_fingerprint": "867fdbf3e2107383",
+      "ad_name": "Necoa - Meta - Austin - Sales - LAL - Influencer - Ziyah Holman - Video - April 26",
+      "img_len": "560",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/660122387_18572757892005706_3169805580274369268_n.jpg?_nc_cat=111&cc"
+    },
+    {
+      "content_fingerprint": "086a262ef983dc3c",
+      "ad_name": "Necoa - Meta - Austin - Sales - Retargeting - Influencer - Ziyah Holman - Video - April 26",
+      "img_len": "560",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/660122387_18572757892005706_3169805580274369268_n.jpg?_nc_cat=111&cc"
+    },
+    {
+      "content_fingerprint": "aeb58df0c9a06bf5",
+      "ad_name": "Necoa - Meta - Sales - Retargeting - Influencer - Maria Sanchez - Video - April 26",
+      "img_len": "560",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&cc"
+    },
+    {
+      "content_fingerprint": "22d1c36a23e6ac14",
+      "ad_name": "Necoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - May 2026",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/690771608_1672856044040804_7040515740593709997_n.jpg?_nc_cat=108&ccb="
+    },
+    {
+      "content_fingerprint": "738cbd748d96ea05",
+      "ad_name": "Necoa - Meta -  Houston - Sales - Retargeting - Talk Clean to Me - Male Talent - Video - May 2026",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb="
+    },
+    {
+      "content_fingerprint": "ce18f4384cb9d712",
+      "ad_name": "Necoa - Meta - Austin - Sales - LAL - Influencer - Ziyah Holman - Video - May 26",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/693755108_1660726198476622_5692953198419141049_n.jpg?_nc_cat=109&ccb="
+    },
+    {
+      "content_fingerprint": "292ea6544e73c590",
+      "ad_name": "Necoa - Meta - Austin - Sales - Retargeting - Talk Clean to Me - Male Talent - Video - May 2026",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb="
+    },
+    {
+      "content_fingerprint": "738cbd748d96ea05",
+      "ad_name": "Necoa - Meta -  DFW- Sales - LAL - Talk Clean to Me - Male Talent - Video - May 2026",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb="
+    },
+    {
+      "content_fingerprint": "febb8857f556b546",
+      "ad_name": "Necoa - DFW - Traffic - Health & Lifestyle - Influencer - Maria Sanchez - Video - April 26",
+      "img_len": "558",
+      "img_preview": "https://scontent-sof1-1.xx.fbcdn.net/v/t15.5256-10/673830400_1313833457287120_1494728383437287540_n.jpg?_nc_cat=104&ccb="
+    }
+  ],
+  "messages": [],
+  "stdout": "content_fingerprint\tad_name\timg_len\timg_preview\n1ff6896c61de8c86\tNecoa - Meta - Sales - LAL - Influencer - Maria Sanchez - Video - April 26\t560\thttps://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&cc\n867fdbf3e2107383\tNecoa - Meta - Austin - Sales - LAL - Influencer - Ziyah Holman - Video - April 26\t560\thttps://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/660122387_18572757892005706_3169805580274369268_n.jpg?_nc_cat=111&cc\n086a262ef983dc3c\tNecoa - Meta - Austin - Sales - Retargeting - Influencer - Ziyah Holman - Video - April 26\t560\thttps://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/660122387_18572757892005706_3169805580274369268_n.jpg?_nc_cat=111&cc\naeb58df0c9a06bf5\tNecoa - Meta - Sales - Retargeting - Influencer - Maria Sanchez - Video - April 26\t560\thttps://scontent-sof1-2.xx.fbcdn.net/v/t51.82787-10/672346529_18580533580014031_8713893397232297430_n.jpg?_nc_cat=107&cc\n22d1c36a23e6ac14\tNecoa - Meta - Austin - Traffic - Health & Lifestyle - Influencer - Ziyah Holman - Video - May 2026\t558\thttps://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/690771608_1672856044040804_7040515740593709997_n.jpg?_nc_cat=108&ccb=\n738cbd748d96ea05\tNecoa - Meta -  Houston - Sales - Retargeting - Talk Clean to Me - Male Talent - Video - May 2026\t558\thttps://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb=\nce18f4384cb9d712\tNecoa - Meta - Austin - Sales - LAL - Influencer - Ziyah Holman - Video - May 26\t558\thttps://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/693755108_1660726198476622_5692953198419141049_n.jpg?_nc_cat=109&ccb=\n292ea6544e73c590\tNecoa - Meta - Austin - Sales - Retargeting - Talk Clean to Me - Male Talent - Video - May 2026\t558\thttps://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb=\n738cbd748d96ea05\tNecoa - Meta -  DFW- Sales - LAL - Talk Clean to Me - Male Talent - Video - May 2026\t558\thttps://scontent-sof1-2.xx.fbcdn.net/v/t15.5256-10/689758241_1889072915110045_5045780256062542488_n.jpg?_nc_cat=111&ccb=\nfebb8857f556b546\tNecoa - DFW - Traffic - Health & Lifestyle - Influencer - Maria Sanchez - Video - April 26\t558\thttps://scontent-sof1-1.xx.fbcdn.net/v/t15.5256-10/673830400_1313833457287120_1494728383437287540_n.jpg?_nc_cat=104&ccb=\n",
+  "stderr": "",
+  "execution_time_ms": 269
+}

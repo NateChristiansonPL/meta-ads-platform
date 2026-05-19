@@ -519,6 +519,7 @@ async function analyzeStoredPerformance(input: {
       // ── Enrichment 3: Score-Trajectory Projection ────────────────────────
       dailyScoreSlope: null as string | null,
       slopeRSquared: null as string | null,
+      projectedEmergingDate: null as string | null,
       projectedPossibleDate: null as string | null,
       projectedProbableDate: null as string | null,
       // ── Enrichment 4: Decay Velocity ─────────────────────────────────────
@@ -732,6 +733,7 @@ async function analyzeStoredPerformance(input: {
     if (proj.slope > 0 && proj.rSquared >= 0.25) {
       row.dailyScoreSlope = proj.slope.toFixed(4);
       row.slopeRSquared = proj.rSquared.toFixed(4);
+      row.projectedEmergingDate = proj.projectedEmergingDate;
       row.projectedPossibleDate = proj.projectedPossibleDate;
       row.projectedProbableDate = proj.projectedProbableDate;
     }
@@ -754,6 +756,7 @@ async function analyzeStoredPerformance(input: {
         .set({
           dailyScoreSlope: row.dailyScoreSlope,
           slopeRSquared: row.slopeRSquared,
+          projectedEmergingDate: row.projectedEmergingDate,
           projectedPossibleDate: row.projectedPossibleDate,
           projectedProbableDate: row.projectedProbableDate,
           decayVelocity: row.decayVelocity,
@@ -966,6 +969,7 @@ function mapResult(
     projection: row.dailyScoreSlope ? {
       slope: num(row.dailyScoreSlope),
       rSquared: num(row.slopeRSquared),
+      projectedEmergingDate: row.projectedEmergingDate ?? null,
       projectedPossibleDate: row.projectedPossibleDate ?? null,
       projectedProbableDate: row.projectedProbableDate ?? null,
     } : null,
