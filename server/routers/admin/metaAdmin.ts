@@ -2174,28 +2174,30 @@ export const metaAdminRouter = router({
       try {
         const bmId = tokenRecord.businessManagerId;
         type RawPixel = { id: string; name: string };
-        const mapPixel = (p: RawPixel) => ({ id: p.id, name: p.name });
+        const mapItem = (p: RawPixel, source: 'pixel' | 'dataset') => ({ id: p.id, name: p.name, source });
 
-        const [ownedData, clientData] = await Promise.allSettled([
+        const [ownedPixels, clientPixels, ownedDatasets, clientDatasets] = await Promise.allSettled([
           metaGet(`/${bmId}/owned_pixels`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
           metaGet(`/${bmId}/client_pixels`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
+          metaGet(`/${bmId}/owned_offline_conversion_data_sets`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
+          metaGet(`/${bmId}/client_offline_conversion_data_sets`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
         ]);
 
-        const ownedPixels: ReturnType<typeof mapPixel>[] =
-          ownedData.status === 'fulfilled' ? (ownedData.value.data || []).map(mapPixel) : [];
-        const clientPixels: ReturnType<typeof mapPixel>[] =
-          clientData.status === 'fulfilled' ? (clientData.value.data || []).map(mapPixel) : [];
+        const ownedPx = ownedPixels.status === 'fulfilled' ? (ownedPixels.value.data || []).map((p: RawPixel) => mapItem(p, 'pixel')) : [];
+        const clientPx = clientPixels.status === 'fulfilled' ? (clientPixels.value.data || []).map((p: RawPixel) => mapItem(p, 'pixel')) : [];
+        const ownedDs = ownedDatasets.status === 'fulfilled' ? (ownedDatasets.value.data || []).map((p: RawPixel) => mapItem(p, 'dataset')) : [];
+        const clientDs = clientDatasets.status === 'fulfilled' ? (clientDatasets.value.data || []).map((p: RawPixel) => mapItem(p, 'dataset')) : [];
 
         const seen = new Set<string>();
-        const pixels: ReturnType<typeof mapPixel>[] = [];
-        for (const p of [...ownedPixels, ...clientPixels]) {
+        const pixels: ReturnType<typeof mapItem>[] = [];
+        for (const p of [...ownedPx, ...clientPx, ...ownedDs, ...clientDs]) {
           if (!seen.has(p.id)) { seen.add(p.id); pixels.push(p); }
         }
         return { pixels };
       } catch (err) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: `Failed to fetch pixels: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Failed to fetch pixels/datasets: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
     }),

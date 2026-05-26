@@ -270,19 +270,19 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
             )}
           </Section>
 
-          {/* ── Step 5: Pixel ID ── */}
-          <Section icon={Zap} label="Pixel ID" step={5} optional>
+          {/* ── Step 5: Pixel / Dataset ID ── */}
+          <Section icon={Zap} label="Pixel / Dataset" step={5} optional>
             {!settings.tokenId ? (
               <DisabledRow text="Select a Business Manager first" />
             ) : loadingPixels ? (
-              <LoadingRow text="Loading pixels…" />
+              <LoadingRow text="Loading pixels & datasets…" />
             ) : pixels.length === 0 ? (
               <div className="space-y-2">
-                <EmptyRow text="No pixels found via BM. Enter the Pixel ID manually:" />
+                <EmptyRow text="No pixels or datasets found via BM. Enter the ID manually:" />
                 <ManualInput
                   value={settings.pixelId}
                   onChange={v => onUpdate({ ...settings, pixelId: v, pixelName: '' })}
-                  placeholder="Pixel ID (e.g. 123456789)"
+                  placeholder="Pixel or Dataset ID (e.g. 123456789)"
                   mono
                   hint="Used for conversion tracking on all ads"
                 />
@@ -295,13 +295,16 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
                   search={pixelSearch}
                   onSearchChange={setPixelSearch}
                   onChange={handlePixelChange}
-                  placeholder="Search pixels…"
+                  placeholder="Search pixels & datasets…"
                   options={pixels
-                    .filter((p: { id: string; name: string }) => {
+                    .filter((p: { id: string; name: string; source?: string }) => {
                       const q = pixelSearch.toLowerCase();
                       return !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
                     })
-                    .map((p: { id: string; name: string }) => ({ value: p.id, label: `${p.name} (${p.id})` }))}
+                    .map((p: { id: string; name: string; source?: string }) => ({
+                      value: p.id,
+                      label: `${p.name} (${p.id})${p.source === 'dataset' ? ' [Dataset]' : ' [Pixel]'}`,
+                    }))}
                 />
                 <div className="flex items-center gap-2 pt-1">
                   <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
@@ -311,13 +314,13 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
                 <ManualInput
                   value={settings.pixelId}
                   onChange={v => onUpdate({ ...settings, pixelId: v, pixelName: '' })}
-                  placeholder="Pixel ID (e.g. 123456789)"
+                  placeholder="Pixel or Dataset ID (e.g. 123456789)"
                   mono
-                  hint="Paste a pixel ID if it's not listed above"
+                  hint="Paste a pixel or dataset ID if it's not listed above"
                 />
               </div>
             )}
-            <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Used for conversion tracking on all ads</p>
+            <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Used for conversion tracking on all ads (pixels & offline datasets)</p>
           </Section>
 
           {/* ── Status summary ── */}
