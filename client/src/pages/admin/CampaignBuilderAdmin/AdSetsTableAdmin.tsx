@@ -756,6 +756,30 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   const [bulkLocMatching, setBulkLocMatching] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
 
+  // ── Column resizing ──────────────────────────────────────────────────────────
+  const AD_SET_COL_DEFAULTS: Record<string, number> = {
+    checkbox: 32, status: 100, campaign: 180, name: 180, budget: 120,
+    startEnd: 200, optGoal: 200, convLoc: 160, placements: 130,
+    ageGender: 130, targeting: 140, optFields: 120, actions: 64,
+  };
+  const [colWidths, setColWidths] = useState(AD_SET_COL_DEFAULTS);
+  const resizingCol = useRef<{ key: string; startX: number; startW: number } | null>(null);
+
+  const startResize = (key: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingCol.current = { key, startX: e.clientX, startW: colWidths[key] };
+    const onMove = (me: MouseEvent) => {
+      if (!resizingCol.current) return;
+      const delta = me.clientX - resizingCol.current.startX;
+      setColWidths(prev => ({ ...prev, [resizingCol.current!.key]: Math.max(60, resizingCol.current!.startW + delta) }));
+    };
+    const onUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const colW = (key: string) => ({ width: colWidths[key], minWidth: colWidths[key] });
+
   // ── Row selection (checkboxes) ─────────────────────────────────────────────
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const toggleRowSelect = (id: string) => {
@@ -1025,32 +1049,64 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full border-collapse text-[12px]" style={{ minWidth: 1400 }}>
+      <div className="flex-1 overflow-auto" ref={tableRef}>
+        <table className="border-collapse text-[12px]" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={colW('checkbox')} />
+            <col style={colW('status')} />
+            <col style={colW('campaign')} />
+            <col style={colW('name')} />
+            <col style={colW('budget')} />
+            <col style={colW('startEnd')} />
+            <col style={colW('optGoal')} />
+            <col style={colW('convLoc')} />
+            <col style={colW('placements')} />
+            <col style={colW('ageGender')} />
+            <col style={colW('targeting')} />
+            <col style={colW('optFields')} />
+            <col style={colW('actions')} />
+          </colgroup>
           <thead>
             <tr className="border-b border-border">
-              <Th className="w-8">
-                <input
-                  type="checkbox"
-                  checked={rows.length > 0 && selectedRows.size === rows.length}
-                  ref={el => { if (el) el.indeterminate = selectedRows.size > 0 && selectedRows.size < rows.length; }}
-                  onChange={toggleSelectAll}
-                  className="w-3 h-3 accent-primary cursor-pointer"
-                  title="Select all"
-                />
-              </Th>
-              <Th required>Status</Th>
-              <Th required>Campaign</Th>
-              <Th required>Ad Set Name</Th>
-              <Th required>Budget</Th>
-              <Th required>Start / End</Th>
-              <Th required>Opt Goal</Th>
-              <Th>Conv. Location</Th>
-              <Th required>Placements</Th>
-              <Th>Age / Gender</Th>
-              <Th>Targeting</Th>
-              <Th>Optional Fields</Th>
-              <Th className="w-16" />
+              {[
+                { key: 'checkbox', label: '', isCheckbox: true },
+                { key: 'status', label: 'Status', required: true },
+                { key: 'campaign', label: 'Campaign', required: true },
+                { key: 'name', label: 'Ad Set Name', required: true },
+                { key: 'budget', label: 'Budget', required: true },
+                { key: 'startEnd', label: 'Start / End', required: true },
+                { key: 'optGoal', label: 'Opt Goal', required: true },
+                { key: 'convLoc', label: 'Conv. Location' },
+                { key: 'placements', label: 'Placements', required: true },
+                { key: 'ageGender', label: 'Age / Gender' },
+                { key: 'targeting', label: 'Targeting' },
+                { key: 'optFields', label: 'Optional Fields' },
+                { key: 'actions', label: '' },
+              ].map(col => (
+                <th key={col.key} className={cn(
+                  'relative px-2 py-2 text-left text-[10px] font-700 tracking-wider border-r border-border last:border-r-0 whitespace-nowrap sticky top-0 bg-surface-1 z-10',
+                  'text-muted-foreground'
+                )}>
+                  {(col as any).isCheckbox ? (
+                    <input
+                      type="checkbox"
+                      checked={rows.length > 0 && selectedRows.size === rows.length}
+                      ref={el => { if (el) el.indeterminate = selectedRows.size > 0 && selectedRows.size < rows.length; }}
+                      onChange={toggleSelectAll}
+                      className="w-3 h-3 accent-primary cursor-pointer"
+                      title="Select all"
+                    />
+                  ) : (
+                    <>{col.label}{col.required && <span className="text-primary ml-0.5">*</span>}</>
+                  )}
+                  {col.key !== 'checkbox' && col.key !== 'actions' && (
+                    <div
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors"
+                      onMouseDown={e => startResize(col.key, e)}
+                    />
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -1092,7 +1148,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Status */}
-                    <td className="border-r border-border/30 p-0 min-w-[100px]">
+                    <td className="border-r border-border/30 p-0">
                       <BtnGroup
                         options={[
                           { value: 'ACTIVE', label: 'Active', color: 'green' },
@@ -1104,7 +1160,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Campaign */}
-                    <td className="border-r border-border/30 p-0 min-w-[160px]">
+                    <td className="border-r border-border/30 p-0">
                       <select
                         value={row.campaignName}
                         onChange={e => {
@@ -1127,7 +1183,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Ad Set Name */}
-                    <td className="border-r border-border/30 p-0 min-w-[180px]">
+                    <td className="border-r border-border/30 p-0">
                       <CellInput
                         value={row.name}
                         onChange={v => update(row.id, { name: v })}
@@ -1136,7 +1192,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Budget */}
-                    <td className="border-r border-border/30 p-0 min-w-[110px]">
+                    <td className="border-r border-border/30 p-0">
                       <div className="flex flex-col px-1.5 py-1 gap-0.5">
                         <BtnGroup
                           options={[
@@ -1161,7 +1217,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Start / End combined */}
-                    <td className="border-r border-border/30 p-0 min-w-[180px]">
+                    <td className="border-r border-border/30 p-0">
                       <div className="flex flex-col divide-y divide-border/30">
                         <input
                           type="datetime-local"
@@ -1185,7 +1241,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Optimization Goal */}
-                    <td className="border-r border-border/30 p-0 min-w-[200px]">
+                    <td className="border-r border-border/30 p-0">
                       <div className="space-y-0.5">
                         <select
                           value={row.optimizationGoal}
@@ -1292,7 +1348,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Conversion Location */}
-                    <td className="border-r border-border/30 p-0 min-w-[160px]">
+                    <td className="border-r border-border/30 p-0">
                       <select
                         value={row.conversionLocation}
                         onChange={e => update(row.id, { conversionLocation: e.target.value as import('./campaignStoreAdmin').ConversionLocation })}
@@ -1320,7 +1376,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Age + Gender combined */}
-                    <td className="border-r border-border/30 p-0 min-w-[120px]">
+                    <td className="border-r border-border/30 p-0">
                       <div className={cn('flex flex-col divide-y divide-border/30', sacRestricted && 'opacity-40 pointer-events-none')}>
                         {/* Age row */}
                         <div className="flex items-center gap-0.5 px-1.5 py-0.5">
@@ -1352,7 +1408,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                     </td>
 
                     {/* Unified Targeting — inline popup (like Placements) */}
-                    <td className="border-r border-border/30 p-0 min-w-[130px] relative">
+                    <td className="border-r border-border/30 p-0 relative">
                       <button
                         onClick={() => {
                           if (targetingModal?.rowId === row.id) { closeTargetingModal(); }
