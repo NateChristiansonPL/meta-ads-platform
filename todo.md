@@ -847,3 +847,9 @@
 ## Campaign Builder — Bulk Ad Set Actions (May 2026)
 
 - [x] Bulk duplicate (AdSetsTableAdmin only): separate button in toolbar; opens a campaign selection modal to choose which campaign to duplicate the selected ad sets into; carries over all settings, keeps optimization goal as-is
+
+## Campaign Builder — Available to All Users (May 2026)
+
+- [x] Replace Coming Soon Campaign Builder placeholder in sidebar with actual working Campaign Builder route
+- [x] Add /campaign-builder route pointing to the admin campaign builder component (or a shared version)
+- [x] Ensure non-admin users can access the campaign builder and launch builds (check tRPC procedure permissions)

@@ -145,7 +145,7 @@ function Router() {
           <Route path="/admin/profile" component={AdminUserProfile} />
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
-          <Route path="/campaign-builder" component={CampaignBuilder} />
+          <Route path="/campaign-builder" component={CampaignBuilderAdmin} />
           <Route path="/knowledge" component={KnowledgeBase} />
           <Route path="/404" component={NotFound} />
           <Route component={NotFound} />

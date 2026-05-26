@@ -389,20 +389,15 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
             </div>
           </div>
 
-          {/* Coming Soon section */}
+          {/* Tools section */}
           <div className="px-3 pt-4">
             <div className="flex items-center gap-1.5 mb-2 px-2">
               <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Coming Soon
+                Tools
               </p>
-              <HelpTip
-                content="Campaign Builder lets you build and launch campaigns directly from the platform. Additional automation tools are in development."
-                side="right"
-                size={11}
-              />
             </div>
             <div className="flex flex-col gap-0.5">
-              {/* Campaign Builder */}
+              {/* Campaign Builder — available to all users */}
               <NavItem
                 icon={Hammer}
                 label="Campaign Builder"
