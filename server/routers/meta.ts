@@ -327,21 +327,7 @@ export const metaRouter = router({
           // pixel stats may fail if pixel has no recent events — continue
         }
 
-        // 1b. Identify which events have Conversions API (server-side) data
-        try {
-          const serverStats = await metaGet(
-            `/${pixelId}/stats`,
-            { aggregation: "event", start_time: String(thirtyDaysAgo), event_source: "server" },
-            accessToken
-          );
-          for (const bucket of serverStats.data || []) {
-            for (const item of (bucket.data || [])) {
-              if (item.value) capiEvents.add(item.value as string);
-            }
-          }
-        } catch {
-          // server event source query may not be supported — continue without badges
-        }
+        // 1b. capiEvents will be populated from custom conversion names below
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
         const customConversions: { id: string; name: string; rule?: string }[] = [];
@@ -364,6 +350,13 @@ export const metaRouter = router({
             }
           } catch {
             // custom conversions may not be accessible — continue
+          }
+        }
+
+        // Populate capiEvents: events that match a custom conversion name have CAPI set up
+        for (const cc of customConversions) {
+          if (eventSet.has(cc.name)) {
+            capiEvents.add(cc.name);
           }
         }
 
