@@ -260,6 +260,7 @@ export interface BuildSettings {
   instagramUserId: string;
   instagramUsername: string;
   pixelId: string;
+  pixelName: string;
 }
 
 // ── Reach / Overlap history types ───────────────────────────────────────────

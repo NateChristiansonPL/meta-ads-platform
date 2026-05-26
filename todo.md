@@ -835,3 +835,11 @@
 - [x] Fix expiring Facebook CDN image URLs: skip storing fbcdn.net URLs in ad_source_details.image_url during sync; hide img tag gracefully in UI when URL is a CDN URL
 - [x] Add emerging signal projection: compute projected date for emerging threshold (score ≥ 30) in decayVelocity.ts and display it as a pill alongside possible/probable projections
 - [x] Fix expand collision: change expandedRow state from single string to Set<string> so multiple rows can be expanded independently at the same time
+
+## Campaign Builder Account Setup Fixes (May 2026)
+
+- [x] Server: merge owned_pages + client_pages in getFacebookPagesByTokenId (both meta.ts and metaAdmin.ts) — always return combined deduplicated list
+- [x] Server: add getPixelsByTokenId procedure to meta.ts — fetch owned_pixels + client_pixels from BM, return combined deduplicated list with id and name
+- [x] UI: update SettingsDrawer pixel step to use SearchableSelect dropdown (same pattern as ad accounts) instead of ManualInput text field
+- [x] UI: keep manual fallback input for pixel if dropdown returns empty (same pattern as pages)
+- [x] UI: store pixelName alongside pixelId in BuildSettings so status summary can show the pixel name

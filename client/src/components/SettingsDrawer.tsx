@@ -38,6 +38,15 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
     );
   const fbPages = pagesData?.pages ?? [];
 
+  // ── Pixels (loaded when tokenId changes) ───────────────────────────────────
+  const [pixelSearch, setPixelSearch] = useState('');
+  const { data: pixelsData, isLoading: loadingPixels } =
+    trpc.meta.getPixelsByTokenId.useQuery(
+      { tokenId: settings.tokenId! },
+      { enabled: !!settings.tokenId, staleTime: 60_000 }
+    );
+  const pixels = pixelsData?.pixels ?? [];
+
   // ── Instagram accounts (loaded when facebookPageId changes) ────────────────
   const { data: igData, isLoading: loadingIg } =
     trpc.meta.getInstagramAccountsByPage.useQuery(
@@ -76,9 +85,18 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
       facebookPageName: '',
       instagramUserId: '',
       instagramUsername: '',
+      pixelId: '',
+      pixelName: '',
     });
     setAdAccountSearch('');
     setPageSearch('');
+    setPixelSearch('');
+  };
+
+  const handlePixelChange = (id: string) => {
+    const px = pixels.find((p: { id: string; name: string }) => p.id === id);
+    onUpdate({ ...settings, pixelId: id, pixelName: px?.name ?? '' });
+    setPixelSearch('');
   };
 
   const handleAdAccountChange = (id: string) => {
@@ -244,13 +262,38 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
 
           {/* ── Step 5: Pixel ID ── */}
           <Section icon={Zap} label="Pixel ID" step={5} optional>
-            <ManualInput
-              value={settings.pixelId}
-              onChange={v => set('pixelId', v)}
-              placeholder="Pixel ID (e.g. 123456789)"
-              mono
-              hint="Used for conversion tracking on all ads"
-            />
+            {!settings.tokenId ? (
+              <DisabledRow text="Select a Business Manager first" />
+            ) : loadingPixels ? (
+              <LoadingRow text="Loading pixels…" />
+            ) : pixels.length === 0 ? (
+              <div className="space-y-2">
+                <EmptyRow text="No pixels found via BM. Enter the Pixel ID manually:" />
+                <ManualInput
+                  value={settings.pixelId}
+                  onChange={v => onUpdate({ ...settings, pixelId: v, pixelName: '' })}
+                  placeholder="Pixel ID (e.g. 123456789)"
+                  mono
+                  hint="Used for conversion tracking on all ads"
+                />
+              </div>
+            ) : (
+              <SearchableSelect
+                value={settings.pixelId}
+                selectedLabel={settings.pixelId ? `${settings.pixelName || settings.pixelId} (${settings.pixelId})` : ''}
+                search={pixelSearch}
+                onSearchChange={setPixelSearch}
+                onChange={handlePixelChange}
+                placeholder="Search pixels…"
+                options={pixels
+                  .filter((p: { id: string; name: string }) => {
+                    const q = pixelSearch.toLowerCase();
+                    return !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+                  })
+                  .map((p: { id: string; name: string }) => ({ value: p.id, label: `${p.name} (${p.id})` }))}
+              />
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1">Used for conversion tracking on all ads</p>
           </Section>
 
           {/* ── Status summary ── */}
@@ -285,7 +328,7 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
                 />
               )}
               {settings.pixelId && (
-                <StatusRow ok label="Pixel" value={settings.pixelId} />
+                <StatusRow ok label="Pixel" value={settings.pixelName ? `${settings.pixelName} (${settings.pixelId})` : settings.pixelId} />
               )}
             </div>
           )}

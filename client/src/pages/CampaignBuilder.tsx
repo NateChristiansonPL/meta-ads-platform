@@ -46,6 +46,7 @@ function makeInitialSettings(): BuildSettings {
     instagramUserId: "",
     instagramUsername: "",
     pixelId: "",
+    pixelName: "",
     sheetUrl: "",
   };
 }

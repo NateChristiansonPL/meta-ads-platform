@@ -2130,39 +2130,72 @@ export const metaAdminRouter = router({
       }
       try {
         const bmId = tokenRecord.businessManagerId;
-        const data = await metaGet(
-          `/${bmId}/owned_pages`,
-          { fields: "id,name,picture", limit: "200" },
-          tokenRecord.accessToken
-        );
-        const pages = (data.data || []).map(
-          (p: { id: string; name: string; picture?: { data?: { url?: string } } }) => ({
-            id: p.id,
-            name: p.name,
-            pictureUrl: p.picture?.data?.url ?? null,
-          })
-        );
-        // Also try client pages if no owned pages found
-        if (pages.length === 0) {
-          const clientData = await metaGet(
-            `/${bmId}/client_pages`,
-            { fields: "id,name,picture", limit: "200" },
-            tokenRecord.accessToken
-          );
-          const clientPages = (clientData.data || []).map(
-            (p: { id: string; name: string; picture?: { data?: { url?: string } } }) => ({
-              id: p.id,
-              name: p.name,
-              pictureUrl: p.picture?.data?.url ?? null,
-            })
-          );
-          return { pages: clientPages };
+        type RawPage = { id: string; name: string; picture?: { data?: { url?: string } } };
+        const mapPage = (p: RawPage) => ({ id: p.id, name: p.name, pictureUrl: p.picture?.data?.url ?? null });
+
+        const [ownedData, clientData] = await Promise.allSettled([
+          metaGet(`/${bmId}/owned_pages`, { fields: "id,name,picture", limit: "200" }, tokenRecord.accessToken),
+          metaGet(`/${bmId}/client_pages`, { fields: "id,name,picture", limit: "200" }, tokenRecord.accessToken),
+        ]);
+
+        const ownedPages: ReturnType<typeof mapPage>[] =
+          ownedData.status === "fulfilled" ? (ownedData.value.data || []).map(mapPage) : [];
+        const clientPages: ReturnType<typeof mapPage>[] =
+          clientData.status === "fulfilled" ? (clientData.value.data || []).map(mapPage) : [];
+
+        const seen = new Set<string>();
+        const pages: ReturnType<typeof mapPage>[] = [];
+        for (const p of [...ownedPages, ...clientPages]) {
+          if (!seen.has(p.id)) { seen.add(p.id); pages.push(p); }
         }
         return { pages };
       } catch (err) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `Failed to fetch Facebook pages: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }),
+
+  /**
+   * Get Meta Pixels accessible via the BM token (owned + client pixels).
+   */
+  getPixelsByTokenId: protectedProcedure
+    .input(
+      z.object({
+        tokenId: z.number().int().positive(),
+      })
+    )
+    .query(async ({ input }) => {
+      const tokenRecord = await getTokenById(input.tokenId);
+      if (!tokenRecord?.accessToken) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Token not found' });
+      }
+      try {
+        const bmId = tokenRecord.businessManagerId;
+        type RawPixel = { id: string; name: string };
+        const mapPixel = (p: RawPixel) => ({ id: p.id, name: p.name });
+
+        const [ownedData, clientData] = await Promise.allSettled([
+          metaGet(`/${bmId}/owned_pixels`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
+          metaGet(`/${bmId}/client_pixels`, { fields: 'id,name', limit: '200' }, tokenRecord.accessToken),
+        ]);
+
+        const ownedPixels: ReturnType<typeof mapPixel>[] =
+          ownedData.status === 'fulfilled' ? (ownedData.value.data || []).map(mapPixel) : [];
+        const clientPixels: ReturnType<typeof mapPixel>[] =
+          clientData.status === 'fulfilled' ? (clientData.value.data || []).map(mapPixel) : [];
+
+        const seen = new Set<string>();
+        const pixels: ReturnType<typeof mapPixel>[] = [];
+        for (const p of [...ownedPixels, ...clientPixels]) {
+          if (!seen.has(p.id)) { seen.add(p.id); pixels.push(p); }
+        }
+        return { pixels };
+      } catch (err) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Failed to fetch pixels: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
     }),
@@ -2198,7 +2231,6 @@ export const metaAdminRouter = router({
         );
         return { accounts };
       } catch (err) {
-        // Instagram accounts endpoint can fail silently — return empty rather than throwing
         return { accounts: [] };
       }
     }),
