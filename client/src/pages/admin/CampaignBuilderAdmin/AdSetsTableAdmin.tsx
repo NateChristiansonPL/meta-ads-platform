@@ -1292,30 +1292,24 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     const cc = customConversions.find(c => c.id === ccId);
                                     update(row.id, { conversionEvent: cc?.name ?? '', customConversionId: ccId });
                                   } else {
-                                    // Check if this standard event name matches a custom conversion.
-                                    // If so, use the custom_conversion_id instead (Meta requires it for non-standard events).
-                                    const matchingCc = customConversions.find(c => c.name === val);
-                                    if (matchingCc) {
-                                      update(row.id, { conversionEvent: val, customConversionId: matchingCc.id });
-                                    } else {
-                                      update(row.id, { conversionEvent: val, customConversionId: undefined });
-                                    }
+                                    // Standard Meta event selected - use custom_event_type, no custom_conversion_id
+                                    update(row.id, { conversionEvent: val, customConversionId: undefined });
                                   }
                                 }}
                                 className="w-full px-2 py-1 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
                               >
                                 <option value="">Select conversion event…</option>
-                                {pixelEvents.length > 0 && (
-                                  <optgroup label="Standard Events">
-                                    {pixelEvents.map((ev: string) => (
-                                      <option key={ev} value={ev}>{ev}</option>
-                                    ))}
-                                  </optgroup>
-                                )}
                                 {customConversions.length > 0 && (
                                   <optgroup label="Custom Conversions">
                                     {customConversions.map((cc: { id: string; name: string }) => (
                                       <option key={cc.id} value={`cc::${cc.id}`}>{cc.name}</option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {pixelEvents.length > 0 && (
+                                  <optgroup label="Standard Pixel Events">
+                                    {pixelEvents.map((ev: string) => (
+                                      <option key={ev} value={ev}>{ev}</option>
                                     ))}
                                   </optgroup>
                                 )}

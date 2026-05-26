@@ -161,6 +161,7 @@ export interface AdSetRow {
   adScheduling?: string;
   attributionModel?: string;
   leadGenFormId?: string;
+  customConversionId?: string;          // Meta custom conversion ID (when a custom conversion is selected)
   // write-back
   adSetId: string;
 }

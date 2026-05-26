@@ -208,6 +208,12 @@ export function useLaunchBuild(
           } else {
             const budgetCents = Math.round(parseFloat(adSet.budget || '0') * 100);
             const targeting = buildTargetingSpec(adSet);
+            console.log('[LaunchBuild] createAdSet params:', {
+              customConversionId: adSet.customConversionId,
+              conversionEvent: adSet.conversionEvent,
+              conversionLocation: adSet.conversionLocation,
+              pixelId,
+            });
             const result = await createAdSet.mutateAsync({
               accessToken,
               adAccountId,
@@ -222,7 +228,9 @@ export function useLaunchBuild(
               endTime: adSet.endDate ? `${adSet.endDate}T${adSet.endTime || '23:59:59'}` : undefined,
               targeting,
               pixelId: pixelId || undefined,
-              customEventType: adSet.conversionEvent || undefined,
+              // When a custom conversion is selected, don't pass the conversion name as customEventType
+              customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
+              customConversionId: adSet.customConversionId || undefined,
               conversionLocation: adSet.conversionLocation || undefined,
             });
             adSetIdMap[adSet.name] = result.adSetId;

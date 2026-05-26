@@ -875,6 +875,7 @@ export const metaRouter = router({
         conversionLocation: z.string().optional(),
         pixelId: z.string().optional(),
         customEventType: z.string().optional(),
+        customConversionId: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -882,7 +883,7 @@ export const metaRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec,
-        conversionLocation, pixelId, customEventType,
+        conversionLocation, pixelId, customEventType, customConversionId,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -926,9 +927,14 @@ export const metaRouter = router({
       if (attributionSpec) payload.attribution_spec = attributionSpec;
 
       // Promoted object for conversion-based objectives
-      if (pixelId && conversionLocation) {
+      console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType });
+      if (pixelId && (conversionLocation || customConversionId || customEventType)) {
         const promotedObject: Record<string, unknown> = { pixel_id: pixelId };
-        if (customEventType) {
+        if (customConversionId) {
+          // Custom conversion selected: pass ONLY custom_conversion_id
+          // custom_event_type and custom_conversion_id are mutually exclusive in Meta's API
+          promotedObject.custom_conversion_id = customConversionId;
+        } else if (customEventType) {
           promotedObject.custom_event_type = customEventType;
         }
         payload.promoted_object = promotedObject;

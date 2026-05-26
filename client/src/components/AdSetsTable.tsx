@@ -500,6 +500,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
     { enabled: hasPixel, staleTime: 5 * 60 * 1000 }
   );
   const pixelEvents = pixelEventsData?.events ?? [];
+  const customConversions: { id: string; name: string }[] = (pixelEventsData as { customConversions?: { id: string; name: string }[] })?.customConversions ?? [];
 
   // ── Live API: custom audiences ─────────────────────────────────────────────
   const [audienceSearch, setAudienceSearch] = useState('');
@@ -879,16 +880,38 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                         {/* Conversion event */}
                         {showConvEvent && (
                           <div className="px-2 pb-1">
-                            {pixelEvents.length > 0 ? (
+                            {(pixelEvents.length > 0 || customConversions.length > 0) ? (
                               <select
-                                value={row.conversionEvent}
-                                onChange={e => update(row.id, { conversionEvent: e.target.value })}
+                                value={row.customConversionId ? `cc::${row.customConversionId}` : row.conversionEvent}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (val.startsWith('cc::')) {
+                                    const ccId = val.slice(4);
+                                    const cc = customConversions.find(c => c.id === ccId);
+                                    update(row.id, { conversionEvent: cc?.name || '', customConversionId: ccId });
+                                  } else {
+                                    // Standard event selected — check if it matches a custom conversion by name
+                                    const matchingCC = customConversions.find(c => c.name === val);
+                                    update(row.id, { conversionEvent: val, customConversionId: matchingCC?.id || undefined });
+                                  }
+                                }}
                                 className="w-full px-2 py-1 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
                               >
                                 <option value="">Select conversion event…</option>
-                                {pixelEvents.map((ev: string) => (
-                                  <option key={ev} value={ev}>{ev}</option>
-                                ))}
+                                {customConversions.length > 0 && (
+                                  <optgroup label="Custom Conversions">
+                                    {customConversions.map(cc => (
+                                      <option key={`cc-${cc.id}`} value={`cc::${cc.id}`}>{cc.name}</option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {pixelEvents.length > 0 && (
+                                  <optgroup label="Standard Pixel Events">
+                                    {pixelEvents.map((ev: string) => (
+                                      <option key={ev} value={ev}>{ev}</option>
+                                    ))}
+                                  </optgroup>
+                                )}
                               </select>
                             ) : (
                               <CellInput
