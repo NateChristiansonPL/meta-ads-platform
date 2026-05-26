@@ -186,6 +186,13 @@ export function useLaunchBuild(
             // Resolve the parent campaign's objective so the server can gate
             // promoted_object and attribution_spec correctly per Issues 4, 5, 6.
             const parentCampaign = campaigns.find(c => c.name === adSet.campaignName);
+            // Debug: log what's being sent
+            console.log('[LaunchBuild] adSet.customConversionId:', adSet.customConversionId);
+            console.log('[LaunchBuild] adSet.conversionEvent:', adSet.conversionEvent);
+            console.log('[LaunchBuild] adSet.placementType:', adSet.placementType);
+            console.log('[LaunchBuild] targeting.publisher_platforms:', (targeting as Record<string, unknown>).publisher_platforms);
+            console.log('[LaunchBuild] pixelId:', pixelId);
+            console.log('[LaunchBuild] parentCampaign?.objective:', parentCampaign?.objective);
             const result = await createAdSet.mutateAsync({
               accessToken,
               adAccountId,
@@ -200,7 +207,9 @@ export function useLaunchBuild(
               endTime: adSet.endDate ? `${adSet.endDate}T${adSet.endTime || '23:59:59'}` : undefined,
               targeting,
               pixelId: pixelId || undefined,
-              customEventType: adSet.conversionEvent || undefined,
+              // When a custom conversion is selected, don't pass the conversion name as customEventType.
+              // customEventType should only be a standard Meta event type (PURCHASE, LEAD, etc.)
+              customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
               customConversionId: adSet.customConversionId || undefined,
               conversionLocation: adSet.conversionLocation || undefined,
               objective: parentCampaign?.objective || undefined,

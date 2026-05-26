@@ -1166,17 +1166,13 @@ export const metaAdminRouter = router({
       if (objective !== 'OUTCOME_TRAFFIC') {
         if (pixelId) {
           promotedObject.pixel_id = pixelId;
-          if (objective === 'OUTCOME_SALES' || objective === 'OUTCOME_LEADS') {
-            // When a custom conversion is selected, pass its ID to Meta
-            if (customConversionId) {
-              promotedObject.custom_conversion_id = customConversionId;
-              promotedObject.custom_event_type = 'OTHER';
-            } else {
-              promotedObject.custom_event_type = customEventType || 'OTHER';
-            }
-          } else if (customConversionId) {
+          if (customConversionId) {
+            // Custom conversion selected: pass ONLY custom_conversion_id.
+            // custom_event_type and custom_conversion_id are mutually exclusive in Meta's API.
             promotedObject.custom_conversion_id = customConversionId;
-            promotedObject.custom_event_type = 'OTHER';
+          } else if (objective === 'OUTCOME_SALES' || objective === 'OUTCOME_LEADS') {
+            // Standard pixel event for conversion objectives
+            promotedObject.custom_event_type = customEventType || 'OTHER';
           } else if (customEventType) {
             promotedObject.custom_event_type = customEventType;
           }
@@ -1187,6 +1183,14 @@ export const metaAdminRouter = router({
         if (Object.keys(promotedObject).length) payload.promoted_object = promotedObject;
       }
       // For OUTCOME_TRAFFIC: pixel is attached at the ad level via tracking_specs only.
+
+      // Debug: log the final payload being sent to Meta
+      console.log('[createAdSet] promoted_object:', JSON.stringify(payload.promoted_object));
+      console.log('[createAdSet] customConversionId input:', customConversionId);
+      console.log('[createAdSet] customEventType input:', customEventType);
+      console.log('[createAdSet] objective:', objective);
+      console.log('[createAdSet] pixelId:', pixelId);
+      console.log('[createAdSet] targeting.publisher_platforms:', JSON.stringify((targeting as Record<string, unknown>).publisher_platforms));
 
       const data = await metaPost(`/${accountId}/adsets`, stripUndefinedDeep(payload), accessToken);
       return { adSetId: data.id };

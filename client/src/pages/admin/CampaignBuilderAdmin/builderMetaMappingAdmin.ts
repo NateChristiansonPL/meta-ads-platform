@@ -179,7 +179,13 @@ function buildFlexibleSpec(row: AdSetRow): Record<string, unknown>[] | undefined
 }
 
 function applyPlacements(row: AdSetRow, spec: MetaTargetingSpec): void {
-  if (row.placementType !== 'manual') return;
+  if (row.placementType !== 'manual') {
+    // Advantage+ placements: explicitly set ALL publisher platforms.
+    // Omitting publisher_platforms causes Meta to default to only facebook + instagram.
+    // To enable true Advantage+ (all platforms), we must include all 4.
+    spec.publisher_platforms = ['facebook', 'instagram', 'audience_network', 'messenger'];
+    return;
+  }
   const platforms = new Set<string>();
   const fb: string[] = [];
   const ig: string[] = [];
