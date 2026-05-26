@@ -724,6 +724,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
     },
     { enabled: hasCredentials && locationQuery.length >= 2, staleTime: 60 * 1000 }
   );
+  // ── Live API: address geocoding (Pin a Location) ──────────────────────────
+  const [addressQuery, setAddressQuery] = useState('');
+  const [addressRowId, setAddressRowId] = useState<string | null>(null);
+  const { data: geocodeResults, isFetching: geocodingLoading } = trpc.adminMeta.geocodeAddress.useQuery(
+    { address: addressQuery },
+    { enabled: addressQuery.length >= 3, staleTime: 60 * 1000 }
+  );
   // ── Live API: detailed targeting search ─────────────────────────────────
   const [detailedQuery, setDetailedQuery] = useState('');
   const [detailedRowId, setDetailedRowId] = useState<string | null>(null);
@@ -1542,6 +1549,58 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                 ) : (
                                   <p className="text-[11px] text-amber-400">Add credentials in Settings to enable location search.</p>
                                 )}
+                                {/* Pin a specific address */}
+                                {hasCredentials && (
+                                  <div className="relative">
+                                    <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">
+                                      Pin a Specific Address
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        value={addressRowId === row.id ? addressQuery : ''}
+                                        onChange={e => { setAddressQuery(e.target.value); setAddressRowId(row.id); }}
+                                        onFocus={() => setAddressRowId(row.id)}
+                                        placeholder="Type a street address, place, or business…"
+                                        className="flex-1 px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
+                                      />
+                                      {geocodingLoading && <span className="text-[10px] text-muted-foreground">Geocoding…</span>}
+                                    </div>
+                                    {/* Geocode results dropdown */}
+                                    {addressRowId === row.id && addressQuery.length >= 3 && geocodeResults != null && ((geocodeResults as { results?: unknown[] }).results?.length ?? 0) > 0 && (
+                                      <div className="absolute z-50 mt-1 w-full bg-surface-1 border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                        {((geocodeResults as { results?: { address: string; lat: number; lng: number; placeId: string }[] }).results ?? []).map((geo) => (
+                                          <button
+                                            key={geo.placeId}
+                                            onClick={() => {
+                                              const label = geo.address;
+                                              const current = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
+                                              const currentObjs = row.geoLocationObjects || [];
+                                              if (!current.includes(label)) {
+                                                update(row.id, {
+                                                  geoLocations: [...current, label].join('\n'),
+                                                  geoLocationObjects: [...currentObjs, {
+                                                    key: geo.placeId,
+                                                    type: 'custom_location',
+                                                    name: label,
+                                                    latitude: geo.lat,
+                                                    longitude: geo.lng,
+                                                    radius: 10,
+                                                    distanceUnit: 'mile',
+                                                  }],
+                                                });
+                                              }
+                                              setAddressQuery('');
+                                              setAddressRowId(null);
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-[12px] hover:bg-surface-2 transition-colors flex items-center justify-between gap-2">
+                                            <span className="text-foreground">{geo.address}</span>
+                                            <span className="text-[10px] text-muted-foreground/60">📍 Pin</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                                 {/* Selected locations chips with radius controls */}
                                 {row.geoLocations && (
                                   <div className="space-y-2">
@@ -1549,7 +1608,9 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     <div className="space-y-1.5">
                                       {row.geoLocations.split('\n').filter(Boolean).map((loc, i) => {
                                         const geoObj = (row.geoLocationObjects || [])[i];
-                                        const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood'].includes((geoObj.type || '').toLowerCase());
+                                        const geoType = (geoObj?.type || '').toLowerCase();
+                                        const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood', 'custom_location'].includes(geoType);
+                                        const isCustom = geoType === 'custom_location';
                                         return (
                                           <div key={i} className="flex items-center gap-2 flex-wrap">
                                             <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[11px] text-primary">
@@ -1564,7 +1625,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                               <div className="flex items-center gap-1">
                                                 <input
                                                   type="number"
-                                                  min={geoObj.distanceUnit === 'kilometer' ? 17 : 10}
+                                                  min={isCustom ? 1 : (geoObj.distanceUnit === 'kilometer' ? 17 : 10)}
                                                   max={geoObj.distanceUnit === 'kilometer' ? 80 : 50}
                                                   value={geoObj.radius || ''}
                                                   onChange={e => {

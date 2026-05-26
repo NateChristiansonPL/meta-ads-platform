@@ -857,3 +857,4 @@
 - [x] Add radius option for selected locations in Campaign Builder targeting (per-location radius control on chips for cities and custom locations)
 - [x] Support individual address/place locations via the search typeahead (subcity, neighborhood, geo_market added to location_types)
 - [x] Update pixel ID section in SettingsDrawerAdmin to fetch and display both pixels AND datasets connected to the token/ad account
+- [x] Add address/place-level location targeting: allow users to type a specific address, geocode it to lat/lng, and set a radius (1-50 mi) using Meta's custom_locations targeting

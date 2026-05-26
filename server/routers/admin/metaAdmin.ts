@@ -17,6 +17,7 @@ import { z } from "zod";
 import { publicProcedure, protectedProcedure, router } from "../../_core/trpc";
 import { getTokenById } from "../../db";
 import { sheetsValuesBatchUpdate, extractSpreadsheetId, type ValueRange } from "./googleSheetsAdmin";
+import { makeRequest as mapsRequest } from "../../_core/map";
 
 const META_API_VERSION = "v21.0";
 const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -3138,6 +3139,39 @@ export const metaAdminRouter = router({
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch lead gen forms: ${msg}` });
+      }
+    }),
+
+  /**
+   * Geocode an address to lat/lng using Google Maps Geocoding API.
+   * Used for custom_locations targeting in Meta Ads.
+   */
+  geocodeAddress: protectedProcedure
+    .input(z.object({ address: z.string().min(1) }))
+    .query(async ({ input }) => {
+      try {
+        const data = await mapsRequest<{
+          results: Array<{
+            formatted_address: string;
+            geometry: { location: { lat: number; lng: number } };
+            place_id: string;
+          }>;
+          status: string;
+        }>('/maps/api/geocode/json', { address: input.address });
+        if (data.status !== 'OK' || !data.results?.length) {
+          return { results: [] as Array<{ address: string; lat: number; lng: number; placeId: string }> };
+        }
+        return {
+          results: data.results.slice(0, 5).map((r: { formatted_address: string; geometry: { location: { lat: number; lng: number } }; place_id: string }) => ({
+            address: r.formatted_address,
+            lat: r.geometry.location.lat,
+            lng: r.geometry.location.lng,
+            placeId: r.place_id,
+          })),
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Geocoding failed: ${msg}` });
       }
     }),
 });

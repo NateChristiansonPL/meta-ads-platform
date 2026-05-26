@@ -83,11 +83,13 @@ export interface LeadGenForm {
 
 // ── Structured targeting objects (needed for Meta API reach/overlap calls) ────
 export interface GeoLocationObject {
-  key: string;   // Meta geo key (e.g. "2460644" for a city)
-  type: string;  // 'city' | 'region' | 'country' | 'zip' | 'geo_market' | 'medium_geo_area'
+  key: string;   // Meta geo key (e.g. "2460644" for a city) or place_id for custom locations
+  type: string;  // 'city' | 'region' | 'country' | 'zip' | 'geo_market' | 'custom_location'
   name: string;  // display label
-  radius?: number;        // radius around location (cities: 10-50 mi / 17-80 km)
+  radius?: number;        // radius around location (cities: 10-50 mi / 17-80 km; custom: 1-50 mi)
   distanceUnit?: 'mile' | 'kilometer';  // default: 'mile'
+  latitude?: number;      // for custom_location type (geocoded address)
+  longitude?: number;     // for custom_location type (geocoded address)
 }
 export interface InterestObject {
   id: string;    // Meta interest/behavior/demographic ID

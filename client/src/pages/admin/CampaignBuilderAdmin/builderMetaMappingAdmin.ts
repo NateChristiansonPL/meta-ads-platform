@@ -90,12 +90,25 @@ function normalizeGeoFromObjects(geoObjs: GeoLocationObject[]): Record<string, u
   const countries: string[] = [];
   const zips: Record<string, unknown>[] = [];
   const geoMarkets: Record<string, unknown>[] = [];
+  const customLocations: Record<string, unknown>[] = [];
 
   for (const g of geoObjs) {
     const type = clean(g.type).toLowerCase();
     const key = clean(g.key);
     if (!key) continue;
-    if (type === 'city' || type === 'subcity' || type === 'neighborhood') {
+    if (type === 'custom_location') {
+      // Custom locations use lat/lng + radius (Meta API format)
+      if (g.latitude != null && g.longitude != null) {
+        const entry: Record<string, unknown> = {
+          latitude: g.latitude,
+          longitude: g.longitude,
+          radius: g.radius || 10,
+          distance_unit: g.distanceUnit || 'mile',
+        };
+        customLocations.push(entry);
+      }
+    }
+    else if (type === 'city' || type === 'subcity' || type === 'neighborhood') {
       const cityEntry: Record<string, unknown> = { key };
       if (g.radius && g.radius > 0) {
         cityEntry.radius = g.radius;
@@ -115,6 +128,7 @@ function normalizeGeoFromObjects(geoObjs: GeoLocationObject[]): Record<string, u
   if (countries.length) geo.countries = Array.from(new Set(countries));
   if (zips.length) geo.zips = zips;
   if (geoMarkets.length) geo.geo_markets = geoMarkets;
+  if (customLocations.length) geo.custom_locations = customLocations;
   return Object.keys(geo).length ? geo : null;
 }
 
