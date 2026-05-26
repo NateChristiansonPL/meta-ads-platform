@@ -363,9 +363,12 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     },
     {
       id: 'ads',
-      label: `${ads.length} ad${ads.length !== 1 ? 's' : ''} assembled`,
-      pass: ads.length > 0,
-      detail: ads.length === 0 ? 'Go to the Ads tab, check your matrix, and click Generate Ads.' : `${ads.length} ad${ads.length !== 1 ? 's' : ''} ready to traffic.`,
+      label: ads.length === 0 ? '0 ads assembled — ad sets only launch' : `${ads.length} ad${ads.length !== 1 ? 's' : ''} assembled`,
+      pass: true,
+      warn: ads.length === 0,
+      detail: ads.length === 0
+        ? 'No ads assembled. The build will launch campaigns and ad sets only. Go to the Ads tab to add ads if needed.'
+        : `${ads.length} ad${ads.length !== 1 ? 's' : ''} ready to traffic.`,
     },
     {
       id: 'linkage',
