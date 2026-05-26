@@ -928,9 +928,19 @@ export const metaRouter = router({
 
       // Promoted object for conversion-based objectives
       console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType });
-      if (customConversionId) {
-        // Custom conversion: promoted_object contains ONLY custom_conversion_id (no pixel_id, no custom_event_type)
-        payload.promoted_object = { custom_conversion_id: customConversionId };
+      if (customConversionId && pixelId) {
+        // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + custom_conversion_id together
+        payload.promoted_object = {
+          pixel_id: pixelId,
+          custom_event_type: 'OTHER',
+          custom_conversion_id: customConversionId,
+        };
+      } else if (customConversionId) {
+        // Custom conversion without pixel (fallback)
+        payload.promoted_object = {
+          custom_event_type: 'OTHER',
+          custom_conversion_id: customConversionId,
+        };
       } else if (pixelId && (conversionLocation || customEventType)) {
         // Standard pixel event: use pixel_id + custom_event_type
         const promotedObject: Record<string, unknown> = { pixel_id: pixelId };

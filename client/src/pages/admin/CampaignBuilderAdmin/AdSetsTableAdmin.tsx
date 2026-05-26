@@ -1292,8 +1292,10 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     const cc = customConversions.find(c => c.id === ccId);
                                     update(row.id, { conversionEvent: cc?.name ?? '', customConversionId: ccId });
                                   } else {
-                                    // Standard Meta event selected - use custom_event_type, no custom_conversion_id
-                                    update(row.id, { conversionEvent: val, customConversionId: undefined });
+                                    // Standard event selected — check if it matches a custom conversion by name
+                                    // (CAPI-connected events appear in standard list but need custom_conversion_id for Meta API)
+                                    const matchingCC = customConversions.find((c: { id: string; name: string }) => c.name === val);
+                                    update(row.id, { conversionEvent: val, customConversionId: matchingCC?.id || undefined });
                                   }
                                 }}
                                 className="w-full px-2 py-1 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"

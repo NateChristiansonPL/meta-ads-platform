@@ -1165,9 +1165,10 @@ export const metaAdminRouter = router({
       const promotedObject: Record<string, unknown> = {};
       if (objective !== 'OUTCOME_TRAFFIC') {
         if (customConversionId) {
-          // Custom conversion: promoted_object contains ONLY custom_conversion_id
-          // NO pixel_id, NO custom_event_type — they are mutually exclusive
+          // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + custom_conversion_id together
           promotedObject.custom_conversion_id = customConversionId;
+          promotedObject.custom_event_type = 'OTHER';
+          if (pixelId) promotedObject.pixel_id = pixelId;
         } else if (pixelId) {
           // Standard pixel event: use pixel_id + custom_event_type
           promotedObject.pixel_id = pixelId;
