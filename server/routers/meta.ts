@@ -881,6 +881,7 @@ export const metaRouter = router({
         customEventType: z.string().optional(),
         customConversionId: z.string().optional(),
         pixelRule: z.string().optional(),
+        customEventStr: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -888,7 +889,7 @@ export const metaRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec,
-        conversionLocation, pixelId, customEventType, customConversionId, pixelRule,
+        conversionLocation, pixelId, customEventType, customConversionId, pixelRule, customEventStr,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -932,9 +933,9 @@ export const metaRouter = router({
       if (attributionSpec) payload.attribution_spec = attributionSpec;
 
       // Promoted object for conversion-based objectives
-      console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType });
+      console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType, customEventStr });
       if (customConversionId && pixelId) {
-        // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id together
+        // Custom conversion (has ID): pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id
         const po: Record<string, unknown> = {
           pixel_id: pixelId,
           custom_event_type: 'OTHER',
@@ -950,6 +951,13 @@ export const metaRouter = router({
         };
         if (pixelRule) po.pixel_rule = pixelRule;
         payload.promoted_object = po;
+      } else if (customEventStr && pixelId) {
+        // Conversions API event: pixel_id + custom_event_type: "OTHER" + custom_event_str: "Event Name"
+        payload.promoted_object = {
+          pixel_id: pixelId,
+          custom_event_type: 'OTHER',
+          custom_event_str: customEventStr,
+        };
       } else if (pixelId && (conversionLocation || customEventType)) {
         // Standard pixel event: use pixel_id + custom_event_type
         const promotedObject: Record<string, unknown> = { pixel_id: pixelId };

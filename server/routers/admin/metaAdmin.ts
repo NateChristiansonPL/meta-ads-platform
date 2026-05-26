@@ -1052,6 +1052,7 @@ export const metaAdminRouter = router({
         customEventType: z.string().optional(),
         customConversionId: z.string().optional(),
         pixelRule: z.string().optional(),
+        customEventStr: z.string().optional(),
         leadGenFormId: z.string().optional(),
         facebookPageId: z.string().optional(),
         instagramProfileId: z.string().optional(),
@@ -1072,7 +1073,7 @@ export const metaAdminRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
-        conversionLocation, pixelId, customEventType, customConversionId, pixelRule, leadGenFormId, facebookPageId, instagramProfileId,
+        conversionLocation, pixelId, customEventType, customConversionId, pixelRule, customEventStr, leadGenFormId, facebookPageId, instagramProfileId,
         objective, bidStrategy, bidAmount, roasFloor, destinationType, pacingType,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
@@ -1170,11 +1171,17 @@ export const metaAdminRouter = router({
       const promotedObject: Record<string, unknown> = {};
       if (objective !== 'OUTCOME_TRAFFIC') {
         if (customConversionId) {
-          // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id together
+          // Custom conversion (has ID): Meta sends pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id
           promotedObject.custom_conversion_id = customConversionId;
           promotedObject.custom_event_type = 'OTHER';
           if (pixelId) promotedObject.pixel_id = pixelId;
           if (pixelRule) promotedObject.pixel_rule = pixelRule;
+        } else if (customEventStr) {
+          // Conversions API event (no custom conversion ID, but has event name string):
+          // Meta sends pixel_id + custom_event_type: "OTHER" + custom_event_str: "Event Name"
+          if (pixelId) promotedObject.pixel_id = pixelId;
+          promotedObject.custom_event_type = 'OTHER';
+          promotedObject.custom_event_str = customEventStr;
         } else if (pixelId) {
           // Standard pixel event: use pixel_id + custom_event_type
           promotedObject.pixel_id = pixelId;

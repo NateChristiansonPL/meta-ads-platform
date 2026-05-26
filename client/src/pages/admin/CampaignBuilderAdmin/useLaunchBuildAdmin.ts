@@ -193,6 +193,38 @@ export function useLaunchBuild(
             console.log('[LaunchBuild] targeting.publisher_platforms:', (targeting as Record<string, unknown>).publisher_platforms);
             console.log('[LaunchBuild] pixelId:', pixelId);
             console.log('[LaunchBuild] parentCampaign?.objective:', parentCampaign?.objective);
+
+            // Determine how to pass the conversion event to Meta:
+            // 1. Custom Conversion (has customConversionId): use custom_conversion_id + pixel_rule
+            // 2. Conversions API / custom-named event: use custom_event_str (event name) + custom_event_type: OTHER
+            // 3. Standard Meta event (PURCHASE, LEAD, etc.): use custom_event_type directly
+            const STANDARD_META_EVENTS = [
+              'PURCHASE', 'LEAD', 'COMPLETE_REGISTRATION', 'ADD_TO_CART', 'VIEW_CONTENT',
+              'SEARCH', 'ADD_PAYMENT_INFO', 'ADD_TO_WISHLIST', 'INITIATE_CHECKOUT',
+              'CONTACT', 'FIND_LOCATION', 'SCHEDULE', 'START_TRIAL', 'SUBSCRIBE',
+              'SUBMIT_APPLICATION', 'DONATE', 'OTHER', 'PageView', 'ViewContent',
+            ];
+            const eventName = adSet.conversionEvent || '';
+            const isStandardEvent = STANDARD_META_EVENTS.includes(eventName) || STANDARD_META_EVENTS.includes(eventName.toUpperCase());
+            let customEventType: string | undefined;
+            let customEventStr: string | undefined;
+
+            if (adSet.customConversionId) {
+              // Custom conversion path — don't set customEventType or customEventStr
+              customEventType = undefined;
+              customEventStr = undefined;
+            } else if (eventName && !isStandardEvent) {
+              // Conversions API / custom-named event — use custom_event_str
+              customEventType = undefined;
+              customEventStr = eventName;
+            } else if (eventName) {
+              // Standard Meta event — use customEventType directly
+              customEventType = eventName;
+              customEventStr = undefined;
+            }
+
+            console.log('[LaunchBuild] resolved:', { customEventType, customEventStr, customConversionId: adSet.customConversionId });
+
             const result = await createAdSet.mutateAsync({
               accessToken,
               adAccountId,
@@ -207,11 +239,10 @@ export function useLaunchBuild(
               endTime: adSet.endDate ? `${adSet.endDate}T${adSet.endTime || '23:59:59'}` : undefined,
               targeting,
               pixelId: pixelId || undefined,
-              // When a custom conversion is selected, don't pass the conversion name as customEventType.
-              // customEventType should only be a standard Meta event type (PURCHASE, LEAD, etc.)
-              customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
+              customEventType,
               customConversionId: adSet.customConversionId || undefined,
               pixelRule: adSet.customConversionRule || undefined,
+              customEventStr,
               conversionLocation: adSet.conversionLocation || undefined,
               objective: parentCampaign?.objective || undefined,
               ...buildAdSetApiExtras(adSet),

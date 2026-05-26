@@ -208,10 +208,37 @@ export function useLaunchBuild(
           } else {
             const budgetCents = Math.round(parseFloat(adSet.budget || '0') * 100);
             const targeting = buildTargetingSpec(adSet);
+            // Determine how to pass the conversion event to Meta:
+            // 1. Custom Conversion (has customConversionId): use custom_conversion_id + pixel_rule
+            // 2. Conversions API / custom-named event: use custom_event_str (event name)
+            // 3. Standard Meta event (PURCHASE, LEAD, etc.): use custom_event_type directly
+            const STANDARD_META_EVENTS = [
+              'PURCHASE', 'LEAD', 'COMPLETE_REGISTRATION', 'ADD_TO_CART', 'VIEW_CONTENT',
+              'SEARCH', 'ADD_PAYMENT_INFO', 'ADD_TO_WISHLIST', 'INITIATE_CHECKOUT',
+              'CONTACT', 'FIND_LOCATION', 'SCHEDULE', 'START_TRIAL', 'SUBSCRIBE',
+              'SUBMIT_APPLICATION', 'DONATE', 'OTHER', 'PageView', 'ViewContent',
+            ];
+            const eventName = adSet.conversionEvent || '';
+            const isStandardEvent = STANDARD_META_EVENTS.includes(eventName) || STANDARD_META_EVENTS.includes(eventName.toUpperCase());
+            let customEventType: string | undefined;
+            let customEventStr: string | undefined;
+
+            if (adSet.customConversionId) {
+              customEventType = undefined;
+              customEventStr = undefined;
+            } else if (eventName && !isStandardEvent) {
+              customEventType = undefined;
+              customEventStr = eventName;
+            } else if (eventName) {
+              customEventType = eventName;
+              customEventStr = undefined;
+            }
+
             console.log('[LaunchBuild] createAdSet params:', {
               customConversionId: adSet.customConversionId,
               conversionEvent: adSet.conversionEvent,
-              conversionLocation: adSet.conversionLocation,
+              customEventType,
+              customEventStr,
               pixelId,
             });
             const result = await createAdSet.mutateAsync({
@@ -228,10 +255,10 @@ export function useLaunchBuild(
               endTime: adSet.endDate ? `${adSet.endDate}T${adSet.endTime || '23:59:59'}` : undefined,
               targeting,
               pixelId: pixelId || undefined,
-              // When a custom conversion is selected, don't pass the conversion name as customEventType
-              customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
+              customEventType,
               customConversionId: adSet.customConversionId || undefined,
               pixelRule: adSet.customConversionRule || undefined,
+              customEventStr,
               conversionLocation: adSet.conversionLocation || undefined,
             });
             adSetIdMap[adSet.name] = result.adSetId;
