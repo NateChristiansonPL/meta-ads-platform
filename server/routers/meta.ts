@@ -928,13 +928,13 @@ export const metaRouter = router({
 
       // Promoted object for conversion-based objectives
       console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType });
-      if (pixelId && (conversionLocation || customConversionId || customEventType)) {
+      if (customConversionId) {
+        // Custom conversion: promoted_object contains ONLY custom_conversion_id (no pixel_id, no custom_event_type)
+        payload.promoted_object = { custom_conversion_id: customConversionId };
+      } else if (pixelId && (conversionLocation || customEventType)) {
+        // Standard pixel event: use pixel_id + custom_event_type
         const promotedObject: Record<string, unknown> = { pixel_id: pixelId };
-        if (customConversionId) {
-          // Custom conversion selected: pass ONLY custom_conversion_id
-          // custom_event_type and custom_conversion_id are mutually exclusive in Meta's API
-          promotedObject.custom_conversion_id = customConversionId;
-        } else if (customEventType) {
+        if (customEventType) {
           promotedObject.custom_event_type = customEventType;
         }
         payload.promoted_object = promotedObject;
