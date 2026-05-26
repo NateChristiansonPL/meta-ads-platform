@@ -501,6 +501,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   );
   const rawPixelEvents = pixelEventsData?.events ?? [];
   const customConversions: { id: string; name: string }[] = (pixelEventsData as { customConversions?: { id: string; name: string }[] })?.customConversions ?? [];
+  const conversionsApiEvents = new Set((pixelEventsData as { conversionsApiEvents?: string[] })?.conversionsApiEvents ?? []);
   // Filter out standard events that duplicate a custom conversion (by name) to avoid showing them twice
   const customConversionNames = new Set(customConversions.map(cc => cc.name));
   const pixelEvents = rawPixelEvents.filter((ev: string) => !customConversionNames.has(ev));
@@ -911,7 +912,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                 {pixelEvents.length > 0 && (
                                   <optgroup label="Standard Pixel Events">
                                     {pixelEvents.map((ev: string) => (
-                                      <option key={ev} value={ev}>{ev}</option>
+                                      <option key={ev} value={ev}>{ev}{conversionsApiEvents.has(ev) ? ' ✓ CAPI' : ''}</option>
                                     ))}
                                   </optgroup>
                                 )}

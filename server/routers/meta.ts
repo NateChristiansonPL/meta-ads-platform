@@ -310,8 +310,9 @@ export const metaRouter = router({
         const eventSet = new Set<string>();
 
         // 1. Standard pixel events fired in the last 30 days (pixel stats edge)
+        const capiEvents = new Set<string>();
+        const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
         try {
-          const thirtyDaysAgo = Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000);
           const statsData = await metaGet(
             `/${pixelId}/stats`,
             { aggregation: "event", start_time: String(thirtyDaysAgo) },
@@ -324,6 +325,22 @@ export const metaRouter = router({
           }
         } catch {
           // pixel stats may fail if pixel has no recent events — continue
+        }
+
+        // 1b. Identify which events have Conversions API (server-side) data
+        try {
+          const serverStats = await metaGet(
+            `/${pixelId}/stats`,
+            { aggregation: "event", start_time: String(thirtyDaysAgo), event_source: "server" },
+            accessToken
+          );
+          for (const bucket of serverStats.data || []) {
+            for (const item of (bucket.data || [])) {
+              if (item.value) capiEvents.add(item.value as string);
+            }
+          }
+        } catch {
+          // server event source query may not be supported — continue without badges
         }
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
@@ -351,7 +368,8 @@ export const metaRouter = router({
         }
 
         const events = Array.from(eventSet).sort();
-        return { events, customConversions };
+        const conversionsApiEvents = Array.from(capiEvents).sort();
+        return { events, customConversions, conversionsApiEvents };
       } catch (err) {
         throw new TRPCError({
           code: "BAD_REQUEST",
