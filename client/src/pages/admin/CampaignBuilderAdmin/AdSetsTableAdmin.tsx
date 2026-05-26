@@ -698,8 +698,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
     { accessToken: settings?.accessToken ?? '', pixelId: settings?.pixelId ?? '', adAccountId: settings?.adAccountId ?? '' },
     { enabled: hasPixel, staleTime: 5 * 60 * 1000 }
   );
-  const pixelEvents = pixelEventsData?.events ?? [];
+  const rawPixelEvents = pixelEventsData?.events ?? [];
   const customConversions = pixelEventsData?.customConversions ?? [];
+  // Filter out standard events that duplicate a custom conversion (by name) to avoid showing them twice
+  const customConversionNames = new Set(customConversions.map((cc: { name: string }) => cc.name));
+  const pixelEvents = rawPixelEvents.filter((ev: string) => !customConversionNames.has(ev));
 
   // ── Live API: custom audiences ─────────────────────────────────────────────
   const [audienceSearch, setAudienceSearch] = useState('');
