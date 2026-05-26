@@ -9,7 +9,7 @@ export type BudgetType = 'DAILY' | 'LIFETIME';
 export type AdType = 'static' | 'video' | 'carousel';
 export type OptimizationGoal =
   | 'REACH' | 'IMPRESSIONS' | 'LINK_CLICKS' | 'LANDING_PAGE_VIEWS'
-  | 'LEAD_GENERATION' | 'QUALITY_LEAD' | 'CONVERSIONS' | 'VALUE'
+  | 'LEAD_GENERATION' | 'QUALITY_LEAD' | 'OFFSITE_CONVERSIONS' | 'VALUE'
   | 'APP_INSTALLS' | 'THRUPLAY' | 'VIDEO_VIEWS' | 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS'
   | 'POST_ENGAGEMENT' | 'PAGE_LIKES' | 'PAGE_VISITS' | 'AD_RECALL_LIFT';
 export type BillingEvent = 'IMPRESSIONS' | 'LINK_CLICKS' | 'THRUPLAY' | 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS';
@@ -138,6 +138,7 @@ export interface AdSetRow {
   conversionLocation: ConversionLocation;
   conversionEvent: string;
   customConversionId?: string;          // Meta custom conversion ID (when a custom conversion is selected)
+  customConversionRule?: string;        // pixel_rule JSON for the custom conversion (from Meta API)
   // Engagement objective extras
   engagementGoal?: string;              // numeric goal for page visits / page likes
   facebookPageId?: string;             // required for Awareness + Engagement
@@ -392,9 +393,9 @@ export const OBJECTIVE_OPT_GOALS: Record<Objective, OptimizationGoal[]> = {
   OUTCOME_AWARENESS:    ['REACH', 'IMPRESSIONS', 'AD_RECALL_LIFT', 'THRUPLAY', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS'],
   OUTCOME_TRAFFIC:      ['LANDING_PAGE_VIEWS', 'LINK_CLICKS', 'IMPRESSIONS', 'REACH'],
   OUTCOME_ENGAGEMENT:   ['POST_ENGAGEMENT', 'PAGE_LIKES', 'PAGE_VISITS', 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS', 'THRUPLAY', 'LINK_CLICKS'],
-  OUTCOME_LEADS:        ['LEAD_GENERATION', 'QUALITY_LEAD', 'CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS'],
+  OUTCOME_LEADS:        ['LEAD_GENERATION', 'QUALITY_LEAD', 'OFFSITE_CONVERSIONS', 'LINK_CLICKS', 'LANDING_PAGE_VIEWS'],
   OUTCOME_APP_PROMOTION:['APP_INSTALLS', 'LINK_CLICKS'],
-  OUTCOME_SALES:        ['CONVERSIONS', 'VALUE', 'LANDING_PAGE_VIEWS', 'LINK_CLICKS'],
+  OUTCOME_SALES:        ['OFFSITE_CONVERSIONS', 'VALUE', 'LANDING_PAGE_VIEWS', 'LINK_CLICKS'],
 };
 
 export function defaultOptGoal(objective: Objective): OptimizationGoal {
@@ -404,13 +405,13 @@ export function defaultOptGoal(objective: Objective): OptimizationGoal {
     OUTCOME_ENGAGEMENT:   'POST_ENGAGEMENT',
     OUTCOME_LEADS:        'LEAD_GENERATION',
     OUTCOME_APP_PROMOTION:'APP_INSTALLS',
-    OUTCOME_SALES:        'CONVERSIONS',
+    OUTCOME_SALES:        'OFFSITE_CONVERSIONS',
   };
   return map[objective];
 }
 
 export function attributionApplicable(objective: Objective, goal: OptimizationGoal): boolean {
-  const conversionGoals: OptimizationGoal[] = ['CONVERSIONS', 'VALUE', 'LEAD_GENERATION', 'QUALITY_LEAD', 'APP_INSTALLS', 'LANDING_PAGE_VIEWS', 'LINK_CLICKS'];
+  const conversionGoals: OptimizationGoal[] = ['OFFSITE_CONVERSIONS', 'VALUE', 'LEAD_GENERATION', 'QUALITY_LEAD', 'APP_INSTALLS', 'LANDING_PAGE_VIEWS', 'LINK_CLICKS'];
   const conversionObjectives: Objective[] = ['OUTCOME_SALES', 'OUTCOME_LEADS', 'OUTCOME_TRAFFIC', 'OUTCOME_APP_PROMOTION'];
   return conversionObjectives.includes(objective) && conversionGoals.includes(goal);
 }
@@ -455,7 +456,7 @@ export function billingChoiceOptions(goal: OptimizationGoal): { value: string; l
 
 /** Whether conversion event picker should be shown */
 export function conversionEventApplicable(goal: OptimizationGoal): boolean {
-  return goal === 'CONVERSIONS' || goal === 'VALUE' || goal === 'QUALITY_LEAD';
+  return goal === 'OFFSITE_CONVERSIONS' || goal === 'VALUE' || goal === 'QUALITY_LEAD';
 }
 
 /** Whether lead gen form field should be shown */
@@ -686,7 +687,7 @@ export const OPTIMIZATION_GOAL_LABELS: Record<OptimizationGoal, string> = {
   LANDING_PAGE_VIEWS:                 'Landing Page Views',
   LEAD_GENERATION:                    'Lead Generation',
   QUALITY_LEAD:                       'Quality Lead',
-  CONVERSIONS:                        'Conversions',
+  OFFSITE_CONVERSIONS:                'Conversions',
   VALUE:                              'Value',
   APP_INSTALLS:                       'App Installs',
   THRUPLAY:                           'ThruPlay',
@@ -705,7 +706,7 @@ export const OPTIMIZATION_GOAL_KPI: Record<OptimizationGoal, string> = {
   LANDING_PAGE_VIEWS:                 'Cost per LPV',
   LEAD_GENERATION:                    'Cost per Lead',
   QUALITY_LEAD:                       'Cost per Quality Lead',
-  CONVERSIONS:                        'Cost per Conversion',
+  OFFSITE_CONVERSIONS:                'Cost per Conversion',
   VALUE:                              'ROAS',
   APP_INSTALLS:                       'Cost per Install',
   THRUPLAY:                           'Cost per ThruPlay',

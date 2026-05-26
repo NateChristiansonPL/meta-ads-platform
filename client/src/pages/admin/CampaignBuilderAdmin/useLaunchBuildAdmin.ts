@@ -211,6 +211,7 @@ export function useLaunchBuild(
               // customEventType should only be a standard Meta event type (PURCHASE, LEAD, etc.)
               customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
               customConversionId: adSet.customConversionId || undefined,
+              pixelRule: adSet.customConversionRule || undefined,
               conversionLocation: adSet.conversionLocation || undefined,
               objective: parentCampaign?.objective || undefined,
               ...buildAdSetApiExtras(adSet),

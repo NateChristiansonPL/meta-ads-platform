@@ -1293,12 +1293,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                   if (val.startsWith('cc::')) {
                                     const ccId = val.slice(4);
                                     const cc = customConversions.find(c => c.id === ccId);
-                                    update(row.id, { conversionEvent: cc?.name ?? '', customConversionId: ccId });
+                                    update(row.id, { conversionEvent: cc?.name ?? '', customConversionId: ccId, customConversionRule: (cc as { rule?: string })?.rule || undefined });
                                   } else {
                                     // Standard event selected — check if it matches a custom conversion by name
-                                    // (CAPI-connected events appear in standard list but need custom_conversion_id for Meta API)
                                     const matchingCC = customConversions.find((c: { id: string; name: string }) => c.name === val);
-                                    update(row.id, { conversionEvent: val, customConversionId: matchingCC?.id || undefined });
+                                    update(row.id, { conversionEvent: val, customConversionId: matchingCC?.id || undefined, customConversionRule: (matchingCC as { rule?: string })?.rule || undefined });
                                   }
                                 }}
                                 className="w-full px-2 py-1 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"

@@ -484,18 +484,22 @@ export const metaAdminRouter = router({
         }
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
-        const customConversions: { id: string; name: string }[] = [];
+        const customConversions: { id: string; name: string; rule?: string }[] = [];
         if (adAccountId) {
           try {
             const accountId = normalizeAdAccountId(adAccountId);
             const ccData = await metaGet(
               `/${accountId}/customconversions`,
-              { fields: "id,name,pixel", limit: "200" },
+              { fields: "id,name,pixel,rule", limit: "200" },
               accessToken
             );
             for (const cc of ccData.data || []) {
               if (cc.id && cc.name) {
-                customConversions.push({ id: cc.id as string, name: cc.name as string });
+                customConversions.push({
+                  id: cc.id as string,
+                  name: cc.name as string,
+                  rule: cc.rule ? JSON.stringify(cc.rule) : undefined,
+                });
               }
             }
           } catch {
@@ -1047,6 +1051,7 @@ export const metaAdminRouter = router({
         pixelId: z.string().optional(),
         customEventType: z.string().optional(),
         customConversionId: z.string().optional(),
+        pixelRule: z.string().optional(),
         leadGenFormId: z.string().optional(),
         facebookPageId: z.string().optional(),
         instagramProfileId: z.string().optional(),
@@ -1067,7 +1072,7 @@ export const metaAdminRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
-        conversionLocation, pixelId, customEventType, customConversionId, leadGenFormId, facebookPageId, instagramProfileId,
+        conversionLocation, pixelId, customEventType, customConversionId, pixelRule, leadGenFormId, facebookPageId, instagramProfileId,
         objective, bidStrategy, bidAmount, roasFloor, destinationType, pacingType,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
@@ -1165,10 +1170,11 @@ export const metaAdminRouter = router({
       const promotedObject: Record<string, unknown> = {};
       if (objective !== 'OUTCOME_TRAFFIC') {
         if (customConversionId) {
-          // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + custom_conversion_id together
+          // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id together
           promotedObject.custom_conversion_id = customConversionId;
           promotedObject.custom_event_type = 'OTHER';
           if (pixelId) promotedObject.pixel_id = pixelId;
+          if (pixelRule) promotedObject.pixel_rule = pixelRule;
         } else if (pixelId) {
           // Standard pixel event: use pixel_id + custom_event_type
           promotedObject.pixel_id = pixelId;

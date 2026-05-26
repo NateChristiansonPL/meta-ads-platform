@@ -231,6 +231,7 @@ export function useLaunchBuild(
               // When a custom conversion is selected, don't pass the conversion name as customEventType
               customEventType: adSet.customConversionId ? undefined : (adSet.conversionEvent || undefined),
               customConversionId: adSet.customConversionId || undefined,
+              pixelRule: adSet.customConversionRule || undefined,
               conversionLocation: adSet.conversionLocation || undefined,
             });
             adSetIdMap[adSet.name] = result.adSetId;

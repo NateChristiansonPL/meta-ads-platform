@@ -327,18 +327,22 @@ export const metaRouter = router({
         }
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
-        const customConversions: { id: string; name: string }[] = [];
+        const customConversions: { id: string; name: string; rule?: string }[] = [];
         if (adAccountId) {
           try {
             const accountId = normalizeAdAccountId(adAccountId);
             const ccData = await metaGet(
               `/${accountId}/customconversions`,
-              { fields: "id,name,pixel", limit: "200" },
+              { fields: "id,name,pixel,rule", limit: "200" },
               accessToken
             );
             for (const cc of ccData.data || []) {
               if (cc.id && cc.name) {
-                customConversions.push({ id: cc.id as string, name: cc.name as string });
+                customConversions.push({
+                  id: cc.id as string,
+                  name: cc.name as string,
+                  rule: cc.rule ? JSON.stringify(cc.rule) : undefined,
+                });
               }
             }
           } catch {
@@ -876,6 +880,7 @@ export const metaRouter = router({
         pixelId: z.string().optional(),
         customEventType: z.string().optional(),
         customConversionId: z.string().optional(),
+        pixelRule: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -883,7 +888,7 @@ export const metaRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec,
-        conversionLocation, pixelId, customEventType, customConversionId,
+        conversionLocation, pixelId, customEventType, customConversionId, pixelRule,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
 
@@ -929,18 +934,22 @@ export const metaRouter = router({
       // Promoted object for conversion-based objectives
       console.log('[createAdSet] conversion params:', { pixelId, conversionLocation, customConversionId, customEventType });
       if (customConversionId && pixelId) {
-        // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + custom_conversion_id together
-        payload.promoted_object = {
+        // Custom conversion: Meta's native UI sends pixel_id + custom_event_type: "OTHER" + pixel_rule + custom_conversion_id together
+        const po: Record<string, unknown> = {
           pixel_id: pixelId,
           custom_event_type: 'OTHER',
           custom_conversion_id: customConversionId,
         };
+        if (pixelRule) po.pixel_rule = pixelRule;
+        payload.promoted_object = po;
       } else if (customConversionId) {
         // Custom conversion without pixel (fallback)
-        payload.promoted_object = {
+        const po: Record<string, unknown> = {
           custom_event_type: 'OTHER',
           custom_conversion_id: customConversionId,
         };
+        if (pixelRule) po.pixel_rule = pixelRule;
+        payload.promoted_object = po;
       } else if (pixelId && (conversionLocation || customEventType)) {
         // Standard pixel event: use pixel_id + custom_event_type
         const promotedObject: Record<string, unknown> = { pixel_id: pixelId };

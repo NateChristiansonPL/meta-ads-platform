@@ -633,7 +633,7 @@ function PillarAdSets({
 
   // Conversion event applicable goals
   const showConvEvent = focused
-    ? (focused.optimizationGoal === 'CONVERSIONS' || focused.optimizationGoal === 'VALUE' || focused.optimizationGoal === 'QUALITY_LEAD')
+    ? (focused.optimizationGoal === 'OFFSITE_CONVERSIONS' || focused.optimizationGoal === 'VALUE' || focused.optimizationGoal === 'QUALITY_LEAD')
     : false;
 
   // Platform/placement helpers
