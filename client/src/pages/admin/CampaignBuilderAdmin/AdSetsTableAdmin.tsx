@@ -11,7 +11,7 @@
 
 import React, { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
 import {
-  Plus, Copy, Trash2, ChevronDown, ChevronUp, SlidersHorizontal,
+  Plus, Copy, CopyPlus, Trash2, ChevronDown, ChevronUp, SlidersHorizontal,
   MapPin, Users, Clock, X, Check, Info, ExternalLink, BarChart2, RefreshCw, AlertTriangle,
 } from 'lucide-react';
 import { TargetingPopup, AudienceFocus } from './TargetingPopupAdmin';
@@ -814,6 +814,8 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
   const [qaOpen, setQaOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [audienceBuilderOpen, setAudienceBuilderOpen] = useState(false);
+  const [bulkDuplicateModal, setBulkDuplicateModal] = useState(false);
+  const [bulkDupCampaign, setBulkDupCampaign] = useState('');
 
   // Close panels on outside click
   useEffect(() => {
@@ -969,6 +971,16 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
               <SlidersHorizontal size={12} />
               Bulk Edit
               <span className="text-[9px] bg-primary/20 text-primary px-1 rounded">{selectedRows.size}</span>
+            </button>
+          )}
+          {/* Bulk Duplicate button */}
+          {selectedRows.size >= 2 && (
+            <button
+              onClick={() => { setBulkDupCampaign(campaigns[0]?.name ?? ''); setBulkDuplicateModal(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-600 transition-colors border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20">
+              <CopyPlus size={12} />
+              Bulk Duplicate
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1 rounded">{selectedRows.size}</span>
             </button>
           )}
           {/* Build Custom/LAL Audience button */}
@@ -2275,6 +2287,61 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
           onClose={() => setBulkEditOpen(false)}
           settings={settings}
         />
+      )}
+      {/* ── Bulk Duplicate Modal ───────────────────────────────────────────────── */}
+      {bulkDuplicateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setBulkDuplicateModal(false)}>
+          <div className="bg-surface-1 border border-border rounded-xl shadow-2xl w-[420px] max-h-[90vh] overflow-y-auto p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] font-700 text-foreground">Bulk Duplicate Ad Sets</span>
+              <button onClick={() => setBulkDuplicateModal(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              Duplicate <span className="font-700 text-foreground">{selectedRows.size}</span> selected ad set{selectedRows.size !== 1 ? 's' : ''} into the chosen campaign. All settings will be carried over.
+            </p>
+            <div>
+              <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block mb-1">Destination Campaign</label>
+              <select
+                value={bulkDupCampaign}
+                onChange={e => setBulkDupCampaign(e.target.value)}
+                className="w-full px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50"
+              >
+                {campaigns.map(c => (
+                  <option key={c.id} value={c.name}>{c.name || `Campaign ${c.id.slice(0, 4)}`}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button onClick={() => setBulkDuplicateModal(false)}
+                className="px-3 py-1.5 rounded border border-border text-[12px] font-600 text-muted-foreground hover:text-foreground transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={!bulkDupCampaign}
+                onClick={() => {
+                  const targetCampaign = bulkDupCampaign;
+                  const existingInCampaign = rows.filter(r => r.campaignName === targetCampaign).length;
+                  const newRows: AdSetRow[] = [];
+                  selectedAdSets.forEach((row, i) => {
+                    newRows.push({
+                      ...row,
+                      id: genId(),
+                      campaignName: targetCampaign,
+                      name: `Ad Set #${existingInCampaign + i + 1}`,
+                      adSetId: '',
+                    });
+                  });
+                  onChange([...rows, ...newRows]);
+                  toast.success(`Duplicated ${newRows.length} ad set${newRows.length !== 1 ? 's' : ''} into "${targetCampaign}"`);
+                  setBulkDuplicateModal(false);
+                  setSelectedRows(new Set());
+                }}
+                className="px-4 py-1.5 rounded bg-primary text-primary-foreground text-[12px] font-600 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                Duplicate {selectedRows.size} Ad Set{selectedRows.size !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

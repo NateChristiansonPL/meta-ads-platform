@@ -843,3 +843,7 @@
 - [x] UI: update SettingsDrawer pixel step to use SearchableSelect dropdown (same pattern as ad accounts) instead of ManualInput text field
 - [x] UI: keep manual fallback input for pixel if dropdown returns empty (same pattern as pages)
 - [x] UI: store pixelName alongside pixelId in BuildSettings so status summary can show the pixel name
+
+## Campaign Builder — Bulk Ad Set Actions (May 2026)
+
+- [x] Bulk duplicate (AdSetsTableAdmin only): separate button in toolbar; opens a campaign selection modal to choose which campaign to duplicate the selected ad sets into; carries over all settings, keeps optimization goal as-is
