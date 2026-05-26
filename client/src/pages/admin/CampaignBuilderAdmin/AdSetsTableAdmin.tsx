@@ -768,11 +768,13 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
 
   const startResize = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
-    resizingCol.current = { key, startX: e.clientX, startW: colWidths[key] };
+    const startX = e.clientX;
+    const startW = colWidths[key];
+    resizingCol.current = { key, startX, startW };
     const onMove = (me: MouseEvent) => {
       if (!resizingCol.current) return;
-      const delta = me.clientX - resizingCol.current.startX;
-      setColWidths(prev => ({ ...prev, [resizingCol.current!.key]: Math.max(60, resizingCol.current!.startW + delta) }));
+      const delta = me.clientX - startX;
+      setColWidths(prev => ({ ...prev, [key]: Math.max(60, startW + delta) }));
     };
     const onUp = () => { resizingCol.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
     window.addEventListener('mousemove', onMove);

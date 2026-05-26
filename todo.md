@@ -860,3 +860,4 @@
 - [x] Add address/place-level location targeting: allow users to type a specific address, geocode it to lat/lng, and set a radius (1-50 mi) using Meta's custom_locations targeting
 - [x] Implement column width resizing on the Ad Sets tab (same drag-to-resize behavior as the Campaigns tab)
 - [x] Fix: custom conversion event selected in Campaign Builder must be passed as promoted_object.custom_conversion_id when creating ad sets via Meta API
+- [x] Fix: Column resize on Campaigns and Ad Sets tabs crashes with "Cannot read properties of null (reading 'key')" TypeError
