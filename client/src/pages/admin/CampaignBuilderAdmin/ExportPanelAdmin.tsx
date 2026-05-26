@@ -357,9 +357,12 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     },
     {
       id: 'creatives',
-      label: `${filledCreatives.length} creative${filledCreatives.length !== 1 ? 's' : ''} in library`,
-      pass: filledCreatives.length > 0,
-      detail: filledCreatives.map(c => `• ${c.concept || c.creativeId} (${c.adType})`).join('\n') || 'No creatives — add in Creative Library tab.',
+      label: filledCreatives.length === 0 ? '0 creatives in library — ad sets only launch' : `${filledCreatives.length} creative${filledCreatives.length !== 1 ? 's' : ''} in library`,
+      pass: true,
+      warn: filledCreatives.length === 0,
+      detail: filledCreatives.length === 0
+        ? 'No creatives in library. The build will launch campaigns and ad sets only. Add creatives in Creative Library tab if needed.'
+        : filledCreatives.map(c => `• ${c.concept || c.creativeId} (${c.adType})`).join('\n'),
     },
     {
       id: 'ads',
