@@ -146,6 +146,8 @@ function Router() {
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
           <Route path="/campaign-builder" component={CampaignBuilderAdmin} />
+          {/* Keep old non-admin builder accessible at legacy path */}
+          <Route path="/campaign-builder-legacy" component={CampaignBuilder} />
           <Route path="/knowledge" component={KnowledgeBase} />
           <Route path="/404" component={NotFound} />
           <Route component={NotFound} />
