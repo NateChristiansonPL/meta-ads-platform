@@ -43,6 +43,13 @@ export type TargetingPopupProps = {
   onClose: () => void;
   setBulkLocModal: (v: { rowId: string } | null) => void;
   setBulkLocText: (v: string) => void;
+  /** Address geocoding for Pin a Location (optional — only needed when location tab is used) */
+  addressQuery?: string;
+  addressRowId?: string | null;
+  setAddressQuery?: (q: string) => void;
+  setAddressRowId?: (id: string | null) => void;
+  geocodeResults?: { results?: { address: string; lat: number; lng: number; placeId: string }[] } | null | undefined;
+  geocodingLoading?: boolean;
   /** When true, renders as an inline panel (no absolute positioning, no outside-click dismiss) */
   inline?: boolean;
   /** When set, only this tab is active; other tabs are visually disabled */
@@ -58,7 +65,10 @@ export function TargetingPopup({
   narrowQuery, narrowRowId, setNarrowQuery, setNarrowRowId,
   narrowType, setNarrowType, narrowResults, searchingNarrow,
   audienceSearch, setAudienceSearch, customAudiences, loadingAudiences,
-  update, onClose, setBulkLocModal, setBulkLocText, inline = false, lockedTab,
+  update, onClose, setBulkLocModal, setBulkLocText,
+  addressQuery, addressRowId, setAddressQuery, setAddressRowId,
+  geocodeResults, geocodingLoading,
+  inline = false, lockedTab,
 }: TargetingPopupProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -128,7 +138,7 @@ export function TargetingPopup({
                     value={locationRowId === tmRow.id ? locationQuery : ''}
                     onChange={e => { setLocationQuery(e.target.value); setLocationRowId(tmRow.id); }}
                     onFocus={() => setLocationRowId(tmRow.id)}
-                    placeholder="Type city, state, country, or zip…"
+                    placeholder="Type city, neighborhood, state, country, zip, or DMA…"
                     className="flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-white/25"
                   />
                   {searchingLocations && <span className="text-[10px] text-white/30">…</span>}
@@ -159,20 +169,106 @@ export function TargetingPopup({
             ) : (
               <p className="text-[11px] text-amber-400">Add credentials in Settings to enable location search.</p>
             )}
+            {/* Pin a specific address */}
+            {hasCredentials && setAddressQuery && setAddressRowId && (
+              <div className="relative">
+                <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block mb-1">Pin a Specific Address</label>
+                <div className="flex items-center gap-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2">
+                  <MapPin size={11} className="text-white/30 shrink-0" />
+                  <input
+                    value={addressRowId === tmRow.id ? (addressQuery ?? '') : ''}
+                    onChange={e => { setAddressQuery(e.target.value); setAddressRowId(tmRow.id); }}
+                    onFocus={() => setAddressRowId(tmRow.id)}
+                    placeholder="Type a street address, place, or business…"
+                    className="flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-white/25"
+                  />
+                  {geocodingLoading && <span className="text-[10px] text-white/30">…</span>}
+                </div>
+                {addressRowId === tmRow.id && (addressQuery ?? '').length >= 3 && geocodeResults != null && (geocodeResults.results?.length ?? 0) > 0 && (
+                  <div className="absolute z-50 mt-1 w-full rounded-lg shadow-2xl max-h-48 overflow-y-auto" style={{ background: '#0e0d3a', border: '1px solid rgba(255,255,255,0.12)' }}>
+                    {(geocodeResults.results ?? []).map((geo) => (
+                      <button key={geo.placeId} onClick={() => {
+                        const label = geo.address;
+                        const current = tmRow.geoLocations ? tmRow.geoLocations.split('\n').filter(Boolean) : [];
+                        const currentObjs = tmRow.geoLocationObjects || [];
+                        if (!current.includes(label)) {
+                          update(tmRow.id, {
+                            geoLocations: [...current, label].join('\n'),
+                            geoLocationObjects: [...currentObjs, {
+                              key: geo.placeId,
+                              type: 'custom_location',
+                              name: label,
+                              latitude: geo.lat,
+                              longitude: geo.lng,
+                              radius: 10,
+                              distanceUnit: 'mile',
+                            }],
+                          });
+                        }
+                        setAddressQuery('');
+                        setAddressRowId(null);
+                      }} className="w-full text-left px-3 py-2 text-[11px] hover:bg-[rgba(255,255,255,0.05)] transition-colors flex items-center justify-between gap-2">
+                        <span className="text-white">{geo.address}</span>
+                        <span className="text-[10px] text-white/30">📍 Pin</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Selected locations with radius controls */}
             {tmRow.geoLocations && (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="text-[10px] font-700 text-white/40 tracking-wider uppercase block">Selected ({tmRow.geoLocations.split('\n').filter(Boolean).length})</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {tmRow.geoLocations.split('\n').filter(Boolean).map((loc, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.25)] rounded-full text-[10px] text-[#00BEEF]">
-                      {loc}
-                      <button onClick={() => {
-                        const updated = tmRow.geoLocations!.split('\n').filter((_, li) => li !== i).join('\n');
-                        const updatedObjs = (tmRow.geoLocationObjects || []).filter((_, oi) => oi !== i);
-                        update(tmRow.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
-                      }} className="hover:text-red-400 transition-colors"><X size={9} /></button>
-                    </span>
-                  ))}
+                <div className="space-y-1.5">
+                  {tmRow.geoLocations.split('\n').filter(Boolean).map((loc, i) => {
+                    const geoObj = (tmRow.geoLocationObjects || [])[i];
+                    const geoType = (geoObj?.type || '').toLowerCase();
+                    const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood', 'custom_location'].includes(geoType);
+                    const isCustom = geoType === 'custom_location';
+                    return (
+                      <div key={i} className="flex items-center gap-2 flex-wrap">
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-[rgba(0,190,239,0.1)] border border-[rgba(0,190,239,0.25)] rounded-full text-[10px] text-[#00BEEF]">
+                          {loc}
+                          <button onClick={() => {
+                            const updated = tmRow.geoLocations!.split('\n').filter((_, li) => li !== i).join('\n');
+                            const updatedObjs = (tmRow.geoLocationObjects || []).filter((_, oi) => oi !== i);
+                            update(tmRow.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
+                          }} className="hover:text-red-400 transition-colors"><X size={9} /></button>
+                        </span>
+                        {supportsRadius && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={isCustom ? 1 : (geoObj.distanceUnit === 'kilometer' ? 17 : 10)}
+                              max={geoObj.distanceUnit === 'kilometer' ? 80 : 50}
+                              value={geoObj.radius || ''}
+                              onChange={e => {
+                                const val = e.target.value ? Number(e.target.value) : undefined;
+                                const updatedObjs = [...(tmRow.geoLocationObjects || [])];
+                                updatedObjs[i] = { ...updatedObjs[i], radius: val };
+                                update(tmRow.id, { geoLocationObjects: updatedObjs });
+                              }}
+                              placeholder="Radius"
+                              className="w-14 px-1.5 py-0.5 text-[10px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded text-center outline-none focus:border-[rgba(0,190,239,0.4)] text-white placeholder:text-white/20"
+                            />
+                            <select
+                              value={geoObj.distanceUnit || 'mile'}
+                              onChange={e => {
+                                const updatedObjs = [...(tmRow.geoLocationObjects || [])];
+                                updatedObjs[i] = { ...updatedObjs[i], distanceUnit: e.target.value as 'mile' | 'kilometer' };
+                                update(tmRow.id, { geoLocationObjects: updatedObjs });
+                              }}
+                              className="px-1 py-0.5 text-[10px] bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] rounded outline-none focus:border-[rgba(0,190,239,0.4)] text-white"
+                            >
+                              <option value="mile">mi</option>
+                              <option value="kilometer">km</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

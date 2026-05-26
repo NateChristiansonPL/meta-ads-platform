@@ -594,6 +594,7 @@ function PillarAdSets({
     { accessToken: settings?.accessToken ?? '', query: locationQuery, location_types: ['city', 'region', 'country', 'zip'] },
     { enabled: hasCredentials && locationQuery.length >= 2, staleTime: 60 * 1000 }
   );
+
   const { data: detailedResults, isFetching: searchingDetailed } = trpc.adminMeta.searchTargeting.useQuery(
     { accessToken: settings?.accessToken ?? '', adAccountId: settings?.adAccountId ?? '', query: detailedQuery, type: detailedType },
     { enabled: hasCredentials && detailedQuery.length >= 2, staleTime: 60 * 1000 }

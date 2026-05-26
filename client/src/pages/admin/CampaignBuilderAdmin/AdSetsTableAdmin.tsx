@@ -1409,6 +1409,12 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                             onClose={closeTargetingModal}
                             setBulkLocModal={setBulkLocModal}
                             setBulkLocText={setBulkLocText}
+                            addressQuery={addressQuery}
+                            addressRowId={addressRowId}
+                            setAddressQuery={setAddressQuery}
+                            setAddressRowId={setAddressRowId}
+                            geocodeResults={geocodeResults}
+                            geocodingLoading={geocodingLoading}
                           />
                         );
                       })()}
