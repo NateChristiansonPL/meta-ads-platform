@@ -288,20 +288,34 @@ export default function SettingsDrawer({ settings, onUpdate, onClose }: Props) {
                 />
               </div>
             ) : (
-              <SearchableSelect
-                value={settings.pixelId}
-                selectedLabel={settings.pixelId ? `${settings.pixelName || settings.pixelId} (${settings.pixelId})` : ''}
-                search={pixelSearch}
-                onSearchChange={setPixelSearch}
-                onChange={handlePixelChange}
-                placeholder="Search pixels…"
-                options={pixels
-                  .filter((p: { id: string; name: string }) => {
-                    const q = pixelSearch.toLowerCase();
-                    return !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
-                  })
-                  .map((p: { id: string; name: string }) => ({ value: p.id, label: `${p.name} (${p.id})` }))}
-              />
+              <div className="space-y-2">
+                <SearchableSelect
+                  value={settings.pixelId}
+                  selectedLabel={settings.pixelId ? `${settings.pixelName || settings.pixelId} (${settings.pixelId})` : ''}
+                  search={pixelSearch}
+                  onSearchChange={setPixelSearch}
+                  onChange={handlePixelChange}
+                  placeholder="Search pixels…"
+                  options={pixels
+                    .filter((p: { id: string; name: string }) => {
+                      const q = pixelSearch.toLowerCase();
+                      return !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+                    })
+                    .map((p: { id: string; name: string }) => ({ value: p.id, label: `${p.name} (${p.id})` }))}
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                  <span className="text-[9px] font-600 uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.25)' }}>or enter manually</span>
+                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+                </div>
+                <ManualInput
+                  value={settings.pixelId}
+                  onChange={v => onUpdate({ ...settings, pixelId: v, pixelName: '' })}
+                  placeholder="Pixel ID (e.g. 123456789)"
+                  mono
+                  hint="Paste a pixel ID if it's not listed above"
+                />
+              </div>
             )}
             <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Used for conversion tracking on all ads</p>
           </Section>

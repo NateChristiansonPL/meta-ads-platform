@@ -853,3 +853,4 @@
 - [x] Replace Coming Soon Campaign Builder placeholder in sidebar with actual working Campaign Builder route
 - [x] Add /campaign-builder route pointing to the admin campaign builder component (or a shared version)
 - [x] Ensure non-admin users can access the campaign builder and launch builds (check tRPC procedure permissions)
+- [x] Allow manual pixel ID input in Campaign Builder Settings/Setup section (SettingsDrawerAdmin)
