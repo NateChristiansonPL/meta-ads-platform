@@ -95,7 +95,14 @@ function normalizeGeoFromObjects(geoObjs: GeoLocationObject[]): Record<string, u
     const type = clean(g.type).toLowerCase();
     const key = clean(g.key);
     if (!key) continue;
-    if (type === 'city') cities.push({ key });
+    if (type === 'city' || type === 'subcity' || type === 'neighborhood') {
+      const cityEntry: Record<string, unknown> = { key };
+      if (g.radius && g.radius > 0) {
+        cityEntry.radius = g.radius;
+        cityEntry.distance_unit = g.distanceUnit || 'mile';
+      }
+      cities.push(cityEntry);
+    }
     else if (type === 'region') regions.push({ key });
     else if (type === 'country') countries.push(key.toUpperCase());
     else if (type === 'zip') zips.push({ key });

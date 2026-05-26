@@ -854,3 +854,5 @@
 - [x] Add /campaign-builder route pointing to the admin campaign builder component (or a shared version)
 - [x] Ensure non-admin users can access the campaign builder and launch builds (check tRPC procedure permissions)
 - [x] Allow manual pixel ID input in Campaign Builder Settings/Setup section (SettingsDrawerAdmin)
+- [x] Add radius option for selected locations in Campaign Builder targeting (per-location radius control on chips for cities and custom locations)
+- [x] Support individual address/place locations via the search typeahead (subcity, neighborhood, geo_market added to location_types)

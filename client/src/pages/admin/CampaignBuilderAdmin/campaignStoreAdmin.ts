@@ -86,6 +86,8 @@ export interface GeoLocationObject {
   key: string;   // Meta geo key (e.g. "2460644" for a city)
   type: string;  // 'city' | 'region' | 'country' | 'zip' | 'geo_market' | 'medium_geo_area'
   name: string;  // display label
+  radius?: number;        // radius around location (cities: 10-50 mi / 17-80 km)
+  distanceUnit?: 'mile' | 'kilometer';  // default: 'mile'
 }
 export interface InterestObject {
   id: string;    // Meta interest/behavior/demographic ID

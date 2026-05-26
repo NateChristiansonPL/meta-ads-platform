@@ -720,7 +720,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
     {
       accessToken: settings?.accessToken ?? '',
       query: locationQuery,
-      location_types: ['city', 'region', 'country', 'zip'],
+      location_types: ['city', 'subcity', 'neighborhood', 'region', 'country', 'zip', 'geo_market'],
     },
     { enabled: hasCredentials && locationQuery.length >= 2, staleTime: 60 * 1000 }
   );
@@ -1507,7 +1507,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                         value={locationRowId === row.id ? locationQuery : ''}
                                         onChange={e => { setLocationQuery(e.target.value); setLocationRowId(row.id); }}
                                         onFocus={() => setLocationRowId(row.id)}
-                                        placeholder="Type city, state, country, or zip…"
+                                        placeholder="Type city, neighborhood, state, country, zip, or DMA…"
                                         className="flex-1 px-3 py-2 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
                                       />
                                       {searchingLocations && <span className="text-[10px] text-muted-foreground">Searching…</span>}
@@ -1542,21 +1542,57 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                 ) : (
                                   <p className="text-[11px] text-amber-400">Add credentials in Settings to enable location search.</p>
                                 )}
-                                {/* Selected locations chips + manual fallback */}
+                                {/* Selected locations chips with radius controls */}
                                 {row.geoLocations && (
-                                  <div className="space-y-1">
+                                  <div className="space-y-2">
                                     <label className="text-[10px] font-700 text-muted-foreground tracking-wider uppercase block">Selected Locations</label>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {row.geoLocations.split('\n').filter(Boolean).map((loc, i) => (
-                                        <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[11px] text-primary">
-                                          {loc}
-                                          <button onClick={() => {
-                                            const updated = row.geoLocations!.split('\n').filter((l, li) => li !== i).join('\n');
-                                            const updatedObjs = (row.geoLocationObjects || []).filter((_, oi) => oi !== i);
-                                            update(row.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
-                                          }} className="hover:text-red-400 transition-colors"><X size={10} /></button>
-                                        </span>
-                                      ))}
+                                    <div className="space-y-1.5">
+                                      {row.geoLocations.split('\n').filter(Boolean).map((loc, i) => {
+                                        const geoObj = (row.geoLocationObjects || [])[i];
+                                        const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood'].includes((geoObj.type || '').toLowerCase());
+                                        return (
+                                          <div key={i} className="flex items-center gap-2 flex-wrap">
+                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[11px] text-primary">
+                                              {loc}
+                                              <button onClick={() => {
+                                                const updated = row.geoLocations!.split('\n').filter((l, li) => li !== i).join('\n');
+                                                const updatedObjs = (row.geoLocationObjects || []).filter((_, oi) => oi !== i);
+                                                update(row.id, { geoLocations: updated, geoLocationObjects: updatedObjs });
+                                              }} className="hover:text-red-400 transition-colors"><X size={10} /></button>
+                                            </span>
+                                            {supportsRadius && (
+                                              <div className="flex items-center gap-1">
+                                                <input
+                                                  type="number"
+                                                  min={geoObj.distanceUnit === 'kilometer' ? 17 : 10}
+                                                  max={geoObj.distanceUnit === 'kilometer' ? 80 : 50}
+                                                  value={geoObj.radius || ''}
+                                                  onChange={e => {
+                                                    const val = e.target.value ? Number(e.target.value) : undefined;
+                                                    const updatedObjs = [...(row.geoLocationObjects || [])];
+                                                    updatedObjs[i] = { ...updatedObjs[i], radius: val };
+                                                    update(row.id, { geoLocationObjects: updatedObjs });
+                                                  }}
+                                                  placeholder="Radius"
+                                                  className="w-16 px-1.5 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded text-center outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
+                                                />
+                                                <select
+                                                  value={geoObj.distanceUnit || 'mile'}
+                                                  onChange={e => {
+                                                    const updatedObjs = [...(row.geoLocationObjects || [])];
+                                                    updatedObjs[i] = { ...updatedObjs[i], distanceUnit: e.target.value as 'mile' | 'kilometer' };
+                                                    update(row.id, { geoLocationObjects: updatedObjs });
+                                                  }}
+                                                  className="px-1 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
+                                                >
+                                                  <option value="mile">mi</option>
+                                                  <option value="kilometer">km</option>
+                                                </select>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
