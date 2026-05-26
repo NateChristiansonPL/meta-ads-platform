@@ -327,6 +327,7 @@ export const metaRouter = router({
         }
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
+        const customConversions: { id: string; name: string }[] = [];
         if (adAccountId) {
           try {
             const accountId = normalizeAdAccountId(adAccountId);
@@ -336,7 +337,9 @@ export const metaRouter = router({
               accessToken
             );
             for (const cc of ccData.data || []) {
-              if (cc.name) eventSet.add(cc.name as string);
+              if (cc.id && cc.name) {
+                customConversions.push({ id: cc.id as string, name: cc.name as string });
+              }
             }
           } catch {
             // custom conversions may not be accessible — continue
@@ -344,7 +347,7 @@ export const metaRouter = router({
         }
 
         const events = Array.from(eventSet).sort();
-        return { events };
+        return { events, customConversions };
       } catch (err) {
         throw new TRPCError({
           code: "BAD_REQUEST",

@@ -137,6 +137,7 @@ export interface AdSetRow {
   billingChoice?: string;               // 'IMPRESSIONS' | 'THRUPLAY' | 'TWO_SECOND_CONTINUOUS_VIDEO_VIEWS'
   conversionLocation: ConversionLocation;
   conversionEvent: string;
+  customConversionId?: string;          // Meta custom conversion ID (when a custom conversion is selected)
   // Engagement objective extras
   engagementGoal?: string;              // numeric goal for page visits / page likes
   facebookPageId?: string;             // required for Awareness + Engagement

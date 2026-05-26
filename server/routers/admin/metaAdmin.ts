@@ -484,6 +484,7 @@ export const metaAdminRouter = router({
         }
 
         // 2. Custom conversions defined on the ad account (separate from pixel events)
+        const customConversions: { id: string; name: string }[] = [];
         if (adAccountId) {
           try {
             const accountId = normalizeAdAccountId(adAccountId);
@@ -493,7 +494,9 @@ export const metaAdminRouter = router({
               accessToken
             );
             for (const cc of ccData.data || []) {
-              if (cc.name) eventSet.add(cc.name as string);
+              if (cc.id && cc.name) {
+                customConversions.push({ id: cc.id as string, name: cc.name as string });
+              }
             }
           } catch {
             // custom conversions may not be accessible — continue
@@ -501,7 +504,7 @@ export const metaAdminRouter = router({
         }
 
         const events = Array.from(eventSet).sort();
-        return { events };
+        return { events, customConversions };
       } catch (err) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -1043,6 +1046,7 @@ export const metaAdminRouter = router({
         conversionLocation: z.string().optional(),
         pixelId: z.string().optional(),
         customEventType: z.string().optional(),
+        customConversionId: z.string().optional(),
         leadGenFormId: z.string().optional(),
         facebookPageId: z.string().optional(),
         instagramProfileId: z.string().optional(),
@@ -1063,7 +1067,7 @@ export const metaAdminRouter = router({
         accessToken, adAccountId, campaignId, name, status,
         optimizationGoal, billingEvent, budgetType, budgetCents,
         startTime, endTime, targeting, attributionSpec, frequencyControl, adScheduling,
-        conversionLocation, pixelId, customEventType, leadGenFormId, facebookPageId, instagramProfileId,
+        conversionLocation, pixelId, customEventType, customConversionId, leadGenFormId, facebookPageId, instagramProfileId,
         objective, bidStrategy, bidAmount, roasFloor, destinationType, pacingType,
       } = input;
       const accountId = normalizeAdAccountId(adAccountId);
@@ -1152,9 +1156,9 @@ export const metaAdminRouter = router({
       //   campaigns optimizing toward LANDING_PAGE_VIEWS or LINK_CLICKS. The pixel is attached
       //   via tracking_specs at the ad level instead. Omit promoted_object entirely.
       //
-      // OUTCOME_SALES / OUTCOME_LEADS: use pixel_id + custom_event_type: OTHER only.
-      //   Never pass custom_conversion_id in promoted_object for outcome-based buying objectives.
-      //   The customEventId from the builder state is for reporting/optimization signal only.
+      // OUTCOME_SALES / OUTCOME_LEADS: use pixel_id + custom_event_type + custom_conversion_id.
+      //   When a custom conversion is selected, pass custom_conversion_id in promoted_object.
+      //   Meta requires custom_event_type to be set alongside custom_conversion_id.
       //
       // All other objectives (AWARENESS, ENGAGEMENT, etc.): include page_id / instagram_profile_id
       //   when required; pixel_id only when a pixel is configured.
@@ -1162,8 +1166,16 @@ export const metaAdminRouter = router({
       if (objective !== 'OUTCOME_TRAFFIC') {
         if (pixelId) {
           promotedObject.pixel_id = pixelId;
-          // For OUTCOME_SALES/LEADS, always use custom_event_type: OTHER — never custom_conversion_id
           if (objective === 'OUTCOME_SALES' || objective === 'OUTCOME_LEADS') {
+            // When a custom conversion is selected, pass its ID to Meta
+            if (customConversionId) {
+              promotedObject.custom_conversion_id = customConversionId;
+              promotedObject.custom_event_type = 'OTHER';
+            } else {
+              promotedObject.custom_event_type = customEventType || 'OTHER';
+            }
+          } else if (customConversionId) {
+            promotedObject.custom_conversion_id = customConversionId;
             promotedObject.custom_event_type = 'OTHER';
           } else if (customEventType) {
             promotedObject.custom_event_type = customEventType;

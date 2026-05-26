@@ -201,6 +201,7 @@ export function useLaunchBuild(
               targeting,
               pixelId: pixelId || undefined,
               customEventType: adSet.conversionEvent || undefined,
+              customConversionId: adSet.customConversionId || undefined,
               conversionLocation: adSet.conversionLocation || undefined,
               objective: parentCampaign?.objective || undefined,
               ...buildAdSetApiExtras(adSet),
