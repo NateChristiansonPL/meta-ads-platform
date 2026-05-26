@@ -1292,7 +1292,14 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                                     const cc = customConversions.find(c => c.id === ccId);
                                     update(row.id, { conversionEvent: cc?.name ?? '', customConversionId: ccId });
                                   } else {
-                                    update(row.id, { conversionEvent: val, customConversionId: undefined });
+                                    // Check if this standard event name matches a custom conversion.
+                                    // If so, use the custom_conversion_id instead (Meta requires it for non-standard events).
+                                    const matchingCc = customConversions.find(c => c.name === val);
+                                    if (matchingCc) {
+                                      update(row.id, { conversionEvent: val, customConversionId: matchingCc.id });
+                                    } else {
+                                      update(row.id, { conversionEvent: val, customConversionId: undefined });
+                                    }
                                   }
                                 }}
                                 className="w-full px-2 py-1 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
