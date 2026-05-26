@@ -861,3 +861,4 @@
 - [x] Implement column width resizing on the Ad Sets tab (same drag-to-resize behavior as the Campaigns tab)
 - [x] Fix: custom conversion event selected in Campaign Builder must be passed as promoted_object.custom_conversion_id when creating ad sets via Meta API
 - [x] Fix: Column resize on Campaigns and Ad Sets tabs crashes with "Cannot read properties of null (reading 'key')" TypeError
+- [x] Add "Pin a Location" address finder with radius controls to Bulk Edit Ad Sets Locations section (same geocoding search + per-location radius as in TargetingPopupAdmin)

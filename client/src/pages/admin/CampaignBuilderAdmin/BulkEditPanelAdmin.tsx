@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import {
   AdSetRow, BuildSettings, OPTIMIZATION_GOAL_LABELS, OptimizationGoal,
   conversionEventApplicable, LANGUAGE_OPTIONS, TREE_FIELDS, FrequencyControl,
-  frequencyControlApplicable, PLATFORM_PLACEMENTS, InterestObject,
+  frequencyControlApplicable, PLATFORM_PLACEMENTS, InterestObject, GeoLocationObject,
 } from './campaignStoreAdmin';
 import { trpc } from '@/lib/trpc';
 
@@ -53,6 +53,7 @@ interface BulkFields {
   ageMax: string;
   genders: string;
   locationsToAdd: string[];          // display labels
+  locationObjectsToAdd: GeoLocationObject[];  // structured geo objects (parallel to locationsToAdd)
   locationsMode: LocationMode;
   targetedAudiencesToAdd: string[];  // id|name format
   targetedAudiencesMode: AudienceMode;
@@ -178,10 +179,18 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
 
   const [locationQuery, setLocationQuery] = useState('');
   const { data: locationResults, isFetching: searchingLocations } = trpc.adminMeta.searchGeoLocations.useQuery(
-    { accessToken: settings?.accessToken ?? '', query: locationQuery, location_types: ['city', 'region', 'country', 'zip'] },
+    { accessToken: settings?.accessToken ?? '', query: locationQuery, location_types: ['city', 'subcity', 'neighborhood', 'region', 'country', 'zip', 'geo_market'] },
     { enabled: hasCredentials && locationQuery.trim().length >= 2, staleTime: 60 * 1000 },
   );
   const geoResults = (locationResults as { results?: { key: string; name: string; type: string; region?: string; countryName?: string }[] })?.results ?? [];
+
+  // ── Address geocoding (Pin a Location) ─────────────────────────────────────
+  const [addressQuery, setAddressQuery] = useState('');
+  const { data: geocodeResults, isFetching: geocodingLoading } = trpc.adminMeta.geocodeAddress.useQuery(
+    { address: addressQuery },
+    { enabled: addressQuery.length >= 3, staleTime: 60 * 1000 },
+  );
+
   // ── Detailed targeting search ─────────────────────────────────────────────
   const [detailedQuery, setDetailedQuery] = useState('');
   const [detailedType, setDetailedType] = useState<'adinterest' | 'behaviors' | 'demographics'>('adinterest');
@@ -227,6 +236,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     genders: shared(r => r.genders || undefined, 'all'),
     // Audiences (always start empty in add mode — merging makes more sense)
     locationsToAdd: [],
+    locationObjectsToAdd: [],
     locationsMode: 'add',
     targetedAudiencesToAdd: [],
     targetedAudiencesMode: 'add',
@@ -315,11 +325,20 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
       if (enabled.locations && fields.locationsToAdd.length > 0) {
         if (fields.locationsMode === 'replace') {
           patch.geoLocations = fields.locationsToAdd.join('\n');
-          patch.geoLocationObjects = [];
+          patch.geoLocationObjects = [...fields.locationObjectsToAdd];
         } else {
           const existing = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
-          const newLocs = fields.locationsToAdd.filter(l => !existing.includes(l));
+          const existingObjs = row.geoLocationObjects || [];
+          const newLocs: string[] = [];
+          const newObjs: GeoLocationObject[] = [];
+          fields.locationsToAdd.forEach((l, idx) => {
+            if (!existing.includes(l)) {
+              newLocs.push(l);
+              if (fields.locationObjectsToAdd[idx]) newObjs.push(fields.locationObjectsToAdd[idx]);
+            }
+          });
           patch.geoLocations = [...existing, ...newLocs].join('\n');
+          patch.geoLocationObjects = [...existingObjs, ...newObjs];
         }
       }
 
@@ -694,7 +713,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
           {/* Locations */}
           <FieldToggle label="Locations" icon={<MapPin size={13} />} enabled={enabled.locations} onToggle={() => toggleEnabled('locations')}>
             <ModeToggle mode={fields.locationsMode} onChange={m => setField('locationsMode', m)} />
-            {/* Search */}
+            {/* City/Region/Country Search */}
             <div className="relative">
               <input
                 className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
@@ -706,7 +725,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground animate-pulse">searching…</span>
               )}
             </div>
-            {/* Results */}
+            {/* Geo Results */}
             {geoResults.length > 0 && (
               <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
                 {geoResults.slice(0, 8).map((r: { key: string; name: string; type: string; region?: string; countryName?: string }) => {
@@ -716,7 +735,10 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                     <button
                       key={r.key}
                       onClick={() => {
-                        if (!alreadyAdded) setField('locationsToAdd', [...fields.locationsToAdd, label]);
+                        if (!alreadyAdded) {
+                          setField('locationsToAdd', [...fields.locationsToAdd, label]);
+                          setField('locationObjectsToAdd', [...fields.locationObjectsToAdd, { key: r.key, type: r.type, name: label }]);
+                        }
                         setLocationQuery('');
                       }}
                       disabled={alreadyAdded}
@@ -731,17 +753,103 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                 })}
               </div>
             )}
-            {/* Selected chips */}
+
+            {/* Pin a Specific Address */}
+            {hasCredentials && (
+              <div className="relative mt-2">
+                <label className="text-[10px] font-700 text-muted-foreground/60 tracking-wider uppercase block mb-1">Pin a Specific Address</label>
+                <div className="flex items-center gap-2 bg-surface-2/50 border border-border rounded-lg px-2.5 py-1.5">
+                  <MapPin size={11} className="text-muted-foreground/40 shrink-0" />
+                  <input
+                    value={addressQuery}
+                    onChange={e => setAddressQuery(e.target.value)}
+                    placeholder="Type a street address, place, or business…"
+                    className="flex-1 bg-transparent text-[12px] text-foreground outline-none placeholder:text-muted-foreground/40"
+                  />
+                  {geocodingLoading && <span className="text-[10px] text-muted-foreground animate-pulse">…</span>}
+                </div>
+                {addressQuery.length >= 3 && geocodeResults != null && ((geocodeResults as { results?: { address: string; lat: number; lng: number; placeId: string }[] }).results?.length ?? 0) > 0 && (
+                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-surface-2 shadow-xl max-h-48 overflow-y-auto">
+                    {((geocodeResults as { results?: { address: string; lat: number; lng: number; placeId: string }[] }).results ?? []).map((geo) => (
+                      <button key={geo.placeId} onClick={() => {
+                        const label = geo.address;
+                        if (!fields.locationsToAdd.includes(label)) {
+                          setField('locationsToAdd', [...fields.locationsToAdd, label]);
+                          setField('locationObjectsToAdd', [...fields.locationObjectsToAdd, {
+                            key: geo.placeId || `${geo.lat},${geo.lng}`,
+                            type: 'custom_location',
+                            name: label,
+                            latitude: geo.lat,
+                            longitude: geo.lng,
+                            radius: 10,
+                            distanceUnit: 'mile',
+                          }]);
+                        }
+                        setAddressQuery('');
+                      }} className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between gap-2">
+                        <span className="text-foreground">{geo.address}</span>
+                        <span className="text-[10px] text-muted-foreground/50">📍 Pin</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Selected locations with radius controls */}
             {fields.locationsToAdd.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {fields.locationsToAdd.map((loc, i) => (
-                  <span key={i} className="flex items-center gap-1 text-[10px] bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full">
-                    {loc}
-                    <button onClick={() => setField('locationsToAdd', fields.locationsToAdd.filter((_, li) => li !== i))}>
-                      <X size={9} />
-                    </button>
-                  </span>
-                ))}
+              <div className="space-y-1.5 mt-2">
+                <label className="text-[10px] font-700 text-muted-foreground/60 tracking-wider uppercase block">Selected ({fields.locationsToAdd.length})</label>
+                <div className="space-y-1.5">
+                  {fields.locationsToAdd.map((loc, i) => {
+                    const geoObj = fields.locationObjectsToAdd[i];
+                    const geoType = (geoObj?.type || '').toLowerCase();
+                    const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood', 'custom_location'].includes(geoType);
+                    const isCustom = geoType === 'custom_location';
+                    return (
+                      <div key={i} className="flex items-center gap-2 flex-wrap">
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full text-[10px] text-primary">
+                          {isCustom && <span>📍</span>}
+                          {loc}
+                          <button onClick={() => {
+                            setField('locationsToAdd', fields.locationsToAdd.filter((_, li) => li !== i));
+                            setField('locationObjectsToAdd', fields.locationObjectsToAdd.filter((_, oi) => oi !== i));
+                          }} className="hover:text-red-400 transition-colors"><X size={9} /></button>
+                        </span>
+                        {supportsRadius && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={isCustom ? 1 : (geoObj.distanceUnit === 'kilometer' ? 17 : 10)}
+                              max={geoObj.distanceUnit === 'kilometer' ? 80 : 50}
+                              value={geoObj.radius || ''}
+                              onChange={e => {
+                                const val = e.target.value ? Number(e.target.value) : undefined;
+                                const updatedObjs = [...fields.locationObjectsToAdd];
+                                updatedObjs[i] = { ...updatedObjs[i], radius: val };
+                                setField('locationObjectsToAdd', updatedObjs);
+                              }}
+                              placeholder="Radius"
+                              className="w-14 px-1.5 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded text-center outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/30"
+                            />
+                            <select
+                              value={geoObj.distanceUnit || 'mile'}
+                              onChange={e => {
+                                const updatedObjs = [...fields.locationObjectsToAdd];
+                                updatedObjs[i] = { ...updatedObjs[i], distanceUnit: e.target.value as 'mile' | 'kilometer' };
+                                setField('locationObjectsToAdd', updatedObjs);
+                              }}
+                              className="px-1 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
+                            >
+                              <option value="mile">mi</option>
+                              <option value="kilometer">km</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
             {fields.locationsToAdd.length === 0 && (
