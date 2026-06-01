@@ -868,3 +868,10 @@
 ## Campaign Builder — Import Existing Visibility Fix
 
 - [x] Import Existing button only shows on Ads Only tab (hidden on Full Build and Update Ads)
+
+## Campaign Builder — Ads Only Mode Isolation & Read-Only Views
+
+- [x] Isolate imported campaigns/ad sets so they don't populate into Full Build or Update Ads state (keep in importedCampaigns/importedAdSets only)
+- [x] Ads Only Campaigns tab: read-only table with columns (Name, Objective, Status, Campaign ID) + "READ-ONLY — Imported from Meta" info bar
+- [x] Ads Only Ad Sets tab: read-only table with columns (Name, Campaign, Status, Ad Set ID) + "READ-ONLY — Imported from Meta" info bar
+- [x] Full Build and Update Ads tabs show the existing editable tables as before (no change)

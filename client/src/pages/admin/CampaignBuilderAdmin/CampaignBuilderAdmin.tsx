@@ -16,6 +16,7 @@ import SettingsDrawer from "./SettingsDrawerAdmin";
 import SessionManager from "./SessionManagerAdmin";
 import LeadGenFormModal from "./LeadGenFormModalAdmin";
 import ImportMetaStructureModal from "./ImportMetaStructureModalAdmin";
+import { ReadOnlyCampaignsTable, ReadOnlyAdSetsTable } from "./ReadOnlyImportedTablesAdmin";
 import CreativeLibrarySessionModal from "./CreativeLibrarySessionModalAdmin";
 import { useLaunchBuild } from "./useLaunchBuildAdmin";
 import PillarHubAdmin, { TweakSettings } from "./PillarHubAdmin";
@@ -154,20 +155,11 @@ export default function CampaignBuilderAdmin() {
   }) => {
     setState(s => {
       const campaignById = new Map(campaigns.map(c => [c.id, c]));
-      const existingCampaignIds = new Set(s.campaigns.map(c => c.campaignId).filter(Boolean));
       const existingAdSetIds = new Set(s.adSets.map(a => a.adSetId).filter(Boolean));
 
-      const importedCampaignRows = populateRows
-        ? campaigns
-          .filter(campaign => !existingCampaignIds.has(campaign.id))
-          .map(campaign => newCampaign({
-            name: campaign.name,
-            objective: normalizeImportedObjective(campaign.objective),
-            status: campaign.status === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
-            campaignId: campaign.id,
-          }))
-        : [];
-
+      // In ads-only mode, we populate ad set rows (needed for AdsMatrix & launch)
+      // but do NOT populate campaign rows into the editable campaigns array.
+      // The read-only views use importedCampaigns/importedAdSets directly.
       const importedAdSetRows = populateRows
         ? adSets
           .filter(adSet => !existingAdSetIds.has(adSet.id))
@@ -189,7 +181,8 @@ export default function CampaignBuilderAdmin() {
         ...s,
         importedCampaigns: campaigns,
         importedAdSets: adSets,
-        campaigns: populateRows ? [...s.campaigns, ...importedCampaignRows] : s.campaigns,
+        // Only populate adSets rows (needed for matrix/launch resolution)
+        // Do NOT touch campaigns array — read-only view uses importedCampaigns
         adSets: populateRows ? [...s.adSets, ...importedAdSetRows] : s.adSets,
       };
     });
@@ -251,8 +244,8 @@ export default function CampaignBuilderAdmin() {
 
   // ── Tab definitions ──────────────────────────────────────────────────────────
   const TABS: { id: TabId; label: string; count?: number }[] = [
-    { id: "campaigns",        label: "Campaigns",       count: state.campaigns.filter(c => c.name).length },
-    { id: "ad-sets",          label: "Ad Sets",         count: state.adSets.filter(a => a.name).length },
+    { id: "campaigns",        label: "Campaigns",       count: state.buildMode === 'ads-only' ? state.importedCampaigns.length : state.campaigns.filter(c => c.name).length },
+    { id: "ad-sets",          label: "Ad Sets",         count: state.buildMode === 'ads-only' ? state.importedAdSets.length : state.adSets.filter(a => a.name).length },
     { id: "creative-library", label: "Creative Library",count: state.creatives.filter(c => c.concept).length + state.carouselCreatives.length },
     { id: "ads",              label: "Ads",             count: state.ads.filter(a => a.adName).length },
     { id: "export",           label: "Export & Launch" },
@@ -454,25 +447,33 @@ export default function CampaignBuilderAdmin() {
             <>
               {activeTab === "campaigns" && (
                 <div className="h-full overflow-auto">
-                  <CampaignTable
-                    rows={state.campaigns}
-                    onChange={rows => update("campaigns", rows)}
-                  />
+                  {state.buildMode === 'ads-only' ? (
+                    <ReadOnlyCampaignsTable campaigns={state.importedCampaigns} />
+                  ) : (
+                    <CampaignTable
+                      rows={state.campaigns}
+                      onChange={rows => update("campaigns", rows)}
+                    />
+                  )}
                 </div>
               )}
 
               {activeTab === "ad-sets" && (
                 <div className="h-full overflow-auto">
-                  <AdSetsTable
-                    rows={state.adSets}
-                    campaigns={state.campaigns}
-                    onChange={rows => update("adSets", rows)}
-                    settings={state.settings}
-                    reachHistory={state.reachHistory}
-                    overlapHistory={state.overlapHistory}
-                    onReachHistoryChange={h => update("reachHistory", h)}
-                    onOverlapHistoryChange={h => update("overlapHistory", h)}
-                  />
+                  {state.buildMode === 'ads-only' ? (
+                    <ReadOnlyAdSetsTable adSets={state.importedAdSets} campaigns={state.importedCampaigns} />
+                  ) : (
+                    <AdSetsTable
+                      rows={state.adSets}
+                      campaigns={state.campaigns}
+                      onChange={rows => update("adSets", rows)}
+                      settings={state.settings}
+                      reachHistory={state.reachHistory}
+                      overlapHistory={state.overlapHistory}
+                      onReachHistoryChange={h => update("reachHistory", h)}
+                      onOverlapHistoryChange={h => update("overlapHistory", h)}
+                    />
+                  )}
                 </div>
               )}
 
