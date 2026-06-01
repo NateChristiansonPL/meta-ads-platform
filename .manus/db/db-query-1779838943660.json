@@ -1,0 +1,46 @@
+{
+  "query": "SELECT id, businessManagerId, businessManagerName, createdAt FROM token_vault;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT id, businessManagerId, businessManagerName, createdAt FROM token_vault;",
+  "rows": [
+    {
+      "id": "1",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "NULL",
+      "createdAt": "2026-04-24 16:19:38"
+    },
+    {
+      "id": "2",
+      "businessManagerId": "1576238612655062",
+      "businessManagerName": "NULL",
+      "createdAt": "2026-04-24 16:20:48"
+    },
+    {
+      "id": "30001",
+      "businessManagerId": "1576238612655062",
+      "businessManagerName": "NULL",
+      "createdAt": "2026-04-29 20:45:53"
+    },
+    {
+      "id": "30002",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "NULL",
+      "createdAt": "2026-04-29 20:46:32"
+    },
+    {
+      "id": "60001",
+      "businessManagerId": "448939905645483",
+      "businessManagerName": "MediaData BM",
+      "createdAt": "2026-04-30 17:59:22"
+    },
+    {
+      "id": "90001",
+      "businessManagerId": "399721250720481",
+      "businessManagerName": "CCF BM",
+      "createdAt": "2026-04-30 20:58:36"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tbusinessManagerId\tbusinessManagerName\tcreatedAt\n1\t237424740137561\tNULL\t2026-04-24 16:19:38\n2\t1576238612655062\tNULL\t2026-04-24 16:20:48\n30001\t1576238612655062\tNULL\t2026-04-29 20:45:53\n30002\t237424740137561\tNULL\t2026-04-29 20:46:32\n60001\t448939905645483\tMediaData BM\t2026-04-30 17:59:22\n90001\t399721250720481\tCCF BM\t2026-04-30 20:58:36\n",
+  "stderr": "",
+  "execution_time_ms": 267
+}

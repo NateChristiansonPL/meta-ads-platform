@@ -270,19 +270,21 @@ export default function CampaignBuilderAdmin() {
     <div className="flex items-center gap-2">
       <SessionManager state={state} onLoad={handleLoad} />
 
-      <button
-        onClick={() => setImportOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
-        style={{
-          background: state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.12)" : "rgba(255,255,255,0.08)",
-          color: state.importedCampaigns.length || state.importedAdSets.length ? "#00BEEF" : "rgba(255,255,255,0.7)",
-          border: `1px solid ${state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.3)" : "rgba(255,255,255,0.16)"}`,
-        }}
-        title="Import specific existing Meta campaigns and ad sets"
-      >
-        <DownloadCloud size={12} />
-        <span>Import Existing</span>
-      </button>
+      {state.buildMode === 'ads-only' && (
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-600 transition-all"
+          style={{
+            background: state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.12)" : "rgba(255,255,255,0.08)",
+            color: state.importedCampaigns.length || state.importedAdSets.length ? "#00BEEF" : "rgba(255,255,255,0.7)",
+            border: `1px solid ${state.importedCampaigns.length || state.importedAdSets.length ? "rgba(0,190,239,0.3)" : "rgba(255,255,255,0.16)"}`,
+          }}
+          title="Import specific existing Meta campaigns and ad sets"
+        >
+          <DownloadCloud size={12} />
+          <span>Import Existing</span>
+        </button>
+      )}
 
       <button
         onClick={() => setCreativeImportOpen(true)}

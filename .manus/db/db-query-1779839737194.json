@@ -1,0 +1,24 @@
+{
+  "query": "SELECT id, businessManagerId, businessManagerName, LEFT(accessToken, 20) as tokenPreview, updatedAt FROM token_vault WHERE businessManagerId = '237424740137561';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT id, businessManagerId, businessManagerName, LEFT(accessToken, 20) as tokenPreview, updatedAt FROM token_vault WHERE businessManagerId = '237424740137561';",
+  "rows": [
+    {
+      "id": "1",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "Iluminere BM",
+      "tokenPreview": "EAAJaTpmDZB2YBRlGZCU",
+      "updatedAt": "2026-05-26 23:55:32"
+    },
+    {
+      "id": "30002",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "Iluminere BM",
+      "tokenPreview": "EAAJaTpmDZB2YBRlGZCU",
+      "updatedAt": "2026-05-26 23:55:32"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tbusinessManagerId\tbusinessManagerName\ttokenPreview\tupdatedAt\n1\t237424740137561\tIluminere BM\tEAAJaTpmDZB2YBRlGZCU\t2026-05-26 23:55:32\n30002\t237424740137561\tIluminere BM\tEAAJaTpmDZB2YBRlGZCU\t2026-05-26 23:55:32\n",
+  "stderr": "",
+  "execution_time_ms": 276
+}

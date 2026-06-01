@@ -864,3 +864,7 @@
 - [x] Add "Pin a Location" address finder with radius controls to Bulk Edit Ad Sets Locations section (same geocoding search + per-location radius as in TargetingPopupAdmin)
 - [x] Fix: Custom conversion ID still not being passed to ad set creation via Meta API (conversion event field empty in Ads Manager)
 - [x] Fix: Advantage+ placements only sending Facebook & Instagram platforms, missing Audience Network/Messenger/WhatsApp/Threads
+
+## Campaign Builder — Import Existing Visibility Fix
+
+- [x] Import Existing button only shows on Ads Only tab (hidden on Full Build and Update Ads)
