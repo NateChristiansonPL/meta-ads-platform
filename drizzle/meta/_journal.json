@@ -190,6 +190,13 @@
       "when": 1779150551465,
       "tag": "0026_stiff_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1780357655311,
+      "tag": "0027_glorious_scream",
+      "breakpoints": true
     }
   ]
 }

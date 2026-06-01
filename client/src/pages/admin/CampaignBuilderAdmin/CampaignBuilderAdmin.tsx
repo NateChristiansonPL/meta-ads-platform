@@ -5,7 +5,7 @@
  * Credential flow: BM token (vault) → ad account → FB page → IG → pixel
  * All credentials resolved server-side via tokenId; accessToken never typed manually.
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import CampaignTable from "./CampaignTableAdmin";
 import AdSetsTable from "./AdSetsTableAdmin";
@@ -37,6 +37,7 @@ import {
 } from "./campaignStoreAdmin";
 import { DownloadCloud, Layers, Settings, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
+import { useCreativeLibrarySync } from "./useCreativeLibrarySync";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export";
@@ -100,6 +101,22 @@ export default function CampaignBuilderAdmin() {
   // ── Launch hook ──────────────────────────────────────────────────────────────
   const { launch, progress, reset } = useLaunchBuild(state, ({ ads, campaigns, adSets }) => {
     setState(s => ({ ...s, ads, campaigns, adSets }));
+  });
+
+  // ── Creative Library auto-sync ──────────────────────────────────────────────
+  const handleCreativeLibraryLoad = useCallback((creatives: import("./campaignStoreAdmin").CreativeRow[], carouselCreatives: import("./campaignStoreAdmin").CreativeRow[]) => {
+    setState(s => ({
+      ...s,
+      creatives: creatives.length > 0 ? creatives : s.creatives,
+      carouselCreatives: carouselCreatives.length > 0 ? carouselCreatives : s.carouselCreatives,
+    }));
+  }, []);
+
+  const { isSaving: isCreativeLibrarySaving } = useCreativeLibrarySync({
+    adAccountId: state.settings.adAccountId,
+    creatives: state.creatives,
+    carouselCreatives: state.carouselCreatives,
+    onLoad: handleCreativeLibraryLoad,
   });
 
   // ── State helpers ────────────────────────────────────────────────────────────

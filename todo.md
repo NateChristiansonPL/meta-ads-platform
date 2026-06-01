@@ -875,3 +875,11 @@
 - [x] Ads Only Campaigns tab: read-only table with columns (Name, Objective, Status, Campaign ID) + "READ-ONLY — Imported from Meta" info bar
 - [x] Ads Only Ad Sets tab: read-only table with columns (Name, Campaign, Status, Ad Set ID) + "READ-ONLY — Imported from Meta" info bar
 - [x] Full Build and Update Ads tabs show the existing editable tables as before (no change)
+
+## Campaign Builder — Persistent Creative Library per Ad Account
+
+- [x] Database schema: creative_library table keyed by ad account ID + creative row ID
+- [x] Server tRPC procedures: getCreativeLibrary, upsertCreative, deleteCreative per ad account
+- [x] Frontend auto-save: debounced sync of creative library changes to DB
+- [x] Frontend auto-load: load creative library from DB when ad account is selected in Settings
+- [x] Creative Library shared across all build modes (Full Build, Ads Only, Update Ads) for same ad account

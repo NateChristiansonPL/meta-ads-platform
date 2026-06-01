@@ -591,3 +591,29 @@ export const decayReports = mysqlTable("decay_reports", {
 
 export type DecayReport = typeof decayReports.$inferSelect;
 export type InsertDecayReport = typeof decayReports.$inferInsert;
+
+// ── Persistent Creative Library ──────────────────────────────────────────────
+// Stores creative library entries per ad account. Shared across all build modes.
+// Each row corresponds to one CreativeRow in the Campaign Builder.
+
+export const creativeLibrary = mysqlTable("creative_library", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The ad account ID (e.g. "act_123456") this creative belongs to. */
+  adAccountId: varchar("ad_account_id", { length: 64 }).notNull(),
+  /** The client-side row ID (uuid) for matching/upsert. */
+  rowId: varchar("row_id", { length: 64 }).notNull(),
+  /** The user-assigned creative ID (e.g. "CRE-001"). */
+  creativeId: varchar("creative_id", { length: 128 }),
+  /** Ad type: static, video, carousel */
+  adType: varchar("ad_type", { length: 20 }).notNull().default("static"),
+  /** Full serialized CreativeRow JSON (all fields). */
+  rowData: mediumtext("row_data").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  accountIdx: index("cl_account_idx").on(table.adAccountId),
+  accountRowIdx: uniqueIndex("cl_account_row_idx").on(table.adAccountId, table.rowId),
+}));
+
+export type CreativeLibraryEntry = typeof creativeLibrary.$inferSelect;
+export type InsertCreativeLibraryEntry = typeof creativeLibrary.$inferInsert;

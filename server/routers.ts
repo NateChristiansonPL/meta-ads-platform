@@ -9,6 +9,7 @@ import { metaAdminRouter } from "./routers/admin/metaAdmin";
 import { sessionsAdminRouter } from "./routers/admin/sessionsAdmin";
 import { creativeDecayAdminRouter } from "./routers/admin/creativeDecayAdmin";
 import { creativePerformanceSyncAdminRouter } from "./routers/admin/creativePerformanceSyncAdmin";
+import { creativeLibraryAdminRouter } from "./routers/admin/creativeLibraryAdmin";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import {
@@ -126,6 +127,7 @@ export const appRouter = router({
   adminSessions: sessionsAdminRouter,
   creativeDecay: creativeDecayAdminRouter,
   creativePerformanceSync: creativePerformanceSyncAdminRouter,
+  creativeLibrary: creativeLibraryAdminRouter,
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),
