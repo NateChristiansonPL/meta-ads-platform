@@ -4,7 +4,7 @@
 // Single dimension = can use post ID / dark post / social proof
 
 import { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
-import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2 } from 'lucide-react';
+import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import {
   CreativeRow, CarouselCard, PlacementDimension, PlacementAsset,
@@ -294,9 +294,9 @@ function CharCell({ value, limit, onChange, onKeyDown, placeholder, multiline, d
 }
 
 /** Multi-variant copy cell — up to 5 variants with expand/collapse */
-function MultiVariantCell({ values, limit, onChange, placeholder, multiline, dataCell }: {
+function MultiVariantCell({ values, limit, onChange, placeholder, multiline, dataCell, onCellFocus }: {
   values: string[]; limit: number; onChange: (vals: string[]) => void;
-  placeholder?: string; multiline?: boolean; dataCell?: string;
+  placeholder?: string; multiline?: boolean; dataCell?: string; onCellFocus?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const MAX = 5;
@@ -329,10 +329,12 @@ function MultiVariantCell({ values, limit, onChange, placeholder, multiline, dat
       <div className="relative">
         {multiline ? (
           <textarea data-cell={dataCell} value={safeVals[0]} onChange={e => setVal(0, e.target.value)}
+            onFocus={onCellFocus}
             placeholder={placeholder} rows={2}
             className="cell-input w-full resize-none text-[11px] pb-3" />
         ) : (
           <input data-cell={dataCell} value={safeVals[0]} onChange={e => setVal(0, e.target.value)}
+            onFocus={onCellFocus}
             placeholder={placeholder} className="cell-input w-full pb-3" />
         )}
         <span className={`absolute bottom-0.5 right-1 text-[9px] font-mono ${over0 ? 'text-red-400' : near0 ? 'text-amber-400' : 'text-muted-foreground/40'}`}>
@@ -376,6 +378,107 @@ function MultiVariantCell({ values, limit, onChange, placeholder, multiline, dat
               className="absolute bottom-0.5 right-1 text-[9px] text-muted-foreground/40 hover:text-destructive transition-colors">
               ×
             </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Column-split asset inputs for placement-customized creatives (renders only specified dims) */
+function PlacementAssetColumn({ row, dims, onUpdate, settings, onBrowse }: {
+  row: CreativeRow;
+  dims: PlacementDimension[];
+  onUpdate: (assets: PlacementAsset[]) => void;
+  settings?: BuildSettings;
+  onBrowse?: (dim: PlacementDimension) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<PlacementDimension>>(new Set());
+
+  const getAsset = (dim: PlacementDimension): PlacementAsset => {
+    return row.placementAssets.find(a => a.dimension === dim) || { dimension: dim, assetUrl: '' };
+  };
+
+  const setAsset = (dim: PlacementDimension, field: keyof PlacementAsset, val: string | File | undefined) => {
+    const existing = row.placementAssets.find(a => a.dimension === dim);
+    const updated: PlacementAsset = existing ? { ...existing, [field]: val } : { dimension: dim, assetUrl: '', [field]: val };
+    const rest = row.placementAssets.filter(a => a.dimension !== dim);
+    onUpdate([...rest, updated]);
+  };
+
+  const setAssetFile = (dim: PlacementDimension, assetFile: AssetFile | null) => {
+    const existing = row.placementAssets.find(a => a.dimension === dim);
+    const updated: PlacementAsset = {
+      ...(existing || { dimension: dim }),
+      assetUrl: assetFile?.name || '',
+      localFile: assetFile?.file,
+      localPreviewUrl: assetFile?.previewUrl,
+    };
+    const rest = row.placementAssets.filter(a => a.dimension !== dim);
+    onUpdate([...rest, updated]);
+  };
+
+  const toggleExpand = (dim: PlacementDimension) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(dim) ? next.delete(dim) : next.add(dim);
+      return next;
+    });
+  };
+
+  const isVideo = row.adType === 'video';
+
+  if (dims.length === 0) {
+    return <div className="p-1 text-[10px] text-muted-foreground/50 italic">—</div>;
+  }
+
+  return (
+    <div className="space-y-1 p-1">
+      {dims.map(dim => {
+        const asset = getAsset(dim);
+        const isExpanded = expanded.has(dim);
+        const hasOverrides = !!(asset.websiteUrl || asset.primaryText);
+        const dimLabel = dim === '9:16' ? 'Stories/Reels' : dim === '4:5' ? 'Feed' : dim === '1:1' ? 'Square' : dim;
+        return (
+          <div key={dim} className="rounded border border-border overflow-hidden">
+            <div className="flex items-center gap-1 px-1.5 py-1 bg-surface-2">
+              <span className="text-[9px] font-700 text-indigo-400 w-8 flex-shrink-0" title={dimLabel}>{dim}</span>
+              <AssetDropCell
+                value={asset.localFile ? { file: asset.localFile, name: asset.assetUrl, previewUrl: asset.localPreviewUrl ?? '', type: isVideo ? 'video' : 'image', size: asset.localFile.size } : null}
+                accept={isVideo ? 'video/*' : 'image/*'}
+                textValue={asset.assetUrl}
+                onTextChange={v => setAsset(dim, 'assetUrl', v)}
+                onFileChange={f => setAssetFile(dim, f)}
+              />
+              {settings?.accessToken && settings?.adAccountId && onBrowse && (
+                <button onClick={() => onBrowse(dim)}
+                  className="flex-shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-600 text-primary hover:text-primary/80 border border-primary/20 hover:border-primary/40 rounded transition-all bg-primary/5 hover:bg-primary/10"
+                  title={`Browse library for ${dimLabel}`}>
+                  <Layers className="w-2.5 h-2.5" />
+                </button>
+              )}
+              <button onClick={() => toggleExpand(dim)}
+                className={`flex-shrink-0 p-0.5 rounded transition-colors ${hasOverrides ? 'text-amber-400' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Per-placement URL / copy overrides">
+                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+            {isExpanded && (
+              <div className="px-2 py-1.5 bg-surface-1 space-y-1">
+                <div>
+                  <label className="text-[9px] text-amber-400 block mb-0.5">URL Override (optional)</label>
+                  <input value={asset.websiteUrl || ''} onChange={e => setAsset(dim, 'websiteUrl', e.target.value)}
+                    placeholder="Override row URL for this placement"
+                    className="cell-input w-full text-[10px] font-mono" />
+                </div>
+                <div>
+                  <label className="text-[9px] text-amber-400 block mb-0.5">Primary Text Override (optional)</label>
+                  <textarea value={asset.primaryText || ''} onChange={e => setAsset(dim, 'primaryText', e.target.value)}
+                    placeholder="Override row primary text for this placement"
+                    rows={2} className="cell-input w-full text-[10px] resize-none" />
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
@@ -627,6 +730,15 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
   const [mediaBrowserTarget, setMediaBrowserTarget] = useState<{ rowIndex: number; type: 'image' | 'video'; placement: 'feed' | 'stories'; exactDim?: PlacementDimension } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  // Collapsed rows: rows that have been "Done" — show compact summary
+  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+
+  const collapseRow = (id: string) => {
+    setCollapsedRows(prev => { const next = new Set(prev); next.add(id); return next; });
+  };
+  const expandRow = (id: string) => {
+    setCollapsedRows(prev => { const next = new Set(prev); next.delete(id); return next; });
+  };
 
   const set = (idx: number, key: keyof CreativeRow, val: unknown) => {
     const updated = rows.map((r, i) => {
@@ -701,25 +813,35 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
   const filledCount = rows.filter(r => r.concept.trim() || r.creativeId.trim()).length;
 
   // ── Paste-from-spreadsheet ──────────────────────────────────────────────────
-  // Column order for paste: Creative Concept | Length | Website URL | Headline | Primary Text | Description | CTA | Link to UTM
-  const PASTE_COLS = ['concept', 'assetLength', 'websiteUrl', 'headlines', 'primaryTexts', 'descriptions', 'cta', 'urlParams'] as const;
+  // Column order for paste: Creative Concept | Length | Website URL | Headline | Primary Text | Description | Display Link | Link to UTM
+  const PASTE_COLS = ['concept', 'assetLength', 'websiteUrl', 'headlines', 'primaryTexts', 'descriptions', 'cta', 'displayUrl', 'urlParams'] as const;
   type PasteCol = typeof PASTE_COLS[number];
 
-  // Track which row is "focused" for paste anchor
+  // Track which row + column is "focused" for paste anchor
   const [pasteAnchorRow, setPasteAnchorRow] = useState<number | null>(null);
+  const [pasteAnchorCol, setPasteAnchorCol] = useState<number | null>(null);
 
   // Use a stable ref for the paste handler so the effect can clean up properly
   const pasteAnchorRowRef = useRef<number | null>(null);
+  const pasteAnchorColRef = useRef<number | null>(null);
   const rowsRef = useRef(rows);
   const onChangeRef = useRef(onChange);
   useEffect(() => { pasteAnchorRowRef.current = pasteAnchorRow; }, [pasteAnchorRow]);
+  useEffect(() => { pasteAnchorColRef.current = pasteAnchorCol; }, [pasteAnchorCol]);
   useEffect(() => { rowsRef.current = rows; }, [rows]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  // When a cell input is focused, track which paste column it corresponds to
+  const handleCellFocus = (rowIdx: number, colIdx: number) => {
+    setPasteAnchorRow(rowIdx);
+    setPasteAnchorCol(colIdx);
+  };
 
   const applyPaste = useCallback((text: string) => {
     if (!text.includes('\t') && !text.includes('\n')) return false;
     const pasteRows = text.trim().split('\n').map(line => line.split('\t'));
     const startRow = pasteAnchorRowRef.current ?? 0;
+    const startCol = pasteAnchorColRef.current ?? 0;
     const currentRows = rowsRef.current;
 
     // Ensure we have enough rows
@@ -733,8 +855,9 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
       const cells = pasteRows[pasteRowIdx];
       const patch: Partial<CreativeRow> = {};
       cells.forEach((val, ci) => {
-        if (ci >= PASTE_COLS.length) return;
-        const key = PASTE_COLS[ci] as PasteCol;
+        const colIdx = startCol + ci;
+        if (colIdx >= PASTE_COLS.length) return;
+        const key = PASTE_COLS[colIdx] as PasteCol;
         const trimmed = val.trim();
         if (key === 'headlines' || key === 'primaryTexts' || key === 'descriptions') {
           const existing = (r[key] as string[]) || [''];
@@ -750,18 +873,24 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
     });
 
     onChangeRef.current(updated);
-    toast.success(`Pasted ${pasteRows.length} row${pasteRows.length === 1 ? '' : 's'} into Creative Library`);
+    toast.success(`Pasted ${pasteRows.length} row${pasteRows.length === 1 ? '' : 's'} across ${pasteRows[0]?.length || 0} column${(pasteRows[0]?.length || 0) === 1 ? '' : 's'}`);
     return true;
   }, []);
 
   // Global paste listener: fires when the table container or any child has focus
+  // Now also intercepts paste in focused inputs when the clipboard contains multi-cell data (tabs/newlines)
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
       const active = document.activeElement;
       if (!tableRef.current?.contains(active)) return;
-      // Let normal paste work in text inputs / textareas
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
       const text = e.clipboardData?.getData('text/plain') ?? '';
+      // If multi-cell data (contains tabs or newlines), intercept even in inputs
+      if (text.includes('\t') || (text.includes('\n') && text.trim().split('\n').length > 1)) {
+        if (applyPaste(text)) e.preventDefault();
+        return;
+      }
+      // Single-cell paste: let normal paste work in text inputs / textareas
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
       if (applyPaste(text)) e.preventDefault();
     };
     document.addEventListener('paste', handleGlobalPaste);
@@ -784,7 +913,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
         {pasteAnchorRow !== null && (
           <span className="text-[10px] text-primary/80 flex items-center gap-1">
             <span className="font-mono bg-primary/10 px-1 py-0.5 rounded text-[9px]">Ctrl+V</span>
-            Paste from row {pasteAnchorRow + 1} · Cols: Concept | Length | URL | Headline | Primary Text | Description | CTA | UTM
+            Paste from row {pasteAnchorRow + 1}{pasteAnchorCol !== null && pasteAnchorCol > 0 ? `, col ${PASTE_COLS[pasteAnchorCol]?.replace(/([A-Z])/g, ' $1').trim() || pasteAnchorCol + 1}` : ''} · Multi-cell paste supported
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -817,7 +946,8 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               <Th w={120}>CTA</Th>
               <Th w={160}>Display Link</Th>
               <Th w={200}>Link to UTM</Th>
-              <Th w={64}></Th>
+              <Th w={64}>Done</Th>
+              <Th w={48}></Th>
             </tr>
           </thead>
           <tbody>
@@ -825,6 +955,54 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
               const isPlacementCustom = row.placementDimensions.length > 1;
               const isPostIdOk = row.placementDimensions.length === 1;
               const isVideo = row.adType === 'video';
+              const isCollapsed = collapsedRows.has(row.id);
+
+              // Collapsed row: show compact summary — click to expand
+              if (isCollapsed) {
+                return (
+                  <tr key={row.id}
+                    className="border-b border-border hover:bg-surface-2/30 transition-colors cursor-pointer"
+                    onClick={() => expandRow(row.id)}
+                  >
+                    <td className="px-2 py-1.5 text-center text-[10px] text-muted-foreground font-mono border-r border-border select-none">{i + 1}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] font-mono text-muted-foreground truncate max-w-[90px]">{row.creativeId || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border">
+                      <span className={`text-[9px] font-700 px-1.5 py-0.5 rounded ${row.adType === 'static' ? 'bg-blue-500/20 text-blue-400' : 'bg-violet-500/20 text-violet-400'}`}>{row.adType}</span>
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground">{row.placementDimensions.join(', ') || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[11px] font-600 text-foreground truncate max-w-[180px]">{row.concept || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground font-mono text-center">{row.assetLength || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground truncate" colSpan={2}>
+                      {row.placementAssets.map(a => `${a.dimension}: ${a.assetUrl || '—'}`).join(' | ') || '—'}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground font-mono truncate max-w-[180px]">{row.websiteUrl || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground truncate" colSpan={3}>
+                      {row.headlines?.[0] || '—'} | {row.primaryTexts?.[0]?.slice(0, 30) || '—'} | {row.descriptions?.[0] || '—'}
+                    </td>
+                    <td className="px-2 py-1.5 border-r border-border text-[9px] text-muted-foreground">{row.cta?.replace(/_/g, ' ') || '—'}</td>
+                    <td className="px-2 py-1.5 border-r border-border text-[10px] text-muted-foreground font-mono truncate" colSpan={2}>
+                      {row.displayUrl || '—'} | {row.urlParams?.slice(0, 20) || '—'}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <span className="text-[9px] text-emerald-400 font-700 flex items-center gap-0.5 justify-center">
+                        <CheckCircle2 className="w-3 h-3" />
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-0.5 justify-center">
+                        <button onClick={(e) => { e.stopPropagation(); duplicate(i); }} title="Duplicate"
+                          className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); remove(i); }} title="Delete"
+                          className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
 
               return (
                 <tr key={row.id}
@@ -901,6 +1079,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <input data-cell={`${i}-1`} value={row.concept}
                       onChange={e => set(i, 'concept', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 1)}
+                      onFocus={() => handleCellFocus(i, 0)}
                       placeholder="e.g. Fine Print" className="cell-input w-full" />
                   </td>
 
@@ -909,6 +1088,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <input data-cell={`${i}-2`} value={row.assetLength}
                       onChange={e => set(i, 'assetLength', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 2)}
+                      onFocus={() => handleCellFocus(i, 1)}
                       placeholder={isVideo ? '15, 30...' : '—'}
                       disabled={!isVideo} type={isVideo ? 'number' : 'text'} min="0"
                       className="cell-input w-full font-mono text-center disabled:opacity-30 disabled:cursor-not-allowed" />
@@ -916,16 +1096,28 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
 
                   {/* Feed Asset + Stories/Reels Asset — two separate columns */}
                   {isPlacementCustom ? (
-                    // Placement-customized: span both columns with the full stack
-                    <td className="p-0 border-r border-border" colSpan={2}>
-                      <PlacementAssetStack
-                        row={row}
-                        dims={row.placementDimensions}
-                        onUpdate={assets => set(i, 'placementAssets', assets)}
-                        settings={settings}
-                        onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: dim === '9:16' ? 'stories' : 'feed', exactDim: dim })}
-                      />
-                    </td>
+                    <>
+                      {/* Feed column: show 4:5 and 1:1 assets */}
+                      <td className="p-0 border-r border-border min-w-[200px]">
+                        <PlacementAssetColumn
+                          row={row}
+                          dims={row.placementDimensions.filter(d => d !== '9:16')}
+                          onUpdate={assets => set(i, 'placementAssets', assets)}
+                          settings={settings}
+                          onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: 'feed', exactDim: dim })}
+                        />
+                      </td>
+                      {/* Stories/Reels column: show 9:16 asset */}
+                      <td className="p-0 border-r border-border min-w-[200px]">
+                        <PlacementAssetColumn
+                          row={row}
+                          dims={row.placementDimensions.filter(d => d === '9:16')}
+                          onUpdate={assets => set(i, 'placementAssets', assets)}
+                          settings={settings}
+                          onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: 'stories', exactDim: dim })}
+                        />
+                      </td>
+                    </>
                   ) : (
                     <>
                       {/* Feed Asset (4:5) */}
@@ -996,6 +1188,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <input data-cell={`${i}-4`} value={row.websiteUrl}
                       onChange={e => set(i, 'websiteUrl', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 4)}
+                      onFocus={() => handleCellFocus(i, 2)}
                       placeholder="https://..." className="cell-input w-full font-mono text-[11px]" />
                     {!isPlacementCustom && row.adType !== 'carousel' && (
                       <button
@@ -1011,6 +1204,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                   <td className="p-0 border-r border-border">
                     <MultiVariantCell dataCell={`${i}-5`} values={row.headlines?.length ? row.headlines : ['']} limit={40}
                       onChange={vals => set(i, 'headlines', vals)}
+                      onCellFocus={() => handleCellFocus(i, 3)}
                       placeholder="Headline" />
                   </td>
 
@@ -1018,6 +1212,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                   <td className="p-0 border-r border-border">
                     <MultiVariantCell dataCell={`${i}-6`} values={row.primaryTexts?.length ? row.primaryTexts : ['']} limit={125}
                       onChange={vals => set(i, 'primaryTexts', vals)}
+                      onCellFocus={() => handleCellFocus(i, 4)}
                       placeholder="Primary text" multiline />
                   </td>
 
@@ -1025,6 +1220,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                   <td className="p-0 border-r border-border">
                     <MultiVariantCell dataCell={`${i}-7`} values={row.descriptions?.length ? row.descriptions : ['']} limit={30}
                       onChange={vals => set(i, 'descriptions', vals)}
+                      onCellFocus={() => handleCellFocus(i, 5)}
                       placeholder="Description" />
                   </td>
 
@@ -1033,6 +1229,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <div className="relative">
                       <select data-cell={`${i}-8`} value={row.cta}
                         onChange={e => set(i, 'cta', e.target.value)}
+                        onFocus={() => handleCellFocus(i, 6)}
                         className="cell-input w-full appearance-none pr-6 cursor-pointer">
                         {CTA_OPTIONS.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                       </select>
@@ -1045,6 +1242,7 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <input data-cell={`${i}-9`} value={row.displayUrl || ''}
                       onChange={e => set(i, 'displayUrl', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 9)}
+                      onFocus={() => handleCellFocus(i, 7)}
                       placeholder="example.com" className="cell-input w-full font-mono text-[10px]" />
                   </td>
 
@@ -1053,11 +1251,22 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
                     <input data-cell={`${i}-10`} value={row.urlParams}
                       onChange={e => set(i, 'urlParams', e.target.value)}
                       onKeyDown={e => onKeyDown(e, i, 10)}
+                      onFocus={() => handleCellFocus(i, 8)}
                       placeholder="utm_source=meta&utm_medium=paid_social" className="cell-input w-full font-mono text-[10px]" />
                   </td>
 
+                  {/* DONE button */}
+                  <td className="w-16 border-r border-border">
+                    <div className="flex items-center justify-center">
+                      <button onClick={() => collapseRow(row.id)} title="Done — collapse row"
+                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-700 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all">
+                        <CheckCircle2 className="w-3 h-3" /> Done
+                      </button>
+                    </div>
+                  </td>
+
                   {/* Actions */}
-                  <td className="w-16">
+                  <td className="w-12">
                     <div className="flex items-center gap-0.5 justify-center opacity-0 group-hover:opacity-100 transition-opacity px-1">
                       <button onClick={() => duplicate(i)} title="Duplicate"
                         className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors">

@@ -891,3 +891,12 @@
 - [x] Column sorting (asc/desc) for Campaigns tab: Status, Campaign Name, Objective, Spend Cap
 - [x] Placements as 4th tab in targeting modal (to the right of Custom), accordion-style platform expansion (one at a time, selections persist)
 - [x] Quick Build button on Custom tab (top-right) linking to custom/LAL audience builder section
+
+## Campaign Builder — Bulk Edit, Creative Library Improvements
+
+- [x] Bulk Edit modal: individual ad set editing per field (e.g., Locations shows "All Ad Sets" + one option per selected ad set)
+- [x] Bulk Edit modal: combine Detailed Targeting + Narrow Targeting (AND) into one section
+- [x] Bulk Edit modal: combine Targeted Custom/LAL Audiences + Excluded Custom/LAL Audiences into one section
+- [x] Creative Library: fix 9:16 asset positioning — always under Stories/Reels column, not nested under Feed
+- [x] Creative Library: multi-cell paste across text fields (Creative Concept, Length, Website, Headline, Primary Text, Description, Display Link, Link to UTM)
+- [x] Creative Library: DONE button at far right of each row to collapse it; click row to expand again

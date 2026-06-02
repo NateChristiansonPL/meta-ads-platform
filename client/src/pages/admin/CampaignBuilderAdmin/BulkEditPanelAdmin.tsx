@@ -5,6 +5,10 @@
  * event, locations (add/replace), custom/LAL targeted audiences (add/replace),
  * excluded audiences (add/replace).
  *
+ * Features:
+ * - Per-ad-set editing: each targeting field shows "All Ad Sets" + individual ad set tabs
+ * - Combined sections: Detailed + Narrow Targeting in one section; Targeted + Excluded Audiences in one section
+ *
  * Used by both AdSetsTableAdmin (spreadsheet) and PillarHubAdmin (pillar view).
  */
 import React, { useState, useCallback } from 'react';
@@ -38,6 +42,28 @@ type LocationMode = 'add' | 'replace';
 type AudienceMode = 'add' | 'replace';
 
 type NameMode = 'prefix' | 'suffix' | 'replace';
+
+// Per-ad-set field values (keyed by ad set ID or 'all')
+interface PerAdSetLocations {
+  locationsToAdd: string[];
+  locationObjectsToAdd: GeoLocationObject[];
+  locationsMode: LocationMode;
+}
+
+interface PerAdSetDetailed {
+  detailedInterestObjects: InterestObject[];
+  detailedInterestsMode: 'add' | 'replace';
+  narrowInterestObjects: InterestObject[];
+  narrowInterestsMode: 'add' | 'replace';
+}
+
+interface PerAdSetAudiences {
+  targetedAudiencesToAdd: string[];
+  targetedAudiencesMode: AudienceMode;
+  excludedAudiencesToAdd: string[];
+  excludedAudiencesMode: AudienceMode;
+}
+
 interface BulkFields {
   nameValue: string;
   nameMode: NameMode;
@@ -52,22 +78,10 @@ interface BulkFields {
   ageMin: string;
   ageMax: string;
   genders: string;
-  locationsToAdd: string[];          // display labels
-  locationObjectsToAdd: GeoLocationObject[];  // structured geo objects (parallel to locationsToAdd)
-  locationsMode: LocationMode;
-  targetedAudiencesToAdd: string[];  // id|name format
-  targetedAudiencesMode: AudienceMode;
-  excludedAudiencesToAdd: string[];  // id|name format
-  excludedAudiencesMode: AudienceMode;
   // placements
   placementType: 'advantage_plus' | 'manual';
   platforms: string[];
   placements: string[];
-  // detailed targeting
-  detailedInterestObjects: InterestObject[];
-  detailedInterestsMode: 'add' | 'replace';
-  narrowInterestObjects: InterestObject[];
-  narrowInterestsMode: 'add' | 'replace';
   // optional fields
   language: string;
   operatingSystem: string;
@@ -85,11 +99,9 @@ interface EnabledFields {
   conversionEvent: boolean;
   ageGender: boolean;
   locations: boolean;
-  targetedAudiences: boolean;
-  excludedAudiences: boolean;
+  audiences: boolean; // combined targeted + excluded
   placements: boolean;
-  detailedTargeting: boolean;
-  narrowTargeting: boolean;
+  detailedTargeting: boolean; // combined detailed + narrow
   // optional fields (each individually toggled inside the collapsed section)
   language: boolean;
   operatingSystem: boolean;
@@ -151,6 +163,83 @@ function ModeToggle({ mode, onChange }: { mode: 'add' | 'replace'; onChange: (m:
           )}
         >
           {m === 'add' ? '+ Add to existing' : '↺ Replace all'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Ad Set Tab Switcher ───────────────────────────────────────────────────────
+
+function AdSetTabSwitcher({
+  selectedRows,
+  activeTab,
+  onTabChange,
+}: {
+  selectedRows: AdSetRow[];
+  activeTab: string; // 'all' or ad set ID
+  onTabChange: (tab: string) => void;
+}) {
+  if (selectedRows.length <= 1) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mb-2 pb-2 border-b border-border/30">
+      <button
+        onClick={() => onTabChange('all')}
+        className={cn(
+          'px-2 py-0.5 rounded text-[10px] font-700 border transition-all',
+          activeTab === 'all'
+            ? 'bg-primary/15 border-primary/40 text-primary'
+            : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+        )}
+      >
+        All Ad Sets
+      </button>
+      {selectedRows.map(row => (
+        <button
+          key={row.id}
+          onClick={() => onTabChange(row.id)}
+          className={cn(
+            'px-2 py-0.5 rounded text-[10px] font-700 border transition-all truncate max-w-[120px]',
+            activeTab === row.id
+              ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+              : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+          )}
+          title={row.name || 'Untitled'}
+        >
+          {row.name || 'Untitled'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Sub-tab switcher for combined sections ────────────────────────────────────
+
+function SubSectionTabs({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: string; label: string; color?: string }[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="flex gap-1 mb-2">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={cn(
+            'px-2.5 py-0.5 rounded text-[10px] font-700 border transition-all',
+            active === t.id
+              ? t.color === 'amber' ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                : t.color === 'red' ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                : 'bg-primary/15 border-primary/40 text-primary'
+              : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {t.label}
         </button>
       ))}
     </div>
@@ -234,23 +323,10 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     ageMin: shared(r => r.ageMin ? String(r.ageMin) : undefined, '18'),
     ageMax: shared(r => r.ageMax ? String(r.ageMax) : undefined, '65'),
     genders: shared(r => r.genders || undefined, 'all'),
-    // Audiences (always start empty in add mode — merging makes more sense)
-    locationsToAdd: [],
-    locationObjectsToAdd: [],
-    locationsMode: 'add',
-    targetedAudiencesToAdd: [],
-    targetedAudiencesMode: 'add',
-    excludedAudiencesToAdd: [],
-    excludedAudiencesMode: 'add',
     // Placements
     placementType: shared(r => r.placementType || undefined, 'manual' as const),
     platforms: [],
     placements: [],
-    // Detailed targeting (always start empty in add mode)
-    detailedInterestObjects: [],
-    detailedInterestsMode: 'add',
-    narrowInterestObjects: [],
-    narrowInterestsMode: 'add',
     // Optional
     language: shared(r => r.language || undefined, ''),
     operatingSystem: shared(r => r.operatingSystem || undefined, 'all'),
@@ -258,6 +334,48 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     attributionWindow: shared(r => r.attributionWindow || undefined, '7d_click_1d_engaged_1d_view'),
     attributionModel: shared(r => r.attributionModel || undefined, 'standard'),
   }));
+
+  // ── Per-ad-set state for Locations ──────────────────────────────────────────
+  const initPerAdSetLocations = (): Record<string, PerAdSetLocations> => {
+    const map: Record<string, PerAdSetLocations> = {
+      all: { locationsToAdd: [], locationObjectsToAdd: [], locationsMode: 'add' },
+    };
+    selectedRows.forEach(r => {
+      map[r.id] = { locationsToAdd: [], locationObjectsToAdd: [], locationsMode: 'add' };
+    });
+    return map;
+  };
+  const [perAdSetLocations, setPerAdSetLocations] = useState<Record<string, PerAdSetLocations>>(initPerAdSetLocations);
+  const [locationTab, setLocationTab] = useState('all');
+
+  // ── Per-ad-set state for Detailed + Narrow Targeting ────────────────────────
+  const initPerAdSetDetailed = (): Record<string, PerAdSetDetailed> => {
+    const map: Record<string, PerAdSetDetailed> = {
+      all: { detailedInterestObjects: [], detailedInterestsMode: 'add', narrowInterestObjects: [], narrowInterestsMode: 'add' },
+    };
+    selectedRows.forEach(r => {
+      map[r.id] = { detailedInterestObjects: [], detailedInterestsMode: 'add', narrowInterestObjects: [], narrowInterestsMode: 'add' };
+    });
+    return map;
+  };
+  const [perAdSetDetailed, setPerAdSetDetailed] = useState<Record<string, PerAdSetDetailed>>(initPerAdSetDetailed);
+  const [detailedTab, setDetailedTab] = useState('all');
+  const [detailedSubSection, setDetailedSubSection] = useState<'detailed' | 'narrow'>('detailed');
+
+  // ── Per-ad-set state for Audiences (Targeted + Excluded) ────────────────────
+  const initPerAdSetAudiences = (): Record<string, PerAdSetAudiences> => {
+    const map: Record<string, PerAdSetAudiences> = {
+      all: { targetedAudiencesToAdd: [], targetedAudiencesMode: 'add', excludedAudiencesToAdd: [], excludedAudiencesMode: 'add' },
+    };
+    selectedRows.forEach(r => {
+      map[r.id] = { targetedAudiencesToAdd: [], targetedAudiencesMode: 'add', excludedAudiencesToAdd: [], excludedAudiencesMode: 'add' };
+    });
+    return map;
+  };
+  const [perAdSetAudiences, setPerAdSetAudiences] = useState<Record<string, PerAdSetAudiences>>(initPerAdSetAudiences);
+  const [audienceTab, setAudienceTab] = useState('all');
+  const [audienceSubSection, setAudienceSubSection] = useState<'targeted' | 'excluded'>('targeted');
+
   const [enabled, setEnabled] = useState<EnabledFields>({
     name: false,
     budget: false,
@@ -266,11 +384,10 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     conversionEvent: false,
     ageGender: false,
     locations: false,
-    targetedAudiences: false,
-    excludedAudiences: false,
+    audiences: false,
     placements: false,
     detailedTargeting: false,
-    narrowTargeting: false,
+    // optional fields (each individually toggled inside the collapsed section)
     language: false,
     operatingSystem: false,
     devicePlatforms: false,
@@ -287,6 +404,24 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
   const toggleEnabled = useCallback((key: keyof EnabledFields) => {
     setEnabled(e => ({ ...e, [key]: !e[key] }));
   }, []);
+
+  // ── Helpers for per-ad-set location state ───────────────────────────────────
+  const getLocState = (tab: string): PerAdSetLocations => perAdSetLocations[tab] || perAdSetLocations['all'];
+  const setLocState = (tab: string, update: Partial<PerAdSetLocations>) => {
+    setPerAdSetLocations(prev => ({ ...prev, [tab]: { ...prev[tab], ...update } }));
+  };
+
+  // ── Helpers for per-ad-set detailed state ───────────────────────────────────
+  const getDetState = (tab: string): PerAdSetDetailed => perAdSetDetailed[tab] || perAdSetDetailed['all'];
+  const setDetState = (tab: string, update: Partial<PerAdSetDetailed>) => {
+    setPerAdSetDetailed(prev => ({ ...prev, [tab]: { ...prev[tab], ...update } }));
+  };
+
+  // ── Helpers for per-ad-set audience state ───────────────────────────────────
+  const getAudState = (tab: string): PerAdSetAudiences => perAdSetAudiences[tab] || perAdSetAudiences['all'];
+  const setAudState = (tab: string, update: Partial<PerAdSetAudiences>) => {
+    setPerAdSetAudiences(prev => ({ ...prev, [tab]: { ...prev[tab], ...update } }));
+  };
 
   // ── Apply ────────────────────────────────────────────────────────────────────
   const applyCount = Object.values(enabled).filter(Boolean).length;
@@ -322,47 +457,73 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
         patch.conversionEvent = fields.conversionEvent;
       }
 
-      if (enabled.locations && fields.locationsToAdd.length > 0) {
-        if (fields.locationsMode === 'replace') {
-          patch.geoLocations = fields.locationsToAdd.join('\n');
-          patch.geoLocationObjects = [...fields.locationObjectsToAdd];
-        } else {
-          const existing = row.geoLocations ? row.geoLocations.split('\n').filter(Boolean) : [];
-          const existingObjs = row.geoLocationObjects || [];
-          const newLocs: string[] = [];
-          const newObjs: GeoLocationObject[] = [];
-          fields.locationsToAdd.forEach((l, idx) => {
-            if (!existing.includes(l)) {
-              newLocs.push(l);
-              if (fields.locationObjectsToAdd[idx]) newObjs.push(fields.locationObjectsToAdd[idx]);
+      // ── Locations (per-ad-set aware) ──
+      if (enabled.locations) {
+        // Get the per-ad-set state for this specific row, falling back to 'all'
+        const rowLocState = perAdSetLocations[row.id];
+        const allLocState = perAdSetLocations['all'];
+        // Merge: apply 'all' first, then per-ad-set overrides
+        const effectiveStates: PerAdSetLocations[] = [];
+        if (allLocState && allLocState.locationsToAdd.length > 0) effectiveStates.push(allLocState);
+        if (rowLocState && rowLocState.locationsToAdd.length > 0) effectiveStates.push(rowLocState);
+
+        for (const locState of effectiveStates) {
+          if (locState.locationsToAdd.length > 0) {
+            if (locState.locationsMode === 'replace') {
+              patch.geoLocations = locState.locationsToAdd.join('\n');
+              patch.geoLocationObjects = [...locState.locationObjectsToAdd];
+            } else {
+              const existing = (patch.geoLocations ?? row.geoLocations ?? '').split('\n').filter(Boolean);
+              const existingObjs = patch.geoLocationObjects ?? row.geoLocationObjects ?? [];
+              const newLocs: string[] = [];
+              const newObjs: GeoLocationObject[] = [];
+              locState.locationsToAdd.forEach((l, idx) => {
+                if (!existing.includes(l)) {
+                  newLocs.push(l);
+                  if (locState.locationObjectsToAdd[idx]) newObjs.push(locState.locationObjectsToAdd[idx]);
+                }
+              });
+              patch.geoLocations = [...existing, ...newLocs].join('\n');
+              patch.geoLocationObjects = [...existingObjs, ...newObjs];
             }
-          });
-          patch.geoLocations = [...existing, ...newLocs].join('\n');
-          patch.geoLocationObjects = [...existingObjs, ...newObjs];
+          }
         }
       }
 
-      if (enabled.targetedAudiences && fields.targetedAudiencesToAdd.length > 0) {
-        if (fields.targetedAudiencesMode === 'replace') {
-          patch.targetedAudiences = fields.targetedAudiencesToAdd.join('\n');
-        } else {
-          const existing = row.targetedAudiences ? row.targetedAudiences.split('\n').filter(Boolean) : [];
-          const existingIds = existing.map(a => a.split('|')[0]);
-          const newAuds = fields.targetedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
-          patch.targetedAudiences = [...existing, ...newAuds].join('\n');
+      // ── Audiences (per-ad-set aware) ──
+      if (enabled.audiences) {
+        const rowAudState = perAdSetAudiences[row.id];
+        const allAudState = perAdSetAudiences['all'];
+        const effectiveStates: PerAdSetAudiences[] = [];
+        if (allAudState) effectiveStates.push(allAudState);
+        if (rowAudState) effectiveStates.push(rowAudState);
+
+        for (const audState of effectiveStates) {
+          // Targeted
+          if (audState.targetedAudiencesToAdd.length > 0) {
+            if (audState.targetedAudiencesMode === 'replace') {
+              patch.targetedAudiences = audState.targetedAudiencesToAdd.join('\n');
+            } else {
+              const existing = (patch.targetedAudiences ?? row.targetedAudiences ?? '').split('\n').filter(Boolean);
+              const existingIds = existing.map(a => a.split('|')[0]);
+              const newAuds = audState.targetedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
+              patch.targetedAudiences = [...existing, ...newAuds].join('\n');
+            }
+          }
+          // Excluded
+          if (audState.excludedAudiencesToAdd.length > 0) {
+            if (audState.excludedAudiencesMode === 'replace') {
+              patch.excludedAudiences = audState.excludedAudiencesToAdd.join('\n');
+            } else {
+              const existing = (patch.excludedAudiences ?? row.excludedAudiences ?? '').split('\n').filter(Boolean);
+              const existingIds = existing.map(a => a.split('|')[0]);
+              const newAuds = audState.excludedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
+              patch.excludedAudiences = [...existing, ...newAuds].join('\n');
+            }
+          }
         }
       }
 
-      if (enabled.excludedAudiences && fields.excludedAudiencesToAdd.length > 0) {
-        if (fields.excludedAudiencesMode === 'replace') {
-          patch.excludedAudiences = fields.excludedAudiencesToAdd.join('\n');
-        } else {
-          const existing = row.excludedAudiences ? row.excludedAudiences.split('\n').filter(Boolean) : [];
-          const existingIds = existing.map(a => a.split('|')[0]);
-          const newAuds = fields.excludedAudiencesToAdd.filter(a => !existingIds.includes(a.split('|')[0]));
-          patch.excludedAudiences = [...existing, ...newAuds].join('\n');
-        }
-      }
       if (enabled.ageGender) {
         if (fields.ageMin) patch.ageMin = fields.ageMin;
         if (fields.ageMax) patch.ageMax = fields.ageMax;
@@ -373,34 +534,51 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
         patch.platforms = fields.platforms;
         patch.placements = fields.placements;
       }
+
+      // ── Detailed + Narrow Targeting (per-ad-set aware) ──
       if (enabled.detailedTargeting) {
-        const newObjs = fields.detailedInterestObjects;
-        const newNames = newObjs.map(o => o.name);
-        if (fields.detailedInterestsMode === 'replace') {
-          patch.detailedInterests = newNames.join('\n');
-          patch.detailedInterestObjects = newObjs;
-        } else {
-          const existingObjs = row.detailedInterestObjects ?? [];
-          const existingIds = new Set(existingObjs.map(o => o.id));
-          const toAdd = newObjs.filter(o => !existingIds.has(o.id));
-          patch.detailedInterests = [...(row.detailedInterests ? row.detailedInterests.split('\n').filter(Boolean) : []), ...toAdd.map(o => o.name)].join('\n');
-          patch.detailedInterestObjects = [...existingObjs, ...toAdd];
+        const rowDetState = perAdSetDetailed[row.id];
+        const allDetState = perAdSetDetailed['all'];
+        const effectiveStates: PerAdSetDetailed[] = [];
+        if (allDetState) effectiveStates.push(allDetState);
+        if (rowDetState) effectiveStates.push(rowDetState);
+
+        for (const detState of effectiveStates) {
+          // Detailed
+          if (detState.detailedInterestObjects.length > 0) {
+            const newObjs = detState.detailedInterestObjects;
+            const newNames = newObjs.map(o => o.name);
+            if (detState.detailedInterestsMode === 'replace') {
+              patch.detailedInterests = newNames.join('\n');
+              patch.detailedInterestObjects = newObjs;
+            } else {
+              const existingObjs = patch.detailedInterestObjects ?? row.detailedInterestObjects ?? [];
+              const existingIds = new Set(existingObjs.map(o => o.id));
+              const toAdd = newObjs.filter(o => !existingIds.has(o.id));
+              const existingNames = (patch.detailedInterests ?? row.detailedInterests ?? '').split('\n').filter(Boolean);
+              patch.detailedInterests = [...existingNames, ...toAdd.map(o => o.name)].join('\n');
+              patch.detailedInterestObjects = [...existingObjs, ...toAdd];
+            }
+          }
+          // Narrow
+          if (detState.narrowInterestObjects.length > 0) {
+            const newObjs = detState.narrowInterestObjects;
+            const newNames = newObjs.map(o => o.name);
+            if (detState.narrowInterestsMode === 'replace') {
+              patch.narrowInterests = newNames.join('\n');
+              patch.narrowInterestObjects = newObjs;
+            } else {
+              const existingObjs = patch.narrowInterestObjects ?? row.narrowInterestObjects ?? [];
+              const existingIds = new Set(existingObjs.map(o => o.id));
+              const toAdd = newObjs.filter(o => !existingIds.has(o.id));
+              const existingNames = (patch.narrowInterests ?? row.narrowInterests ?? '').split('\n').filter(Boolean);
+              patch.narrowInterests = [...existingNames, ...toAdd.map(o => o.name)].join('\n');
+              patch.narrowInterestObjects = [...existingObjs, ...toAdd];
+            }
+          }
         }
       }
-      if (enabled.narrowTargeting) {
-        const newObjs = fields.narrowInterestObjects;
-        const newNames = newObjs.map(o => o.name);
-        if (fields.narrowInterestsMode === 'replace') {
-          patch.narrowInterests = newNames.join('\n');
-          patch.narrowInterestObjects = newObjs;
-        } else {
-          const existingObjs = row.narrowInterestObjects ?? [];
-          const existingIds = new Set(existingObjs.map(o => o.id));
-          const toAdd = newObjs.filter(o => !existingIds.has(o.id));
-          patch.narrowInterests = [...(row.narrowInterests ? row.narrowInterests.split('\n').filter(Boolean) : []), ...toAdd.map(o => o.name)].join('\n');
-          patch.narrowInterestObjects = [...existingObjs, ...toAdd];
-        }
-      }
+
       if (enabled.language) patch.language = fields.language || undefined;
       if (enabled.operatingSystem) patch.operatingSystem = fields.operatingSystem !== 'all' ? fields.operatingSystem : undefined;
       if (enabled.devicePlatforms) patch.devicePlatforms = fields.devicePlatforms !== 'all' ? fields.devicePlatforms : undefined;
@@ -411,7 +589,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
     });
     onChange(updated);
     onClose();
-  }, [applyCount, enabled, fields, selectedRows, allRows, onChange, onClose]);
+  }, [applyCount, enabled, fields, selectedRows, allRows, onChange, onClose, perAdSetLocations, perAdSetDetailed, perAdSetAudiences]);
 
   const showConvEvent = conversionEventApplicable(fields.optimizationGoal);
 
@@ -483,6 +661,11 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
   const visibleCombined = COMBINED_PLACEMENTS.filter(cp =>
     cp.platforms.some(p => fields.platforms.includes(p))
   );
+
+  // ── Current per-ad-set states for rendering ─────────────────────────────────
+  const curLocState = getLocState(locationTab);
+  const curDetState = getDetState(detailedTab);
+  const curAudState = getAudState(audienceTab);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -710,9 +893,10 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             </div>
           </FieldToggle>
 
-          {/* Locations */}
+          {/* Locations (with per-ad-set tabs) */}
           <FieldToggle label="Locations" icon={<MapPin size={13} />} enabled={enabled.locations} onToggle={() => toggleEnabled('locations')}>
-            <ModeToggle mode={fields.locationsMode} onChange={m => setField('locationsMode', m)} />
+            <AdSetTabSwitcher selectedRows={selectedRows} activeTab={locationTab} onTabChange={setLocationTab} />
+            <ModeToggle mode={curLocState.locationsMode} onChange={m => setLocState(locationTab, { locationsMode: m })} />
             {/* City/Region/Country Search */}
             <div className="relative">
               <input
@@ -730,14 +914,16 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
               <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
                 {geoResults.slice(0, 8).map((r: { key: string; name: string; type: string; region?: string; countryName?: string }) => {
                   const label = [r.name, r.region, r.countryName].filter(Boolean).join(', ');
-                  const alreadyAdded = fields.locationsToAdd.includes(label);
+                  const alreadyAdded = curLocState.locationsToAdd.includes(label);
                   return (
                     <button
                       key={r.key}
                       onClick={() => {
                         if (!alreadyAdded) {
-                          setField('locationsToAdd', [...fields.locationsToAdd, label]);
-                          setField('locationObjectsToAdd', [...fields.locationObjectsToAdd, { key: r.key, type: r.type, name: label }]);
+                          setLocState(locationTab, {
+                            locationsToAdd: [...curLocState.locationsToAdd, label],
+                            locationObjectsToAdd: [...curLocState.locationObjectsToAdd, { key: r.key, type: r.type, name: label }],
+                          });
                         }
                         setLocationQuery('');
                       }}
@@ -773,17 +959,19 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                     {((geocodeResults as { results?: { address: string; lat: number; lng: number; placeId: string }[] }).results ?? []).map((geo) => (
                       <button key={geo.placeId} onClick={() => {
                         const label = geo.address;
-                        if (!fields.locationsToAdd.includes(label)) {
-                          setField('locationsToAdd', [...fields.locationsToAdd, label]);
-                          setField('locationObjectsToAdd', [...fields.locationObjectsToAdd, {
-                            key: geo.placeId || `${geo.lat},${geo.lng}`,
-                            type: 'custom_location',
-                            name: label,
-                            latitude: geo.lat,
-                            longitude: geo.lng,
-                            radius: 10,
-                            distanceUnit: 'mile',
-                          }]);
+                        if (!curLocState.locationsToAdd.includes(label)) {
+                          setLocState(locationTab, {
+                            locationsToAdd: [...curLocState.locationsToAdd, label],
+                            locationObjectsToAdd: [...curLocState.locationObjectsToAdd, {
+                              key: geo.placeId || `${geo.lat},${geo.lng}`,
+                              type: 'custom_location',
+                              name: label,
+                              latitude: geo.lat,
+                              longitude: geo.lng,
+                              radius: 10,
+                              distanceUnit: 'mile',
+                            }],
+                          });
                         }
                         setAddressQuery('');
                       }} className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between gap-2">
@@ -797,12 +985,12 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             )}
 
             {/* Selected locations with radius controls */}
-            {fields.locationsToAdd.length > 0 && (
+            {curLocState.locationsToAdd.length > 0 && (
               <div className="space-y-1.5 mt-2">
-                <label className="text-[10px] font-700 text-muted-foreground/60 tracking-wider uppercase block">Selected ({fields.locationsToAdd.length})</label>
+                <label className="text-[10px] font-700 text-muted-foreground/60 tracking-wider uppercase block">Selected ({curLocState.locationsToAdd.length})</label>
                 <div className="space-y-1.5">
-                  {fields.locationsToAdd.map((loc, i) => {
-                    const geoObj = fields.locationObjectsToAdd[i];
+                  {curLocState.locationsToAdd.map((loc, i) => {
+                    const geoObj = curLocState.locationObjectsToAdd[i];
                     const geoType = (geoObj?.type || '').toLowerCase();
                     const supportsRadius = geoObj && ['city', 'subcity', 'neighborhood', 'custom_location'].includes(geoType);
                     const isCustom = geoType === 'custom_location';
@@ -812,8 +1000,10 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                           {isCustom && <span>📍</span>}
                           {loc}
                           <button onClick={() => {
-                            setField('locationsToAdd', fields.locationsToAdd.filter((_, li) => li !== i));
-                            setField('locationObjectsToAdd', fields.locationObjectsToAdd.filter((_, oi) => oi !== i));
+                            setLocState(locationTab, {
+                              locationsToAdd: curLocState.locationsToAdd.filter((_, li) => li !== i),
+                              locationObjectsToAdd: curLocState.locationObjectsToAdd.filter((_, oi) => oi !== i),
+                            });
                           }} className="hover:text-red-400 transition-colors"><X size={9} /></button>
                         </span>
                         {supportsRadius && (
@@ -825,9 +1015,9 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                               value={geoObj.radius || ''}
                               onChange={e => {
                                 const val = e.target.value ? Number(e.target.value) : undefined;
-                                const updatedObjs = [...fields.locationObjectsToAdd];
+                                const updatedObjs = [...curLocState.locationObjectsToAdd];
                                 updatedObjs[i] = { ...updatedObjs[i], radius: val };
-                                setField('locationObjectsToAdd', updatedObjs);
+                                setLocState(locationTab, { locationObjectsToAdd: updatedObjs });
                               }}
                               placeholder="Radius"
                               className="w-14 px-1.5 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded text-center outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/30"
@@ -835,9 +1025,9 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                             <select
                               value={geoObj.distanceUnit || 'mile'}
                               onChange={e => {
-                                const updatedObjs = [...fields.locationObjectsToAdd];
+                                const updatedObjs = [...curLocState.locationObjectsToAdd];
                                 updatedObjs[i] = { ...updatedObjs[i], distanceUnit: e.target.value as 'mile' | 'kilometer' };
-                                setField('locationObjectsToAdd', updatedObjs);
+                                setLocState(locationTab, { locationObjectsToAdd: updatedObjs });
                               }}
                               className="px-1 py-0.5 text-[10px] bg-surface-2/50 border border-border rounded outline-none focus:border-primary/50 text-foreground"
                             >
@@ -852,7 +1042,7 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
                 </div>
               </div>
             )}
-            {fields.locationsToAdd.length === 0 && (
+            {curLocState.locationsToAdd.length === 0 && (
               <p className="text-[10px] text-muted-foreground/50 italic">No locations added yet</p>
             )}
            </FieldToggle>
@@ -926,235 +1116,265 @@ export function BulkEditPanel({ selectedRows, allRows, onChange, onClose, settin
             </div>
           </FieldToggle>
 
-          {/* Detailed Targeting (Interests & Behaviors) */}
-          <FieldToggle label="Detailed Targeting" icon={<Target size={13} />} enabled={enabled.detailedTargeting} onToggle={() => toggleEnabled('detailedTargeting')}>
-            <ModeToggle mode={fields.detailedInterestsMode} onChange={m => setField('detailedInterestsMode', m)} />
-            {/* Type selector */}
-            <div className="flex gap-1">
-              {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setDetailedType(t)}
-                  className={cn(
-                    'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
-                    detailedType === t
-                      ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
-                  )}
-                >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
-              ))}
-            </div>
-            <div className="relative">
-              <input
-                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
-                placeholder="Search interests, behaviors..."
-                value={detailedQuery}
-                onChange={e => setDetailedQuery(e.target.value)}
-              />
-              {searchingDetailed && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
-            </div>
-            {detailedQuery.length >= 2 && detailedSearchResults.length > 0 && (
-              <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
-                {detailedSearchResults.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => {
-                      const already = fields.detailedInterestObjects.some(o => o.id === r.id);
-                      if (!already) {
-                        setField('detailedInterestObjects', [...fields.detailedInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }]);
-                      }
-                      setDetailedQuery('');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
-                  >
-                    <span className="font-600">{r.name}</span>
-                    {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-            {fields.detailedInterestObjects.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {fields.detailedInterestObjects.map((obj, i) => (
-                  <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-primary/10 text-primary border border-primary/20">
-                    {obj.name}
-                    <button onClick={() => setField('detailedInterestObjects', fields.detailedInterestObjects.filter((_, oi) => oi !== i))} className="hover:text-red-400"><X size={9} /></button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/50 italic">No interests added yet</p>
-            )}
-          </FieldToggle>
+          {/* ── Combined: Detailed Targeting + Narrow Targeting (AND) ── */}
+          <FieldToggle label="Detailed & Narrow Targeting" icon={<Target size={13} />} enabled={enabled.detailedTargeting} onToggle={() => toggleEnabled('detailedTargeting')}>
+            <AdSetTabSwitcher selectedRows={selectedRows} activeTab={detailedTab} onTabChange={setDetailedTab} />
+            <SubSectionTabs
+              tabs={[
+                { id: 'detailed', label: 'Detailed (OR)' },
+                { id: 'narrow', label: 'Narrow (AND)', color: 'amber' },
+              ]}
+              active={detailedSubSection}
+              onChange={id => setDetailedSubSection(id as 'detailed' | 'narrow')}
+            />
 
-          {/* Narrow Targeting (AND layer) */}
-          <FieldToggle label="Narrow Targeting (AND)" icon={<span className="text-[11px]">🔍</span>} enabled={enabled.narrowTargeting} onToggle={() => toggleEnabled('narrowTargeting')}>
-            <ModeToggle mode={fields.narrowInterestsMode} onChange={m => setField('narrowInterestsMode', m)} />
-            <div className="flex gap-1">
-              {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setNarrowType(t)}
-                  className={cn(
-                    'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
-                    narrowType === t
-                      ? 'bg-primary/15 border-primary/40 text-primary'
-                      : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
-                  )}
-                >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
-              ))}
-            </div>
-            <div className="relative">
-              <input
-                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
-                placeholder="Must also match..."
-                value={narrowQuery}
-                onChange={e => setNarrowQuery(e.target.value)}
-              />
-              {searchingNarrow && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
-            </div>
-            {narrowQuery.length >= 2 && narrowSearchResults.length > 0 && (
-              <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
-                {narrowSearchResults.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => {
-                      const already = fields.narrowInterestObjects.some(o => o.id === r.id);
-                      if (!already) {
-                        setField('narrowInterestObjects', [...fields.narrowInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }]);
-                      }
-                      setNarrowQuery('');
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
-                  >
-                    <span className="font-600">{r.name}</span>
-                    {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-            {fields.narrowInterestObjects.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {fields.narrowInterestObjects.map((obj, i) => (
-                  <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                    {obj.name}
-                    <button onClick={() => setField('narrowInterestObjects', fields.narrowInterestObjects.filter((_, oi) => oi !== i))} className="hover:text-red-400"><X size={9} /></button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/50 italic">No narrow targets added yet</p>
-            )}
-          </FieldToggle>
-
-          {/* Targeted Audiences (Custom / LAL) */}
-          <FieldToggle label="Targeted Audiences (Custom / LAL)" icon={<Users size={13} />} enabled={enabled.targetedAudiences} onToggle={() => toggleEnabled('targetedAudiences')}>
-            <ModeToggle mode={fields.targetedAudiencesMode} onChange={m => setField('targetedAudiencesMode', m)} />
-            <div className="relative">
-              <input
-                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
-                value={audienceSearch}
-                onChange={e => setAudienceSearch(e.target.value)}
-                placeholder="Search custom / lookalike audiences…"
-              />
-              {loadingAudiences && (
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground animate-pulse">loading…</span>
-              )}
-            </div>
-            {customAudiences.length > 0 && (
-              <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
-                {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                  const alreadyAdded = fields.targetedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
-                  return (
+            {detailedSubSection === 'detailed' ? (
+              <>
+                <ModeToggle mode={curDetState.detailedInterestsMode} onChange={m => setDetState(detailedTab, { detailedInterestsMode: m })} />
+                {/* Type selector */}
+                <div className="flex gap-1">
+                  {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
                     <button
-                      key={aud.id}
-                      onClick={() => {
-                        if (!alreadyAdded) setField('targetedAudiencesToAdd', [...fields.targetedAudiencesToAdd, `${aud.id}|${aud.name}`]);
-                      }}
-                      disabled={alreadyAdded}
-                      className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
-                    >
-                      <span className="text-foreground">{aud.name}</span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {aud.subtype && <span className="text-[9px] text-muted-foreground/60 bg-surface-2 px-1 rounded">{aud.subtype}</span>}
-                        {alreadyAdded
-                          ? <Check size={10} className="text-primary" />
-                          : <Plus size={10} className="text-muted-foreground" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            {fields.targetedAudiencesToAdd.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {fields.targetedAudiencesToAdd.map((aud, i) => (
-                  <span key={i} className="flex items-center gap-1 text-[10px] bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full">
-                    {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
-                    <button onClick={() => setField('targetedAudiencesToAdd', fields.targetedAudiencesToAdd.filter((_, li) => li !== i))}>
-                      <X size={9} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            {fields.targetedAudiencesToAdd.length === 0 && (
-              <p className="text-[10px] text-muted-foreground/50 italic">No audiences added yet</p>
+                      key={t}
+                      onClick={() => setDetailedType(t)}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                        detailedType === t
+                          ? 'bg-primary/15 border-primary/40 text-primary'
+                          : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                      )}
+                    >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
+                  ))}
+                </div>
+                <div className="relative">
+                  <input
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                    placeholder="Search interests, behaviors..."
+                    value={detailedQuery}
+                    onChange={e => setDetailedQuery(e.target.value)}
+                  />
+                  {searchingDetailed && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
+                </div>
+                {detailedQuery.length >= 2 && detailedSearchResults.length > 0 && (
+                  <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+                    {detailedSearchResults.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          const already = curDetState.detailedInterestObjects.some(o => o.id === r.id);
+                          if (!already) {
+                            setDetState(detailedTab, {
+                              detailedInterestObjects: [...curDetState.detailedInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                            });
+                          }
+                          setDetailedQuery('');
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
+                      >
+                        <span className="font-600">{r.name}</span>
+                        {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {curDetState.detailedInterestObjects.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {curDetState.detailedInterestObjects.map((obj, i) => (
+                      <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-primary/10 text-primary border border-primary/20">
+                        {obj.name}
+                        <button onClick={() => setDetState(detailedTab, { detailedInterestObjects: curDetState.detailedInterestObjects.filter((_, oi) => oi !== i) })} className="hover:text-red-400"><X size={9} /></button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/50 italic">No detailed interests added yet</p>
+                )}
+              </>
+            ) : (
+              <>
+                <ModeToggle mode={curDetState.narrowInterestsMode} onChange={m => setDetState(detailedTab, { narrowInterestsMode: m })} />
+                <div className="flex gap-1">
+                  {(['adinterest', 'behaviors', 'demographics'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setNarrowType(t)}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-600 border transition-all',
+                        narrowType === t
+                          ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
+                          : 'bg-transparent border-border text-muted-foreground hover:text-foreground',
+                      )}
+                    >{t === 'adinterest' ? 'Interests' : t === 'behaviors' ? 'Behaviors' : 'Demographics'}</button>
+                  ))}
+                </div>
+                <div className="relative">
+                  <input
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                    placeholder="Must also match (AND layer)..."
+                    value={narrowQuery}
+                    onChange={e => setNarrowQuery(e.target.value)}
+                  />
+                  {searchingNarrow && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">...</span>}
+                </div>
+                {narrowQuery.length >= 2 && narrowSearchResults.length > 0 && (
+                  <div className="border border-border rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+                    {narrowSearchResults.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          const already = curDetState.narrowInterestObjects.some(o => o.id === r.id);
+                          if (!already) {
+                            setDetState(detailedTab, {
+                              narrowInterestObjects: [...curDetState.narrowInterestObjects, { id: r.id, type: r.type || 'adinterest', name: r.name }],
+                            });
+                          }
+                          setNarrowQuery('');
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-surface-2/60 border-b border-border/30 last:border-0 text-foreground"
+                      >
+                        <span className="font-600">{r.name}</span>
+                        {r.audience_size && <span className="text-muted-foreground ml-1">({(r.audience_size / 1e6).toFixed(1)}M)</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {curDetState.narrowInterestObjects.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {curDetState.narrowInterestObjects.map((obj, i) => (
+                      <span key={obj.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-600 bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        {obj.name}
+                        <button onClick={() => setDetState(detailedTab, { narrowInterestObjects: curDetState.narrowInterestObjects.filter((_, oi) => oi !== i) })} className="hover:text-red-400"><X size={9} /></button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground/50 italic">No narrow targets added yet</p>
+                )}
+              </>
             )}
           </FieldToggle>
 
-          {/* Excluded Audiences */}
-          <FieldToggle label="Excluded Audiences" icon={<Minus size={13} />} enabled={enabled.excludedAudiences} onToggle={() => toggleEnabled('excludedAudiences')}>
-            <ModeToggle mode={fields.excludedAudiencesMode} onChange={m => setField('excludedAudiencesMode', m)} />
-            <div className="relative">
-              <input
-                className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
-                value={audienceSearch}
-                onChange={e => setAudienceSearch(e.target.value)}
-                placeholder="Search audiences to exclude…"
-              />
-            </div>
-            {customAudiences.length > 0 && (
-              <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
-                {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
-                  const alreadyAdded = fields.excludedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
-                  return (
-                    <button
-                      key={aud.id}
-                      onClick={() => {
-                        if (!alreadyAdded) setField('excludedAudiencesToAdd', [...fields.excludedAudiencesToAdd, `${aud.id}|${aud.name}`]);
-                      }}
-                      disabled={alreadyAdded}
-                      className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
-                    >
-                      <span className="text-foreground">{aud.name}</span>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {aud.subtype && <span className="text-[9px] text-muted-foreground/60 bg-surface-2 px-1 rounded">{aud.subtype}</span>}
-                        {alreadyAdded
-                          ? <Check size={10} className="text-primary" />
-                          : <Plus size={10} className="text-muted-foreground" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+          {/* ── Combined: Targeted + Excluded Audiences ── */}
+          <FieldToggle label="Custom & LAL Audiences" icon={<Users size={13} />} enabled={enabled.audiences} onToggle={() => toggleEnabled('audiences')}>
+            <AdSetTabSwitcher selectedRows={selectedRows} activeTab={audienceTab} onTabChange={setAudienceTab} />
+            <SubSectionTabs
+              tabs={[
+                { id: 'targeted', label: 'Targeted' },
+                { id: 'excluded', label: 'Excluded', color: 'red' },
+              ]}
+              active={audienceSubSection}
+              onChange={id => setAudienceSubSection(id as 'targeted' | 'excluded')}
+            />
+
+            {audienceSubSection === 'targeted' ? (
+              <>
+                <ModeToggle mode={curAudState.targetedAudiencesMode} onChange={m => setAudState(audienceTab, { targetedAudiencesMode: m })} />
+                <div className="relative">
+                  <input
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                    value={audienceSearch}
+                    onChange={e => setAudienceSearch(e.target.value)}
+                    placeholder="Search custom / lookalike audiences…"
+                  />
+                  {loadingAudiences && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground animate-pulse">loading…</span>
+                  )}
+                </div>
+                {customAudiences.length > 0 && (
+                  <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
+                    {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
+                      const alreadyAdded = curAudState.targetedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
+                      return (
+                        <button
+                          key={aud.id}
+                          onClick={() => {
+                            if (!alreadyAdded) setAudState(audienceTab, { targetedAudiencesToAdd: [...curAudState.targetedAudiencesToAdd, `${aud.id}|${aud.name}`] });
+                          }}
+                          disabled={alreadyAdded}
+                          className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
+                        >
+                          <span className="text-foreground">{aud.name}</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {aud.subtype && <span className="text-[9px] text-muted-foreground/60 bg-surface-2 px-1 rounded">{aud.subtype}</span>}
+                            {alreadyAdded
+                              ? <Check size={10} className="text-primary" />
+                              : <Plus size={10} className="text-muted-foreground" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {curAudState.targetedAudiencesToAdd.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {curAudState.targetedAudiencesToAdd.map((aud, i) => (
+                      <span key={i} className="flex items-center gap-1 text-[10px] bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full">
+                        {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
+                        <button onClick={() => setAudState(audienceTab, { targetedAudiencesToAdd: curAudState.targetedAudiencesToAdd.filter((_, li) => li !== i) })}>
+                          <X size={9} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {curAudState.targetedAudiencesToAdd.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground/50 italic">No targeted audiences added yet</p>
+                )}
+              </>
+            ) : (
+              <>
+                <ModeToggle mode={curAudState.excludedAudiencesMode} onChange={m => setAudState(audienceTab, { excludedAudiencesMode: m })} />
+                <div className="relative">
+                  <input
+                    className="w-full px-2.5 py-1.5 text-[12px] bg-surface-2/50 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                    value={audienceSearch}
+                    onChange={e => setAudienceSearch(e.target.value)}
+                    placeholder="Search audiences to exclude…"
+                  />
+                </div>
+                {customAudiences.length > 0 && (
+                  <div className="rounded-lg border border-border bg-surface-2/80 max-h-[140px] overflow-y-auto">
+                    {customAudiences.map((aud: { id: string; name: string; subtype?: string }) => {
+                      const alreadyAdded = curAudState.excludedAudiencesToAdd.some(a => a.split('|')[0] === aud.id);
+                      return (
+                        <button
+                          key={aud.id}
+                          onClick={() => {
+                            if (!alreadyAdded) setAudState(audienceTab, { excludedAudiencesToAdd: [...curAudState.excludedAudiencesToAdd, `${aud.id}|${aud.name}`] });
+                          }}
+                          disabled={alreadyAdded}
+                          className="w-full text-left px-3 py-1.5 text-[11px] hover:bg-primary/10 transition-colors border-b border-border/30 last:border-0 flex items-center justify-between"
+                        >
+                          <span className="text-foreground">{aud.name}</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {aud.subtype && <span className="text-[9px] text-muted-foreground/60 bg-surface-2 px-1 rounded">{aud.subtype}</span>}
+                            {alreadyAdded
+                              ? <Check size={10} className="text-red-400" />
+                              : <Plus size={10} className="text-muted-foreground" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {curAudState.excludedAudiencesToAdd.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {curAudState.excludedAudiencesToAdd.map((aud, i) => (
+                      <span key={i} className="flex items-center gap-1 text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
+                        {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
+                        <button onClick={() => setAudState(audienceTab, { excludedAudiencesToAdd: curAudState.excludedAudiencesToAdd.filter((_, li) => li !== i) })}>
+                          <X size={9} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {curAudState.excludedAudiencesToAdd.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground/50 italic">No exclusions added yet</p>
+                )}
+              </>
             )}
-            {fields.excludedAudiencesToAdd.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {fields.excludedAudiencesToAdd.map((aud, i) => (
-                  <span key={i} className="flex items-center gap-1 text-[10px] bg-red-500/10 border border-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
-                    {aud.includes('|') ? aud.split('|').slice(1).join('|') : aud}
-                    <button onClick={() => setField('excludedAudiencesToAdd', fields.excludedAudiencesToAdd.filter((_, li) => li !== i))}>
-                      <X size={9} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            {fields.excludedAudiencesToAdd.length === 0 && (
-              <p className="text-[10px] text-muted-foreground/50 italic">No exclusions added yet</p>
-            )}
-            </FieldToggle>
+          </FieldToggle>
 
           {/* ── Optional Fields (collapsed) ─────────────────────────────────── */}
           <div className={cn(

@@ -4,7 +4,7 @@
 // Single dimension = can use post ID / dark post / social proof
 
 import { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
-import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2 } from 'lucide-react';
+import { Plus, Copy, Trash2, ChevronDown, Link2, Share2, ChevronUp, Layers, ChevronRight, Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import {
   CreativeRow, CarouselCard, PlacementDimension, PlacementAsset,
@@ -872,16 +872,28 @@ function StaticVideoTable({ rows, onChange, settings }: { rows: CreativeRow[]; o
 
                   {/* Feed Asset + Stories/Reels Asset — two separate columns */}
                   {isPlacementCustom ? (
-                    // Placement-customized: span both columns with the full stack
-                    <td className="p-0 border-r border-border" colSpan={2}>
-                      <PlacementAssetStack
-                        row={row}
-                        dims={row.placementDimensions}
-                        onUpdate={assets => set(i, 'placementAssets', assets)}
-                        settings={settings}
-                        onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: dim === '9:16' ? 'stories' : 'feed', exactDim: dim })}
-                      />
-                    </td>
+                    <>
+                      {/* Feed column: show 4:5 and 1:1 assets */}
+                      <td className="p-0 border-r border-border min-w-[200px]">
+                        <PlacementAssetStack
+                          row={row}
+                          dims={row.placementDimensions.filter(d => d !== '9:16')}
+                          onUpdate={assets => set(i, 'placementAssets', assets)}
+                          settings={settings}
+                          onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: 'feed', exactDim: dim })}
+                        />
+                      </td>
+                      {/* Stories/Reels column: show 9:16 asset */}
+                      <td className="p-0 border-r border-border min-w-[200px]">
+                        <PlacementAssetStack
+                          row={row}
+                          dims={row.placementDimensions.filter(d => d === '9:16')}
+                          onUpdate={assets => set(i, 'placementAssets', assets)}
+                          settings={settings}
+                          onBrowse={(dim) => setMediaBrowserTarget({ rowIndex: i, type: isVideo ? 'video' : 'image', placement: 'stories', exactDim: dim })}
+                        />
+                      </td>
+                    </>
                   ) : (
                     <>
                       {/* Feed Asset (4:5) */}
