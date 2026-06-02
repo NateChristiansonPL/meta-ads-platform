@@ -35,9 +35,10 @@ import {
   ImportedMetaAdSet,
   CreativeRow,
 } from "./campaignStoreAdmin";
-import { DownloadCloud, Layers, Settings, LayoutGrid } from "lucide-react";
+import { DownloadCloud, Layers, Settings, LayoutGrid, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { useCreativeLibrarySync } from "./useCreativeLibrarySync";
+import { useUndoHistory } from "./useUndoHistory";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export";
@@ -119,8 +120,12 @@ export default function CampaignBuilderAdmin() {
     onLoad: handleCreativeLibraryLoad,
   });
 
+  // ── Undo history ────────────────────────────────────────────────────────────
+  const { captureBeforeChange, undo, canUndo, pushSnapshot } = useUndoHistory(state, setState);
+
   // ── State helpers ────────────────────────────────────────────────────────────
   const update = <K extends keyof CampaignBuilderState>(key: K, val: CampaignBuilderState[K]) => {
+    captureBeforeChange();
     setState(s => ({ ...s, [key]: val }));
   };
 
@@ -413,6 +418,23 @@ export default function CampaignBuilderAdmin() {
                 </button>
               ))}
             </div>
+
+            {/* Undo button */}
+            <button
+              onClick={() => { if (undo()) toast.success('Undo successful'); }}
+              disabled={!canUndo}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-600 transition-all mr-2"
+              style={{
+                background: canUndo ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: canUndo ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)',
+                border: `1px solid ${canUndo ? 'rgba(255,255,255,0.16)' : 'transparent'}`,
+                cursor: canUndo ? 'pointer' : 'not-allowed',
+              }}
+              title="Undo last change"
+            >
+              <Undo2 size={12} />
+              Undo
+            </button>
 
             {/* Tabs */}
             <div className="flex items-center gap-0.5">

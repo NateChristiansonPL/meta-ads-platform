@@ -1,12 +1,12 @@
 // Shared TargetingPopup component — used by both AdSetsTableAdmin (spreadsheet view)
 // and PillarHubAdmin (pillar view). Extracted to avoid duplication.
 
-import React, { useRef, useEffect } from 'react';
-import { MapPin, Plus, X, ChevronDown } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { MapPin, Plus, X, ChevronDown, Check, Zap, Layout } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AdSetRow } from './campaignStoreAdmin';
+import { AdSetRow, PLATFORM_PLACEMENTS } from './campaignStoreAdmin';
 
-export type AudienceFocus = 'location' | 'interests' | 'custom';
+export type AudienceFocus = 'location' | 'interests' | 'custom' | 'placements';
 
 export type TargetingPopupProps = {
   tmRow: AdSetRow;
@@ -54,6 +54,13 @@ export type TargetingPopupProps = {
   inline?: boolean;
   /** When set, only this tab is active; other tabs are visually disabled */
   lockedTab?: AudienceFocus;
+  /** Placement props for the Placements tab */
+  placementType?: 'advantage_plus' | 'manual';
+  platforms?: string[];
+  placements?: string[];
+  onPlacementChange?: (updates: { placementType?: 'advantage_plus' | 'manual'; platforms?: string[]; placements?: string[] }) => void;
+  /** Quick Build callback for the Custom tab */
+  onOpenQuickBuild?: () => void;
 };
 
 export function TargetingPopup({
@@ -69,6 +76,8 @@ export function TargetingPopup({
   addressQuery, addressRowId, setAddressQuery, setAddressRowId,
   geocodeResults, geocodingLoading,
   inline = false, lockedTab,
+  placementType, platforms = [], placements = [], onPlacementChange,
+  onOpenQuickBuild,
 }: TargetingPopupProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -98,7 +107,7 @@ export function TargetingPopup({
       </div>
       {/* Tab bar */}
       <div className="flex items-center gap-0.5 px-4 pt-2 pb-0">
-        {(['location', 'interests', 'custom'] as AudienceFocus[]).map(f => {
+        {(['location', 'interests', 'custom', 'placements'] as AudienceFocus[]).map(f => {
           const isLocked = lockedTab !== undefined && f !== lockedTab;
           return (
             <button key={f}
@@ -113,7 +122,7 @@ export function TargetingPopup({
                     ? 'border-transparent text-white/20 cursor-not-allowed opacity-40'
                     : 'border-transparent text-white/40 hover:text-white/70'
               )}>
-              {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : '👥 Custom'}
+              {f === 'location' ? '📍 Location' : f === 'interests' ? '🎯 Interests' : f === 'custom' ? '👥 Custom' : '📱 Placements'}
             </button>
           );
         })}
@@ -121,6 +130,12 @@ export function TargetingPopup({
           <button onClick={() => { setBulkLocModal({ rowId: tmRow.id }); setBulkLocText(''); }}
             className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded border border-[rgba(255,255,255,0.12)] text-[10px] font-600 text-white/50 hover:text-white/80 hover:border-[rgba(255,255,255,0.25)] transition-colors">
             <Plus size={9} /> Bulk Paste
+          </button>
+        )}
+        {audienceFocus === 'custom' && onOpenQuickBuild && (
+          <button onClick={onOpenQuickBuild}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded border border-[rgba(255,255,255,0.12)] text-[10px] font-600 text-white/50 hover:text-[#00BEEF] hover:border-[rgba(0,190,239,0.3)] transition-colors">
+            <Zap size={10} /> Quick Build
           </button>
         )}
       </div>
@@ -522,6 +537,16 @@ export function TargetingPopup({
             </div>
           </div>
         )}
+
+        {/* PLACEMENTS TAB */}
+        {audienceFocus === 'placements' && onPlacementChange && (
+          <PlacementsTabContent
+            placementType={placementType || 'manual'}
+            platforms={platforms}
+            placements={placements}
+            onChange={onPlacementChange}
+          />
+        )}
       </div>
       {/* Footer */}
       <div className="flex items-center justify-end px-4 py-2.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
@@ -530,6 +555,146 @@ export function TargetingPopup({
           Done
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Placements Tab Content (accordion-style, one platform expanded at a time) ──
+function PlacementsTabContent({ placementType, platforms, placements, onChange }: {
+  placementType: 'advantage_plus' | 'manual';
+  platforms: string[];
+  placements: string[];
+  onChange: (updates: { placementType?: 'advantage_plus' | 'manual'; platforms?: string[]; placements?: string[] }) => void;
+}) {
+  const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
+  const allPlatforms = Object.keys(PLATFORM_PLACEMENTS);
+
+  const togglePlatform = (p: string) => {
+    const next = platforms.includes(p)
+      ? platforms.filter(x => x !== p)
+      : [...platforms, p];
+    // Remove placements for deselected platform
+    const nextPlacements = placements.filter(pl => next.some(np => pl.startsWith(np)));
+    onChange({ platforms: next, placements: nextPlacements });
+  };
+
+  const togglePlacement = (key: string) => {
+    const next = placements.includes(key)
+      ? placements.filter(x => x !== key)
+      : [...placements, key];
+    onChange({ placements: next });
+  };
+
+  const handlePlatformExpand = (p: string) => {
+    // If clicking the already-expanded platform, collapse it
+    if (expandedPlatform === p) {
+      setExpandedPlatform(null);
+    } else {
+      // Auto-select the platform if not already selected
+      if (!platforms.includes(p)) {
+        const next = [...platforms, p];
+        onChange({ platforms: next });
+      }
+      setExpandedPlatform(p);
+    }
+  };
+
+  const platformLabel = (p: string) => {
+    if (p === 'audience_network') return 'Audience Network';
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  };
+
+  const getSelectedCount = (p: string) => placements.filter(pl => pl.startsWith(p)).length;
+
+  return (
+    <div className="space-y-3">
+      {/* Advantage+ / Manual toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-600 text-white/50 uppercase tracking-wider">Placement Type</span>
+        <div className="flex gap-1">
+          {(['advantage_plus', 'manual'] as const).map(t => (
+            <button key={t} onClick={() => onChange({ placementType: t, placements: t === 'advantage_plus' ? [] : placements })}
+              className={cn(
+                'px-2.5 py-1 rounded text-[10px] font-600 border transition-all',
+                placementType === t
+                  ? 'bg-[rgba(0,190,239,0.12)] border-[rgba(0,190,239,0.4)] text-[#00BEEF]'
+                  : 'bg-transparent border-[rgba(255,255,255,0.12)] text-white/40 hover:text-white/70'
+              )}>
+              {t === 'advantage_plus' ? 'Advantage+' : 'Manual'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {placementType === 'manual' && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-700 text-white/40 uppercase tracking-wider mb-2">Select Platforms & Placements</p>
+          {allPlatforms.map(p => {
+            const isSelected = platforms.includes(p);
+            const isExpanded = expandedPlatform === p;
+            const count = getSelectedCount(p);
+            const platformPlacements = PLATFORM_PLACEMENTS[p] || [];
+
+            return (
+              <div key={p} className="rounded-lg border transition-all" style={{ borderColor: isExpanded ? 'rgba(0,190,239,0.3)' : 'rgba(255,255,255,0.08)', background: isExpanded ? 'rgba(0,190,239,0.04)' : 'transparent' }}>
+                {/* Platform header row */}
+                <div className="flex items-center gap-2 px-3 py-2 cursor-pointer" onClick={() => handlePlatformExpand(p)}>
+                  {/* Checkbox to toggle platform on/off */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); togglePlatform(p); }}
+                    className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all',
+                      isSelected ? 'bg-[#00BEEF] border-[#00BEEF]' : 'border-[rgba(255,255,255,0.2)] hover:border-[rgba(255,255,255,0.4)]'
+                    )}>
+                    {isSelected && <Check size={10} className="text-[#0e0d3a]" />}
+                  </button>
+                  <span className={cn('text-[11px] font-600 flex-1', isSelected ? 'text-white' : 'text-white/50')}>
+                    {platformLabel(p)}
+                  </span>
+                  {count > 0 && (
+                    <span className="text-[9px] font-700 px-1.5 py-0.5 rounded-full bg-[rgba(0,190,239,0.15)] text-[#00BEEF]">
+                      {count}
+                    </span>
+                  )}
+                  <ChevronDown size={12} className={cn('text-white/30 transition-transform', isExpanded && 'rotate-180 text-[#00BEEF]')} />
+                </div>
+
+                {/* Expanded placement list */}
+                {isExpanded && (
+                  <div className="px-3 pb-2.5 pt-0.5">
+                    <div className="grid grid-cols-2 gap-1">
+                      {platformPlacements.map(pl => (
+                        <button key={pl.key} onClick={() => togglePlacement(pl.key)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-2 py-1.5 rounded text-[10px] border transition-all text-left',
+                            placements.includes(pl.key)
+                              ? 'bg-[rgba(0,190,239,0.08)] border-[rgba(0,190,239,0.25)] text-[#00BEEF]'
+                              : 'bg-transparent border-[rgba(255,255,255,0.06)] text-white/50 hover:text-white/70 hover:border-[rgba(255,255,255,0.15)]'
+                          )}>
+                          <div className={cn(
+                            'w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0',
+                            placements.includes(pl.key) ? 'bg-[#00BEEF] border-[#00BEEF]' : 'border-[rgba(255,255,255,0.2)]'
+                          )}>
+                            {placements.includes(pl.key) && <Check size={8} className="text-[#0e0d3a]" />}
+                          </div>
+                          {pl.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {placementType === 'advantage_plus' && (
+        <div className="py-4 text-center">
+          <p className="text-[11px] text-white/40">Advantage+ automatically optimizes placements across all platforms.</p>
+          <p className="text-[10px] text-white/25 mt-1">No manual selection needed.</p>
+        </div>
+      )}
     </div>
   );
 }

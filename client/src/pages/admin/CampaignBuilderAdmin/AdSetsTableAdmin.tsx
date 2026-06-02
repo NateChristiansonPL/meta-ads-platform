@@ -9,10 +9,11 @@
 //  - Audience restructure: Detailed Interests, Narrow Interests, Targeted Custom/LAL, Excluded Custom/LAL
 //  - Day Parting: 3-hour increments, bolder grid lines, 50% larger cells
 
-import React, { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
+import React, { useRef, KeyboardEvent, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Plus, Copy, CopyPlus, Trash2, ChevronDown, ChevronUp, SlidersHorizontal,
   MapPin, Users, Clock, X, Check, Info, ExternalLink, BarChart2, RefreshCw, AlertTriangle,
+  ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import { TargetingPopup, AudienceFocus } from './TargetingPopupAdmin';
 import {
@@ -848,7 +849,40 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
     }
   }, [rows, settings, overlapHistory, onOverlapHistoryChange, builderOverlapMutation]);
 
-  // ── Pre-Launch QA rail ─────────────────────────────────────────────────────
+  //   // ── Sorting state ───────────────────────────────────────────────────
+  type AdSetSortKey = 'campaignName' | 'name';
+  type AdSetSortDir = 'asc' | 'desc' | null;
+  const [adSetSortKey, setAdSetSortKey] = useState<AdSetSortKey | null>(null);
+  const [adSetSortDir, setAdSetSortDir] = useState<AdSetSortDir>(null);
+
+  const toggleAdSetSort = (key: AdSetSortKey) => {
+    if (adSetSortKey === key) {
+      if (adSetSortDir === 'asc') setAdSetSortDir('desc');
+      else if (adSetSortDir === 'desc') { setAdSetSortKey(null); setAdSetSortDir(null); }
+      else setAdSetSortDir('asc');
+    } else {
+      setAdSetSortKey(key);
+      setAdSetSortDir('asc');
+    }
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!adSetSortKey || !adSetSortDir) return rows;
+    return [...rows].sort((a, b) => {
+      const aVal = (a[adSetSortKey] ?? '').toString().toLowerCase();
+      const bVal = (b[adSetSortKey] ?? '').toString().toLowerCase();
+      if (aVal < bVal) return adSetSortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return adSetSortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [rows, adSetSortKey, adSetSortDir]);
+
+  const getOriginalRow = (sortedIdx: number) => {
+    if (!adSetSortKey || !adSetSortDir) return rows[sortedIdx];
+    return sortedRows[sortedIdx];
+  };
+
+  // ── Pre-Launch QA rail ─────────────────────────────────────────────
   const [qaOpen, setQaOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [audienceBuilderOpen, setAudienceBuilderOpen] = useState(false);
@@ -1076,24 +1110,29 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
           <thead>
             <tr className="border-b border-border">
               {[
-                { key: 'checkbox', label: '', isCheckbox: true },
-                { key: 'status', label: 'Status', required: true },
-                { key: 'campaign', label: 'Campaign', required: true },
-                { key: 'name', label: 'Ad Set Name', required: true },
-                { key: 'budget', label: 'Budget', required: true },
-                { key: 'startEnd', label: 'Start / End', required: true },
-                { key: 'optGoal', label: 'Opt Goal', required: true },
-                { key: 'convLoc', label: 'Conv. Location' },
-                { key: 'placements', label: 'Placements', required: true },
-                { key: 'ageGender', label: 'Age / Gender' },
-                { key: 'targeting', label: 'Targeting' },
-                { key: 'optFields', label: 'Optional Fields' },
-                { key: 'actions', label: '' },
+                { key: 'checkbox', label: '', isCheckbox: true, sortable: false },
+                { key: 'status', label: 'Status', required: true, sortable: false },
+                { key: 'campaign', label: 'Campaign', required: true, sortable: true, sortKey: 'campaignName' as AdSetSortKey },
+                { key: 'name', label: 'Ad Set Name', required: true, sortable: true, sortKey: 'name' as AdSetSortKey },
+                { key: 'budget', label: 'Budget', required: true, sortable: false },
+                { key: 'startEnd', label: 'Start / End', required: true, sortable: false },
+                { key: 'optGoal', label: 'Opt Goal', required: true, sortable: false },
+                { key: 'convLoc', label: 'Conv. Location', sortable: false },
+                { key: 'placements', label: 'Placements', required: true, sortable: false },
+                { key: 'ageGender', label: 'Age / Gender', sortable: false },
+                { key: 'targeting', label: 'Targeting', sortable: false },
+                { key: 'optFields', label: 'Optional Fields', sortable: false },
+                { key: 'actions', label: '', sortable: false },
               ].map(col => (
-                <th key={col.key} className={cn(
-                  'relative px-2 py-2 text-left text-[10px] font-700 tracking-wider border-r border-border last:border-r-0 whitespace-nowrap sticky top-0 bg-surface-1 z-10',
-                  'text-muted-foreground'
-                )}>
+                <th
+                  key={col.key}
+                  className={cn(
+                    'relative px-2 py-2 text-left text-[10px] font-700 tracking-wider border-r border-border last:border-r-0 whitespace-nowrap sticky top-0 bg-surface-1 z-10',
+                    'text-muted-foreground',
+                    col.sortable && 'cursor-pointer select-none hover:text-foreground'
+                  )}
+                  onClick={col.sortable && col.sortKey ? () => toggleAdSetSort(col.sortKey!) : undefined}
+                >
                   {(col as any).isCheckbox ? (
                     <input
                       type="checkbox"
@@ -1104,7 +1143,14 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                       title="Select all"
                     />
                   ) : (
-                    <>{col.label}{col.required && <span className="text-primary ml-0.5">*</span>}</>
+                    <span className="flex items-center gap-1">
+                      {col.label}{col.required && <span className="text-primary ml-0.5">*</span>}
+                      {col.sortable && col.sortKey && (
+                        adSetSortKey === col.sortKey
+                          ? adSetSortDir === 'asc' ? <ArrowUp size={10} className="text-cyan-400" /> : <ArrowDown size={10} className="text-cyan-400" />
+                          : <ArrowUpDown size={10} className="opacity-30" />
+                      )}
+                    </span>
                   )}
                   {col.key !== 'checkbox' && col.key !== 'actions' && (
                     <div
@@ -1117,7 +1163,7 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => {
+            {sortedRows.map((row, idx) => {
               const objective = getCampaignObjective(row.campaignName);
               const sac = getCampaignSAC(row.campaignName);
               const sacRestricted = sacRestrictsTargeting(sac);
@@ -1500,6 +1546,11 @@ export default function AdSetsTable({ rows, campaigns, onChange, settings, reach
                             setAddressRowId={setAddressRowId}
                             geocodeResults={geocodeResults}
                             geocodingLoading={geocodingLoading}
+                            placementType={row.placementType}
+                            platforms={row.platforms}
+                            placements={row.placements}
+                            onPlacementChange={(updates) => update(row.id, updates as Partial<AdSetRow>)}
+                            onOpenQuickBuild={() => { closeTargetingModal(); setAudienceBuilderOpen(true); }}
                           />
                         );
                       })()}

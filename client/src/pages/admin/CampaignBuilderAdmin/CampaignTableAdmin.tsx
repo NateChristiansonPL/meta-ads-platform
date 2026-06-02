@@ -2,8 +2,8 @@
 // Status at front as button group (default PAUSED), column resizing, paste support
 // specialAdCategory and cbo are in the Optional Fields popup (not inline columns)
 
-import { useRef, KeyboardEvent, useState, useCallback, useEffect } from 'react';
-import { Plus, Copy, Trash2, ChevronDown, SlidersHorizontal, X, Check } from 'lucide-react';
+import { useRef, KeyboardEvent, useState, useCallback, useEffect, useMemo } from 'react';
+import { Plus, Copy, Trash2, ChevronDown, SlidersHorizontal, X, Check, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import {
   CampaignRow, newCampaign, OBJECTIVES, SPECIAL_AD_CATEGORIES,
 } from './campaignStoreAdmin';
@@ -120,10 +120,53 @@ const DEFAULT_WIDTHS: Record<string, number> = {
   spendCap: 110, optFields: 110, campaignId: 160, actions: 64,
 };
 
+type SortDir = 'asc' | 'desc' | null;
+type SortKey = 'name' | 'status' | 'objective' | 'spendCap';
+
 export default function CampaignTable({ rows, onChange }: Props) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [colWidths, setColWidths] = useState(DEFAULT_WIDTHS);
   const resizingCol = useRef<{ key: string; startX: number; startW: number } | null>(null);
+
+  // Sorting state
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else if (sortDir === 'desc') { setSortKey(null); setSortDir(null); }
+      else setSortDir('asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey || !sortDir) return rows;
+    const sorted = [...rows].sort((a, b) => {
+      let aVal = (a[sortKey] ?? '').toString().toLowerCase();
+      let bVal = (b[sortKey] ?? '').toString().toLowerCase();
+      // Numeric sort for spendCap
+      if (sortKey === 'spendCap') {
+        const aNum = parseFloat(aVal) || 0;
+        const bNum = parseFloat(bVal) || 0;
+        return sortDir === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [rows, sortKey, sortDir]);
+
+  // Map sorted index back to original index for edits
+  const getOriginalIndex = (sortedIdx: number) => {
+    if (!sortKey || !sortDir) return sortedIdx;
+    const row = sortedRows[sortedIdx];
+    return rows.findIndex(r => r.id === row.id);
+  };
 
   // Per-row optional fields state: rowId → Set<fieldKey>
   const [activeOptFields, setActiveOptFields] = useState<Record<string, Set<string>>>({});
@@ -263,17 +306,28 @@ export default function CampaignTable({ rows, onChange }: Props) {
           <thead className="sticky top-0 z-10">
             <tr className="bg-surface-2 border-b border-border">
               {[
-                { key: 'num',        label: '#' },
-                { key: 'status',     label: 'Status',                       required: true },
-                { key: 'name',       label: 'Campaign Name',                required: true },
-                { key: 'objective',  label: 'Objective',                    required: true },
-                { key: 'spendCap',   label: 'Spend Cap ($)' },
-                { key: 'optFields',  label: 'Optional Fields' },
-                { key: 'campaignId', label: 'Campaign ID (write-back)',      muted: true },
-                { key: 'actions',    label: '' },
+                { key: 'num',        label: '#',                            sortable: false },
+                { key: 'status',     label: 'Status',                       required: true, sortable: true },
+                { key: 'name',       label: 'Campaign Name',                required: true, sortable: true },
+                { key: 'objective',  label: 'Objective',                    required: true, sortable: true },
+                { key: 'spendCap',   label: 'Spend Cap ($)',                sortable: true },
+                { key: 'optFields',  label: 'Optional Fields',              sortable: false },
+                { key: 'campaignId', label: 'Campaign ID (write-back)',      muted: true, sortable: false },
+                { key: 'actions',    label: '',                             sortable: false },
               ].map(col => (
-                <th key={col.key} className={cn('relative px-2 py-2 text-left text-[10px] font-700 uppercase tracking-wider border-r border-border last:border-r-0', (col as any).muted ? 'text-muted-foreground/50' : 'text-muted-foreground')}>
-                  {col.label}
+                <th
+                  key={col.key}
+                  className={cn('relative px-2 py-2 text-left text-[10px] font-700 uppercase tracking-wider border-r border-border last:border-r-0', (col as any).muted ? 'text-muted-foreground/50' : 'text-muted-foreground', col.sortable && 'cursor-pointer select-none hover:text-foreground')}
+                  onClick={col.sortable ? () => toggleSort(col.key as SortKey) : undefined}
+                >
+                  <span className="flex items-center gap-1">
+                    {col.label}
+                    {col.sortable && (
+                      sortKey === col.key
+                        ? sortDir === 'asc' ? <ArrowUp size={10} className="text-cyan-400" /> : <ArrowDown size={10} className="text-cyan-400" />
+                        : <ArrowUpDown size={10} className="opacity-30" />
+                    )}
+                  </span>
                   {(col as any).required && <span className="text-danger ml-0.5">*</span>}
                   {col.key !== 'num' && col.key !== 'actions' && (
                     <div
@@ -286,7 +340,8 @@ export default function CampaignTable({ rows, onChange }: Props) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => {
+            {sortedRows.map((row, sortedIdx) => {
+              const i = getOriginalIndex(sortedIdx);
               const optFields = getOptFields(row.id);
               const isPopupOpen = openOptPopup === row.id;
               // Compute summary badges for the optional fields button

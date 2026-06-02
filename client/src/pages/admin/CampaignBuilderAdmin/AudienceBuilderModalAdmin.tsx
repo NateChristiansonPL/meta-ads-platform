@@ -80,6 +80,7 @@ interface Props {
   instagramUserId?: string;
   onCreated: (audience: { id: string; name: string }) => void;
   onClose: () => void;
+  initialScreen?: Screen;
 }
 
 // ─── Primitive Components ─────────────────────────────────────────────────────
@@ -1161,8 +1162,8 @@ function QuickBuild({ onBack, onCreated, accessToken, adAccountId, pixelId, face
   );
 }
 // ─── Main Modall ───────────────────────────────────────────────────────────────
-export default function AudienceBuilderModal({ accessToken, adAccountId, pixelId, facebookPageId, instagramUserId, onCreated, onClose }: Props) {
-  const [screen, setScreen] = useState<Screen>('type');
+export default function AudienceBuilderModal({ accessToken, adAccountId, pixelId, facebookPageId, instagramUserId, onCreated, onClose, initialScreen = 'type' }: Props) {
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [selectedSource, setSelectedSource] = useState<SourceDef | null>(null);
 
   return (

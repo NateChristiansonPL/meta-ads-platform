@@ -883,3 +883,11 @@
 - [x] Frontend auto-save: debounced sync of creative library changes to DB
 - [x] Frontend auto-load: load creative library from DB when ad account is selected in Settings
 - [x] Creative Library shared across all build modes (Full Build, Ads Only, Update Ads) for same ad account
+
+## Campaign Builder — Undo, Sorting, Placements Tab, Quick Build
+
+- [x] Undo button on every tab (Full Build/Ads Only/Update Ads and sub-tabs: Campaigns, Ad Sets, Creative Library, Ads, Export)
+- [x] Column sorting (asc/desc) for Ad Sets tab: Campaign Name, Ad Set Name
+- [x] Column sorting (asc/desc) for Campaigns tab: Status, Campaign Name, Objective, Spend Cap
+- [x] Placements as 4th tab in targeting modal (to the right of Custom), accordion-style platform expansion (one at a time, selections persist)
+- [x] Quick Build button on Custom tab (top-right) linking to custom/LAL audience builder section
