@@ -923,3 +923,14 @@
 - [x] Move Run QA button to be visible next to Launch Build button (not hidden below viewport)
 - [x] Change QA to use the same Export checkbox selection instead of only targeting published ads
 - [x] QA runs on selected ads that have Meta Ad IDs; shows count + warning for selected ads without IDs
+
+## Ad QA Checklist - Dedicated Tab
+
+- [x] Create QaChecklistTab component with cascading Campaign > Ad Set > Ads dropdowns
+- [x] Campaign dropdown: multi-select, Active/Inactive filter (default Active)
+- [x] Ad Set dropdown: multi-select, filtered by selected campaigns
+- [x] Ads dropdown: multi-select, filtered by selected ad sets, with Active/Inactive/Last 7 Days filter
+- [x] Run QA button triggers the launchQaChecklist skill on selected ad IDs
+- [x] Download XLSX link appears when QA completes
+- [x] Add "QA Checklist" tab to Campaign Builder top nav (right of "Update Ads")
+- [ ] Remove QA section from ExportPanel (kept for now — accessible from both places)

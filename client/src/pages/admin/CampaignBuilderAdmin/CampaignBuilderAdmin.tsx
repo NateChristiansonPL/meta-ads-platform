@@ -12,6 +12,7 @@ import AdSetsTable from "./AdSetsTableAdmin";
 import CreativesTable from "./CreativesTableAdmin";
 import AdsMatrix from "./AdsMatrixAdmin";
 import ExportPanel from "./ExportPanelAdmin";
+import QaChecklistTab from "./QaChecklistTabAdmin";
 import SettingsDrawer from "./SettingsDrawerAdmin";
 import SessionManager from "./SessionManagerAdmin";
 import LeadGenFormModal from "./LeadGenFormModalAdmin";
@@ -41,7 +42,7 @@ import { useCreativeLibrarySync } from "./useCreativeLibrarySync";
 import { useUndoHistory } from "./useUndoHistory";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export";
+type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export" | "qa-checklist";
 type ViewMode = "spreadsheet" | "pillar";
 
 const DEFAULT_TWEAKS: TweakSettings = {
@@ -277,6 +278,7 @@ export default function CampaignBuilderAdmin() {
     { id: "creative-library", label: "Creative Library",count: state.creatives.filter(c => c.concept).length + state.carouselCreatives.length },
     { id: "ads",              label: "Ads",             count: state.ads.filter(a => a.adName).length },
     { id: "export",           label: "Export & Launch" },
+    { id: "qa-checklist",      label: "QA Checklist" },
   ];
 
   // ── Build mode selector ──────────────────────────────────────────────────────
@@ -559,6 +561,12 @@ export default function CampaignBuilderAdmin() {
                     onLaunch={launch}
                     launchProgress={progress}
                   />
+                </div>
+              )}
+
+              {activeTab === "qa-checklist" && (
+                <div className="h-full overflow-auto">
+                  <QaChecklistTab settings={state.settings} />
                 </div>
               )}
             </>

@@ -2260,6 +2260,48 @@ export const metaRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: `Failed to fetch lead gen forms: ${msg}` });
       }
     }),
+  /**
+   * Fetch ads for given ad set IDs (for QA Checklist tab).
+   * Returns ad id, name, status, created_time for each ad.
+   */
+  getAds: publicProcedure
+    .input(
+      z.object({
+        accessToken: z.string().min(1),
+        adSetIds: z.array(z.string().min(1)).min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      const { accessToken, adSetIds } = input;
+      try {
+        const allAds: { id: string; name: string; status: string; createdTime: string; adSetId: string }[] = [];
+        for (const adSetId of adSetIds) {
+          const data = await metaGet(
+            `/${adSetId}/ads`,
+            {
+              fields: "id,name,status,created_time",
+              limit: "200",
+            },
+            accessToken
+          );
+          for (const ad of (data.data || []) as { id: string; name: string; status: string; created_time: string }[]) {
+            allAds.push({
+              id: ad.id,
+              name: ad.name,
+              status: ad.status,
+              createdTime: ad.created_time,
+              adSetId,
+            });
+          }
+        }
+        return { ads: allAds };
+      } catch (err) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Failed to fetch ads: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }),
 });
 // ─── Targeting spec merge helperr (for overlap analysis) ───────────────────────
 function mergeTargetingSpecs(
