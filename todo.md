@@ -917,3 +917,9 @@
 - [x] Add tRPC procedure to launch QA skill run
 - [x] Add "Run QA" button in Campaign Builder Export panel UI
 - [x] Wire QA results back to UI (download XLSX)
+
+## Ad QA Checklist - Visibility & Selection Fix
+
+- [x] Move Run QA button to be visible next to Launch Build button (not hidden below viewport)
+- [x] Change QA to use the same Export checkbox selection instead of only targeting published ads
+- [x] QA runs on selected ads that have Meta Ad IDs; shows count + warning for selected ads without IDs

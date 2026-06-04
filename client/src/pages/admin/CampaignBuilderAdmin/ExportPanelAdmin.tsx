@@ -423,20 +423,25 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     }
   }, [getQaRunStatus.data]);
 
+  // QA uses the same Export selection checkboxes but filters to only ads with a valid Meta Ad ID
+  const qaEligibleAds = localAds.filter(a => a.selectedForExport !== false && /^\d{8,}$/.test((a.adId || '').trim()));
+  const qaSelectedCount = localAds.filter(a => a.selectedForExport !== false).length;
+  const qaIneligibleCount = qaSelectedCount - qaEligibleAds.length;
+
   const handleRunQa = async () => {
     const { settings } = state;
     if (!settings.adAccountId.trim()) { toast.error('Ad Account ID is required.'); return; }
 
-    // Collect ad IDs from ads that have been published (have a numeric adId)
-    const publishedAdIds = localAds
-      .filter(a => /^\d{8,}$/.test((a.adId || '').trim()))
-      .map(a => a.adId!.trim());
-
-    if (publishedAdIds.length === 0) {
-      toast.error('No published ads found. Run QA after ads have been created in Meta.');
+    if (qaEligibleAds.length === 0) {
+      if (qaIneligibleCount > 0) {
+        toast.error(`${qaIneligibleCount} ad${qaIneligibleCount !== 1 ? 's' : ''} selected but none have a Meta Ad ID yet. QA requires ads that have been published to Meta.`);
+      } else {
+        toast.error('No ads selected for export. Use the checkboxes above to select ads to QA.');
+      }
       return;
     }
 
+    const adIds = qaEligibleAds.map(a => a.adId!.trim());
     setQaState({ phase: 'launching' });
     try {
       const result = await launchQaChecklist.mutateAsync({
@@ -444,11 +449,11 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         adAccountName: settings.adAccountName,
         tokenId: settings.tokenId ?? undefined,
         facebookPageId: settings.facebookPageId,
-        adIds: publishedAdIds,
+        adIds,
         agentProfile: 'manus-1.6',
       });
       setQaState({ phase: 'running', runId: result.runId });
-      toast.success(`QA Checklist started for ${publishedAdIds.length} ads`);
+      toast.success(`QA Checklist started for ${adIds.length} ad${adIds.length !== 1 ? 's' : ''}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setQaState({ phase: 'error', errorMessage: msg });
@@ -831,28 +836,29 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         </div>
       </div>
 
-      {/* ── QA Checklist Section ── */}
-      <div className="bg-surface-1 border border-border rounded-2xl p-5">
+      {/* ── QA Checklist — inline with launch actions ── */}
+      <div className="bg-surface-1 border border-border rounded-2xl p-4">
         <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <h3 className="text-[13px] font-700 text-foreground flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
-              Ad QA Checklist
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              Verify Advantage+ Creative settings, partnership ads, multi-advertiser, and copy for all published ads.
-              Produces a formatted XLSX report.
-            </p>
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            <div>
+              <h3 className="text-[13px] font-700 text-foreground">Ad QA Checklist</h3>
+              <p className="text-[10px] text-muted-foreground">
+                Runs on {qaEligibleAds.length} selected ad{qaEligibleAds.length !== 1 ? 's' : ''} with Meta Ad IDs.
+                {qaIneligibleCount > 0 && <span className="text-amber-400 ml-1">({qaIneligibleCount} selected without Ad ID — will be skipped)</span>}
+                {' '}Use the Export checkboxes above to choose which ads to QA.
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleRunQa}
-              disabled={qaState.phase === 'launching' || qaState.phase === 'running' || localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0}
-              title={localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0 ? 'No published ads to QA' : 'Run QA Checklist on published ads'}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[12px] font-700 border transition-all ${
+              disabled={qaState.phase === 'launching' || qaState.phase === 'running' || qaEligibleAds.length === 0}
+              title={qaEligibleAds.length === 0 ? 'No selected ads with Meta Ad IDs to QA' : `Run QA on ${qaEligibleAds.length} selected ad${qaEligibleAds.length !== 1 ? 's' : ''}`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-700 border transition-all ${
                 qaState.phase === 'launching' || qaState.phase === 'running'
                   ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 cursor-wait'
-                  : localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0
+                  : qaEligibleAds.length === 0
                   ? 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
                   : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/25 cursor-pointer'
               }`}
@@ -863,27 +869,26 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
               }
               {qaState.phase === 'launching' ? 'Submitting…'
                 : qaState.phase === 'running' ? 'QA Running…'
-                : 'Run QA'
+                : `Run QA (${qaEligibleAds.length})`
               }
             </button>
-            {qaState.phase === 'done' && (
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-[11px] text-emerald-400">QA complete!</span>
-                {qaState.attachments && qaState.attachments.length > 0 && (
-                  <a
-                    href={qaState.attachments[0].url}
-                    download={qaState.attachments[0].filename || 'ad_qa_checklist.xlsx'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-cyan-400 underline hover:text-cyan-300"
-                  >
-                    Download XLSX Report
-                  </a>
-                )}
-              </div>
+            {qaState.phase === 'done' && qaState.attachments && qaState.attachments.length > 0 && (
+              <a
+                href={qaState.attachments[0].url}
+                download={qaState.attachments[0].filename || 'ad_qa_checklist.xlsx'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12px] font-700 border bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 cursor-pointer transition-all"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Download Report
+              </a>
+            )}
+            {qaState.phase === 'done' && (!qaState.attachments || qaState.attachments.length === 0) && (
+              <span className="text-[11px] text-emerald-400">QA complete (no file)</span>
             )}
             {qaState.phase === 'error' && (
-              <span className="text-[11px] text-red-400">{qaState.errorMessage || 'QA failed'}</span>
+              <span className="text-[11px] text-red-400 max-w-[200px] truncate" title={qaState.errorMessage}>{qaState.errorMessage || 'QA failed'}</span>
             )}
           </div>
         </div>
