@@ -933,4 +933,4 @@
 - [x] Run QA button triggers the launchQaChecklist skill on selected ad IDs
 - [x] Download XLSX link appears when QA completes
 - [x] Add "QA Checklist" tab to Campaign Builder top nav (right of "Update Ads")
-- [ ] Remove QA section from ExportPanel (kept for now — accessible from both places)
+- [x] Remove QA section from ExportPanel (moved entirely to dedicated QA Checklist tab)

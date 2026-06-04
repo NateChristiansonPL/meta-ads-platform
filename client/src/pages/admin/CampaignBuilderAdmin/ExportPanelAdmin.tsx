@@ -14,7 +14,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CheckCircle2, XCircle, AlertCircle, AlertTriangle, Copy, Rocket,
   ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink, OctagonX,
-  Square, CheckSquare, ShieldCheck
+  Square, CheckSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CampaignBuilderState, AdRow } from './campaignStoreAdmin';
@@ -356,10 +356,10 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
   });
 
   const [isAborting, setIsAborting] = useState(false);
-  const [qaState, setQaState] = useState<{ phase: 'idle' | 'launching' | 'running' | 'done' | 'error'; runId?: number; errorMessage?: string; attachments?: Array<{ filename: string; url: string }>; }>({ phase: 'idle' });
+
   const abortRunMutation = trpc.runs.abortRun.useMutation();
   const launchCampaignBuild = trpc.runs.launchCampaignBuild.useMutation();
-  const launchQaChecklist = trpc.runs.launchQaChecklist.useMutation();
+
   const getRunStatus = trpc.runs.getRunStatus.useQuery(
     { runId: manusLaunch.runId! },
     {
@@ -394,72 +394,9 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     }
   }, [getRunStatus.data]);
 
-  // ── QA Checklist polling ──
-  const getQaRunStatus = trpc.runs.getRunStatus.useQuery(
-    { runId: qaState.runId! },
-    {
-      enabled: qaState.runId !== undefined && (qaState.phase === 'running' || qaState.phase === 'launching'),
-      refetchInterval: 4000,
-    }
-  );
 
-  useEffect(() => {
-    const run = getQaRunStatus.data;
-    if (!run) return;
-    if (run.status === 'success') {
-      setQaState(prev => ({
-        ...prev,
-        phase: 'done',
-        attachments: (run as any).attachments ?? [],
-      }));
-    } else if (run.status === 'error') {
-      setQaState(prev => ({
-        ...prev,
-        phase: 'error',
-        errorMessage: (run as any).errorMessage ?? 'Unknown error',
-      }));
-    } else {
-      setQaState(prev => ({ ...prev, phase: 'running' }));
-    }
-  }, [getQaRunStatus.data]);
 
-  // QA uses the same Export selection checkboxes but filters to only ads with a valid Meta Ad ID
-  const qaEligibleAds = localAds.filter(a => a.selectedForExport !== false && /^\d{8,}$/.test((a.adId || '').trim()));
-  const qaSelectedCount = localAds.filter(a => a.selectedForExport !== false).length;
-  const qaIneligibleCount = qaSelectedCount - qaEligibleAds.length;
 
-  const handleRunQa = async () => {
-    const { settings } = state;
-    if (!settings.adAccountId.trim()) { toast.error('Ad Account ID is required.'); return; }
-
-    if (qaEligibleAds.length === 0) {
-      if (qaIneligibleCount > 0) {
-        toast.error(`${qaIneligibleCount} ad${qaIneligibleCount !== 1 ? 's' : ''} selected but none have a Meta Ad ID yet. QA requires ads that have been published to Meta.`);
-      } else {
-        toast.error('No ads selected for export. Use the checkboxes above to select ads to QA.');
-      }
-      return;
-    }
-
-    const adIds = qaEligibleAds.map(a => a.adId!.trim());
-    setQaState({ phase: 'launching' });
-    try {
-      const result = await launchQaChecklist.mutateAsync({
-        adAccountId: settings.adAccountId,
-        adAccountName: settings.adAccountName,
-        tokenId: settings.tokenId ?? undefined,
-        facebookPageId: settings.facebookPageId,
-        adIds,
-        agentProfile: 'manus-1.6',
-      });
-      setQaState({ phase: 'running', runId: result.runId });
-      toast.success(`QA Checklist started for ${adIds.length} ad${adIds.length !== 1 ? 's' : ''}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setQaState({ phase: 'error', errorMessage: msg });
-      toast.error(`QA launch failed: ${msg}`);
-    }
-  };
 
   const handleAbort = async () => {
     if (!manusLaunch.runId) return;
@@ -836,63 +773,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         </div>
       </div>
 
-      {/* ── QA Checklist — inline with launch actions ── */}
-      <div className="bg-surface-1 border border-border rounded-2xl p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-5 h-5 text-cyan-400" />
-            <div>
-              <h3 className="text-[13px] font-700 text-foreground">Ad QA Checklist</h3>
-              <p className="text-[10px] text-muted-foreground">
-                Runs on {qaEligibleAds.length} selected ad{qaEligibleAds.length !== 1 ? 's' : ''} with Meta Ad IDs.
-                {qaIneligibleCount > 0 && <span className="text-amber-400 ml-1">({qaIneligibleCount} selected without Ad ID — will be skipped)</span>}
-                {' '}Use the Export checkboxes above to choose which ads to QA.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRunQa}
-              disabled={qaState.phase === 'launching' || qaState.phase === 'running' || qaEligibleAds.length === 0}
-              title={qaEligibleAds.length === 0 ? 'No selected ads with Meta Ad IDs to QA' : `Run QA on ${qaEligibleAds.length} selected ad${qaEligibleAds.length !== 1 ? 's' : ''}`}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-700 border transition-all ${
-                qaState.phase === 'launching' || qaState.phase === 'running'
-                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 cursor-wait'
-                  : qaEligibleAds.length === 0
-                  ? 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
-                  : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/25 cursor-pointer'
-              }`}
-            >
-              {qaState.phase === 'launching' || qaState.phase === 'running'
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <ShieldCheck className="w-3.5 h-3.5" />
-              }
-              {qaState.phase === 'launching' ? 'Submitting…'
-                : qaState.phase === 'running' ? 'QA Running…'
-                : `Run QA (${qaEligibleAds.length})`
-              }
-            </button>
-            {qaState.phase === 'done' && qaState.attachments && qaState.attachments.length > 0 && (
-              <a
-                href={qaState.attachments[0].url}
-                download={qaState.attachments[0].filename || 'ad_qa_checklist.xlsx'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[12px] font-700 border bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 cursor-pointer transition-all"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Download Report
-              </a>
-            )}
-            {qaState.phase === 'done' && (!qaState.attachments || qaState.attachments.length === 0) && (
-              <span className="text-[11px] text-emerald-400">QA complete (no file)</span>
-            )}
-            {qaState.phase === 'error' && (
-              <span className="text-[11px] text-red-400 max-w-[200px] truncate" title={qaState.errorMessage}>{qaState.errorMessage || 'QA failed'}</span>
-            )}
-          </div>
-        </div>
-      </div>
+
     </div>
   );
 }
