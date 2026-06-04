@@ -907,3 +907,13 @@
 - [x] Add selection UI (checkboxes) on the Ads tab/export step so users can select which ads to export to Meta
 - [x] Auto-select only new/unpublished ads by default; already-published ads should be unchecked and visually marked
 - [x] Prevent already-published ads from being re-published unless explicitly selected by the user
+
+## Ad QA Checklist Skill
+
+- [x] Create Python skill script (ad_qa_checklist.py) that fetches ad data from Meta Graph API
+- [x] Implement 5-branch degrees_of_freedom_spec checking (Static No PAC, Static PAC, Video No PAC, Video PAC, Carousel)
+- [x] Generate XLSX output with all required columns matching screenshot format
+- [x] Add skill prompt builder in manusTask.ts for ad-qa-checklist
+- [x] Add tRPC procedure to launch QA skill run
+- [x] Add "Run QA" button in Campaign Builder Export panel UI
+- [x] Wire QA results back to UI (download XLSX)

@@ -12,6 +12,8 @@
  */
 
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 
 const MANUS_API_BASE = "https://api.manus.ai";
 
@@ -881,4 +883,83 @@ After completing the build:
 1. Report the IDs of all created/updated campaigns, ad sets, and ads
 2. Note any errors or skipped items
 3. Provide a summary of what was created vs. what failed`;
+}
+
+/**
+ * Build a prompt for the Ad QA Checklist skill.
+ * This instructs the Manus agent to run the Python QA script against newly-created ads
+ * and return the XLSX report.
+ */
+export function buildAdQaChecklistPrompt(params: {
+  accessToken: string;
+  adAccountId: string;
+  adIds: string[];
+  facebookPageId?: string;
+}): string {
+  const { accessToken, adAccountId, adIds, facebookPageId } = params;
+  const accountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+  const adIdList = adIds.join(",");
+
+  return `## Ad QA Checklist — Creative Settings Verification
+
+Run the Ad QA Checklist Python script to verify that all newly-created ads have the correct Advantage+ Creative settings turned OFF, and produce a formatted XLSX report with all ad details.
+
+### Setup
+
+1. First, install required packages:
+\`\`\`bash
+pip3 install requests openpyxl
+\`\`\`
+
+2. Save the following script as \`/home/ubuntu/ad_qa_checklist.py\` and run it:
+
+\`\`\`bash
+python3 /home/ubuntu/ad_qa_checklist.py \\
+  --ad-ids "${adIdList}" \\
+  --access-token "${accessToken}" \\
+  --ad-account-id "${accountId}" \\
+  ${facebookPageId ? `--page-id "${facebookPageId}" \\` : ""}
+  --output "/home/ubuntu/output/ad_qa_checklist.xlsx"
+\`\`\`
+
+### What the script does:
+For each ad ID, it:
+1. Fetches the ad and creative data from Meta Graph API
+2. Determines the ad format (Static/Video/Carousel) and PAC status (Placement Asset Customized)
+3. Compares the live \`degrees_of_freedom_spec\` against the expected "all OFF" spec for that format+PAC combination
+4. Extracts: Ad Name, Status, Preview Link, Partnership Ad status, Multi-Advertiser status, FB Page, Headline, Primary Text, Description, CTA, Landing Page, UTMs, Permalink, Pixel
+5. Reports any Advantage+ Creative settings that are still ON
+
+### Branch Logic (5 format/PAC combinations):
+- **STATIC_NO_PAC**: Single image, no placement asset customization
+- **STATIC_PAC**: Single image WITH placement asset customization  
+- **VIDEO_NO_PAC**: Single video, no placement asset customization
+- **VIDEO_PAC**: Single video WITH placement asset customization
+- **CAROUSEL**: Carousel format
+
+### Key Differences Between Specs:
+- Static No PAC: \`text_translation\` has \`action_metadata: {type: "MANUAL"}\`
+- Static PAC: \`text_translation\` has NO \`action_metadata\` (just \`enroll_status: OPT_OUT\`)
+- Video No PAC: \`video_filtering\` has NO \`action_metadata\`, \`text_translation\` has \`action_metadata: {type: "MANUAL"}\`  
+- Video PAC: \`video_filtering\` HAS \`action_metadata: {type: "DEFAULT_OFF"}\`, \`text_translation\` has NO \`action_metadata\`
+- Carousel: Same as Static PAC pattern
+
+### Output:
+The script produces \`/home/ubuntu/output/ad_qa_checklist.xlsx\` with:
+- Gold header row with column names
+- Navy blue "Ad/Creative Checklist" title banner
+- Alternating row colors
+- All columns from the QA template
+
+After running, please:
+1. Confirm the script ran successfully
+2. Report any ads that have Advantage+ Creative settings still ON
+3. Attach the XLSX file as the deliverable
+
+### The Python Script:
+
+\`\`\`python
+${fs.readFileSync(path.resolve(__dirname, "skills/ad-qa-checklist.py"), "utf-8")}
+\`\`\`
+`;
 }

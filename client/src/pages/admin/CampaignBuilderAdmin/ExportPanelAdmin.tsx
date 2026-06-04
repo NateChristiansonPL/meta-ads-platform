@@ -356,8 +356,10 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
   });
 
   const [isAborting, setIsAborting] = useState(false);
+  const [qaState, setQaState] = useState<{ phase: 'idle' | 'launching' | 'running' | 'done' | 'error'; runId?: number; errorMessage?: string; attachments?: Array<{ filename: string; url: string }>; }>({ phase: 'idle' });
   const abortRunMutation = trpc.runs.abortRun.useMutation();
   const launchCampaignBuild = trpc.runs.launchCampaignBuild.useMutation();
+  const launchQaChecklist = trpc.runs.launchQaChecklist.useMutation();
   const getRunStatus = trpc.runs.getRunStatus.useQuery(
     { runId: manusLaunch.runId! },
     {
@@ -391,6 +393,68 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
       setManusLaunch(prev => ({ ...prev, phase: 'running', statusMessages: msgs }));
     }
   }, [getRunStatus.data]);
+
+  // ── QA Checklist polling ──
+  const getQaRunStatus = trpc.runs.getRunStatus.useQuery(
+    { runId: qaState.runId! },
+    {
+      enabled: qaState.runId !== undefined && (qaState.phase === 'running' || qaState.phase === 'launching'),
+      refetchInterval: 4000,
+    }
+  );
+
+  useEffect(() => {
+    const run = getQaRunStatus.data;
+    if (!run) return;
+    if (run.status === 'success') {
+      setQaState(prev => ({
+        ...prev,
+        phase: 'done',
+        attachments: (run as any).attachments ?? [],
+      }));
+    } else if (run.status === 'error') {
+      setQaState(prev => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: (run as any).errorMessage ?? 'Unknown error',
+      }));
+    } else {
+      setQaState(prev => ({ ...prev, phase: 'running' }));
+    }
+  }, [getQaRunStatus.data]);
+
+  const handleRunQa = async () => {
+    const { settings } = state;
+    if (!settings.adAccountId.trim()) { toast.error('Ad Account ID is required.'); return; }
+
+    // Collect ad IDs from ads that have been published (have a numeric adId)
+    const publishedAdIds = localAds
+      .filter(a => /^\d{8,}$/.test((a.adId || '').trim()))
+      .map(a => a.adId!.trim());
+
+    if (publishedAdIds.length === 0) {
+      toast.error('No published ads found. Run QA after ads have been created in Meta.');
+      return;
+    }
+
+    setQaState({ phase: 'launching' });
+    try {
+      const result = await launchQaChecklist.mutateAsync({
+        adAccountId: settings.adAccountId,
+        adAccountName: settings.adAccountName,
+        tokenId: settings.tokenId ?? undefined,
+        facebookPageId: settings.facebookPageId,
+        adIds: publishedAdIds,
+        agentProfile: 'manus-1.6',
+      });
+      setQaState({ phase: 'running', runId: result.runId });
+      toast.success(`QA Checklist started for ${publishedAdIds.length} ads`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setQaState({ phase: 'error', errorMessage: msg });
+      toast.error(`QA launch failed: ${msg}`);
+    }
+  };
 
   const handleAbort = async () => {
     if (!manusLaunch.runId) return;
@@ -762,6 +826,64 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
             )}
             {manusLaunch.phase === 'error' && (
               <span className="text-[11px] text-red-400">Launch failed — see details above</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── QA Checklist Section ── */}
+      <div className="bg-surface-1 border border-border rounded-2xl p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-[13px] font-700 text-foreground flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+              Ad QA Checklist
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              Verify Advantage+ Creative settings, partnership ads, multi-advertiser, and copy for all published ads.
+              Produces a formatted XLSX report.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleRunQa}
+              disabled={qaState.phase === 'launching' || qaState.phase === 'running' || localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0}
+              title={localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0 ? 'No published ads to QA' : 'Run QA Checklist on published ads'}
+              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[12px] font-700 border transition-all ${
+                qaState.phase === 'launching' || qaState.phase === 'running'
+                  ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 cursor-wait'
+                  : localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length === 0
+                  ? 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
+                  : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/25 cursor-pointer'
+              }`}
+            >
+              {qaState.phase === 'launching' || qaState.phase === 'running'
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <ShieldCheck className="w-3.5 h-3.5" />
+              }
+              {qaState.phase === 'launching' ? 'Submitting…'
+                : qaState.phase === 'running' ? 'QA Running…'
+                : 'Run QA'
+              }
+            </button>
+            {qaState.phase === 'done' && (
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-[11px] text-emerald-400">QA complete!</span>
+                {qaState.attachments && qaState.attachments.length > 0 && (
+                  <a
+                    href={qaState.attachments[0].url}
+                    download={qaState.attachments[0].filename || 'ad_qa_checklist.xlsx'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-cyan-400 underline hover:text-cyan-300"
+                  >
+                    Download XLSX Report
+                  </a>
+                )}
+              </div>
+            )}
+            {qaState.phase === 'error' && (
+              <span className="text-[11px] text-red-400">{qaState.errorMessage || 'QA failed'}</span>
             )}
           </div>
         </div>

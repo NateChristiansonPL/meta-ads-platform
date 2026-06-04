@@ -52,7 +52,7 @@ import {
   updateToken,
 } from "./db";
 import axios from "axios";
-import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
+import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, buildAdQaChecklistPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
@@ -913,6 +913,115 @@ export const appRouter = router({
               prompt,
               agentProfile: input.agentProfile,
               projectId: skillProjectId,
+              onProgress: async (msg: string, taskId?: string) => {
+                statusLog.push({ ts: Date.now(), msg });
+                if (taskId) {
+                  await updateSkillRun(runId, { manusTaskId: taskId }).catch(() => {});
+                }
+                flushCounter++;
+                if (flushCounter % 3 === 0) await flushStatusLog();
+              },
+            });
+
+            const durationMs = Date.now() - startedAt;
+            await updateSkillRun(runId, {
+              status: result.status,
+              reportMarkdown: result.report || undefined,
+              errorMessage: result.errorMessage || undefined,
+              durationMs,
+              taskUrl: result.taskUrl,
+              attachments: result.attachments,
+              creditUsage: result.creditUsage,
+              statusLog,
+            });
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            await updateSkillRun(runId, {
+              status: "error",
+              errorMessage: errMsg,
+              durationMs: Date.now() - startedAt,
+            }).catch(() => {});
+          }
+        })();
+
+        return { runId };
+      }),
+
+    /**
+     * launchQaChecklist: Fires the ad-qa-checklist skill to verify
+     * Advantage+ Creative settings and produce an XLSX QA report.
+     */
+    launchQaChecklist: protectedProcedure
+      .input(z.object({
+        adAccountId: z.string().min(1),
+        adAccountName: z.string().optional(),
+        tokenId: z.number().int().positive().optional(),
+        facebookPageId: z.string().optional(),
+        adIds: z.array(z.string().min(1)).min(1),
+        agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const apiKey = process.env.MANUS_API_KEY;
+        if (!apiKey) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "MANUS_API_KEY is not configured.",
+          });
+        }
+
+        // Fetch the Meta access token
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No active Meta access token found.",
+          });
+        }
+
+        const runId = await createSkillRun({
+          userId: ctx.user.id,
+          skillId: "ad-qa-checklist",
+          skillName: "Ad QA Checklist",
+          status: "running",
+          adAccountId: input.adAccountId,
+          adAccountName: input.adAccountName ?? null,
+          businessManagerId: null,
+          datePreset: null,
+          campaignIds: [],
+          extraParams: { adIds: input.adIds },
+        });
+
+        const startedAt = Date.now();
+
+        // Fire-and-forget background execution
+        (async () => {
+          try {
+            const prompt = buildAdQaChecklistPrompt({
+              accessToken: metaAccessToken!,
+              adAccountId: input.adAccountId,
+              adIds: input.adIds,
+              facebookPageId: input.facebookPageId,
+            });
+
+            const statusLog: Array<{ ts: number; msg: string }> = [];
+            let flushCounter = 0;
+            const flushStatusLog = async () => {
+              await updateSkillRun(runId, { statusLog }).catch(() => {});
+            };
+
+            const result = await runManusSkillTask({
+              apiKey,
+              skillId: "ad-qa-checklist",
+              prompt,
+              agentProfile: input.agentProfile,
               onProgress: async (msg: string, taskId?: string) => {
                 statusLog.push({ ts: Date.now(), msg });
                 if (taskId) {
