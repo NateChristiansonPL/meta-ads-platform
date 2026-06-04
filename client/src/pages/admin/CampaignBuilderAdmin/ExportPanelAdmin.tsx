@@ -13,7 +13,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   CheckCircle2, XCircle, AlertCircle, AlertTriangle, Copy, Rocket,
-  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink, OctagonX
+  ChevronDown, ChevronRight, Film, Info, Replace, Search, Eye, Loader2, ExternalLink, OctagonX,
+  Square, CheckSquare, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CampaignBuilderState, AdRow } from './campaignStoreAdmin';
@@ -142,9 +143,31 @@ function FindReplace({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRow[])
 function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRow[]) => void }) {
   const [expanded, setExpanded] = useState(true);
 
-  const setAdField = (id: string, field: keyof AdRow, val: string) => {
+  const isPublished = (ad: AdRow) => /^\d{8,}$/.test((ad.adId || '').trim());
+
+  const setAdField = (id: string, field: keyof AdRow, val: string | boolean) => {
     onUpdate(ads.map(a => a.id === id ? { ...a, [field]: val } : a));
   };
+
+  const toggleExport = (id: string) => {
+    onUpdate(ads.map(a => a.id === id ? { ...a, selectedForExport: !a.selectedForExport } : a));
+  };
+
+  const selectAllNew = () => {
+    onUpdate(ads.map(a => ({ ...a, selectedForExport: !isPublished(a) })));
+  };
+
+  const selectAll = () => {
+    onUpdate(ads.map(a => ({ ...a, selectedForExport: true })));
+  };
+
+  const deselectAll = () => {
+    onUpdate(ads.map(a => ({ ...a, selectedForExport: false })));
+  };
+
+  const selectedCount = ads.filter(a => a.selectedForExport).length;
+  const newCount = ads.filter(a => !isPublished(a)).length;
+  const publishedCount = ads.filter(a => isPublished(a)).length;
 
   return (
     <div className="border border-border rounded-xl overflow-hidden">
@@ -153,7 +176,9 @@ function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRo
         className="w-full flex items-center gap-2 px-4 py-2.5 bg-surface-1 hover:bg-surface-2 transition-colors text-left"
       >
         <span className="text-[12px] font-700 text-foreground">Pre-Publish Ad Review</span>
-        <span className="text-[10px] text-muted-foreground">{ads.length} ad{ads.length !== 1 ? 's' : ''} — final chance to edit names, URLs, and UTMs</span>
+        <span className="text-[10px] text-muted-foreground">
+          {ads.length} ad{ads.length !== 1 ? 's' : ''} — {selectedCount} selected for export
+        </span>
         <div className="ml-auto">
           {expanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
         </div>
@@ -165,73 +190,149 @@ function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRo
               No ads assembled yet — go to the Ads tab to generate ads from your creative × ad set matrix.
             </div>
           ) : (
-            <table className="w-full border-collapse text-xs" style={{ minWidth: 1400 }}>
-              <thead>
-                <tr className="bg-surface-2 border-b border-border">
-                  {[
-                    ['#', 32], ['Status', 80], ['Needs Update', 90], ['Ad Name', 200], ['Ad Set', 150],
-                    ['Campaign', 150], ['Type', 80], ['Length', 70], ['Launch Date', 100],
-                    ['Source Post ID', 140], ['Website URL', 180], ['UTM Parameters', 220],
-                    ['Ad ID', 130], ['Preview', 90],
-                  ].map(([h, w], i) => (
-                    <th key={h as string} className="px-2 py-2 text-left text-[10px] font-700 text-muted-foreground border-r border-border"
-                      style={{ minWidth: w as number }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {ads.map((ad, i) => (
-                  <tr key={ad.id} className={`border-b border-border hover:bg-surface-2/30 transition-colors ${i % 2 === 0 ? '' : 'bg-surface-1/20'}`}>
-                    <td className="px-2 py-0 text-center text-[10px] text-muted-foreground font-mono border-r border-border w-8">{i + 1}</td>
-                    <td className="px-1 py-1 border-r border-border">
-                      <span className={`text-[9px] font-700 px-1.5 py-0.5 rounded border ${
-                        ad.status === 'ACTIVE' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                      }`}>{ad.status === 'ACTIVE' ? 'On' : 'Off'}</span>
-                    </td>
-                    <td className="px-1 py-1 border-r border-border">
-                      <span className={`text-[9px] font-700 px-1.5 py-0.5 rounded border ${
-                        ad.needsUpdate ? 'bg-orange-500/15 text-orange-400 border-orange-500/30' : 'bg-surface-2 text-muted-foreground border-border'
-                      }`}>{ad.needsUpdate ? 'Update' : '—'}</span>
-                    </td>
-                    <td className="p-0 border-r border-border">
-                      <input value={ad.adName || ''} onChange={e => setAdField(ad.id, 'adName', e.target.value)}
-                        className="cell-input w-full text-[11px]" style={{ minWidth: 200 }} />
-                    </td>
-                    <td className="px-2 py-1.5 border-r border-border text-[11px] text-muted-foreground whitespace-nowrap">{ad.adSetName || '—'}</td>
-                    <td className="px-2 py-1.5 border-r border-border text-[11px] text-muted-foreground whitespace-nowrap">{ad.campaignName || '—'}</td>
-                    <td className="px-2 py-1.5 border-r border-border">
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-600 ${
-                        ad.creativeType === 'video' ? 'bg-violet-500/20 text-violet-400' :
-                        ad.creativeType === 'carousel' ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-surface-2 text-muted-foreground'
-                      }`}>{ad.creativeType?.toUpperCase() || '—'}</span>
-                    </td>
-                    <td className="px-2 py-1.5 border-r border-border text-[11px] font-mono text-muted-foreground">{ad.creativeLength || '—'}</td>
-                    <td className="px-2 py-1.5 border-r border-border text-[11px] font-mono text-muted-foreground">{ad.launchDate || '—'}</td>
-                    <td className="p-0 border-r border-border">
-                      <input value={ad.sourcePostId || ''} onChange={e => setAdField(ad.id, 'sourcePostId', e.target.value)}
-                        placeholder="Post ID" className="cell-input w-full text-[10px] font-mono" style={{ minWidth: 140 }} />
-                    </td>
-                    <td className="p-0 border-r border-border">
-                      <input value={ad.overrideWebsiteUrl || ''} onChange={e => setAdField(ad.id, 'overrideWebsiteUrl', e.target.value)}
-                        placeholder="https://..." className="cell-input w-full text-[11px] font-mono" style={{ minWidth: 180 }} />
-                    </td>
-                    <td className="p-0 border-r border-border">
-                      <input value={ad.overrideUtmParams || ''} onChange={e => setAdField(ad.id, 'overrideUtmParams', e.target.value)}
-                        placeholder="utm_source=meta&utm_medium=paid_social" className="cell-input w-full text-[10px] font-mono" style={{ minWidth: 220 }} />
-                    </td>
-                    <td className="px-2 py-1.5 border-r border-border text-[10px] font-mono text-muted-foreground">{ad.adId || <span className="italic opacity-40">auto</span>}</td>
-                    <td className="px-2 py-1.5">
-                      {ad.previewLink ? (
-                        <a href={ad.previewLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline">Preview</a>
-                      ) : <span className="text-[10px] text-muted-foreground italic opacity-40">—</span>}
-                    </td>
+            <>
+              {/* Selection controls + summary */}
+              <div className="flex items-center gap-3 px-4 py-2 bg-surface-0 border-b border-border">
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="text-emerald-400 font-700">{newCount} new</span>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-amber-400 font-700">{publishedCount} already published</span>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-primary font-700">{selectedCount} selected for export</span>
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                  <button onClick={selectAllNew} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded hover:bg-surface-2 border border-border">
+                    Select New Only
+                  </button>
+                  <button onClick={selectAll} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded hover:bg-surface-2 border border-border">
+                    Select All
+                  </button>
+                  <button onClick={deselectAll} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-0.5 rounded hover:bg-surface-2 border border-border">
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+
+              {/* Published ads warning */}
+              {publishedCount > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/5 border-b border-amber-500/20">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                  <span className="text-[10px] text-amber-300">
+                    {publishedCount} ad{publishedCount !== 1 ? 's' : ''} already published (have Ad ID). They are deselected by default to prevent re-publishing.
+                    Select them manually only if you intend to re-create them.
+                  </span>
+                </div>
+              )}
+
+              <table className="w-full border-collapse text-xs" style={{ minWidth: 1500 }}>
+                <thead>
+                  <tr className="bg-surface-2 border-b border-border">
+                    <th className="px-2 py-2 text-center text-[10px] font-700 text-muted-foreground border-r border-border" style={{ minWidth: 44 }}>Export</th>
+                    {[
+                      ['#', 32], ['Status', 80], ['Needs Update', 90], ['Ad Name', 200], ['Ad Set', 150],
+                      ['Campaign', 150], ['Type', 80], ['Length', 70], ['Launch Date', 100],
+                      ['Source Post ID', 140], ['Website URL', 180], ['UTM Parameters', 220],
+                      ['Ad ID', 130], ['Preview', 90],
+                    ].map(([h, w]) => (
+                      <th key={h as string} className="px-2 py-2 text-left text-[10px] font-700 text-muted-foreground border-r border-border"
+                        style={{ minWidth: w as number }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ads.map((ad, i) => {
+                    const published = isPublished(ad);
+                    const selected = ad.selectedForExport;
+                    return (
+                      <tr key={ad.id} className={`border-b border-border transition-colors ${
+                        published && !selected
+                          ? 'bg-surface-1/40 opacity-60'
+                          : selected
+                          ? i % 2 === 0 ? 'hover:bg-surface-2/30' : 'bg-surface-1/20 hover:bg-surface-2/30'
+                          : 'opacity-50 hover:opacity-70'
+                      }`}>
+                        {/* Export checkbox */}
+                        <td className="px-2 py-1 text-center border-r border-border">
+                          <button
+                            onClick={() => toggleExport(ad.id)}
+                            className={`p-0.5 rounded transition-colors ${
+                              selected
+                                ? 'text-primary hover:text-primary/80'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            title={selected ? 'Deselect from export' : 'Select for export'}
+                          >
+                            {selected
+                              ? <CheckSquare className="w-4 h-4" />
+                              : <Square className="w-4 h-4" />
+                            }
+                          </button>
+                        </td>
+                        <td className="px-2 py-0 text-center text-[10px] text-muted-foreground font-mono border-r border-border w-8">{i + 1}</td>
+                        <td className="px-1 py-1 border-r border-border">
+                          <div className="flex items-center gap-1">
+                            <span className={`text-[9px] font-700 px-1.5 py-0.5 rounded border ${
+                              ad.status === 'ACTIVE' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                            }`}>{ad.status === 'ACTIVE' ? 'On' : 'Off'}</span>
+                            {published && (
+                              <span className="text-[8px] font-700 px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30" title="Already published to Meta">
+                                LIVE
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-1 py-1 border-r border-border">
+                          <span className={`text-[9px] font-700 px-1.5 py-0.5 rounded border ${
+                            ad.needsUpdate ? 'bg-orange-500/15 text-orange-400 border-orange-500/30' : 'bg-surface-2 text-muted-foreground border-border'
+                          }`}>{ad.needsUpdate ? 'Update' : '—'}</span>
+                        </td>
+                        <td className="p-0 border-r border-border">
+                          <input value={ad.adName || ''} onChange={e => setAdField(ad.id, 'adName', e.target.value)}
+                            className="cell-input w-full text-[11px]" style={{ minWidth: 200 }} />
+                        </td>
+                        <td className="px-2 py-1.5 border-r border-border text-[11px] text-muted-foreground whitespace-nowrap">{ad.adSetName || '—'}</td>
+                        <td className="px-2 py-1.5 border-r border-border text-[11px] text-muted-foreground whitespace-nowrap">{ad.campaignName || '—'}</td>
+                        <td className="px-2 py-1.5 border-r border-border">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-600 ${
+                            ad.creativeType === 'video' ? 'bg-violet-500/20 text-violet-400' :
+                            ad.creativeType === 'carousel' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-surface-2 text-muted-foreground'
+                          }`}>{ad.creativeType?.toUpperCase() || '—'}</span>
+                        </td>
+                        <td className="px-2 py-1.5 border-r border-border text-[11px] font-mono text-muted-foreground">{ad.creativeLength || '—'}</td>
+                        <td className="px-2 py-1.5 border-r border-border text-[11px] font-mono text-muted-foreground">{ad.launchDate || '—'}</td>
+                        <td className="p-0 border-r border-border">
+                          <input value={ad.sourcePostId || ''} onChange={e => setAdField(ad.id, 'sourcePostId', e.target.value)}
+                            placeholder="Post ID" className="cell-input w-full text-[10px] font-mono" style={{ minWidth: 140 }} />
+                        </td>
+                        <td className="p-0 border-r border-border">
+                          <input value={ad.overrideWebsiteUrl || ''} onChange={e => setAdField(ad.id, 'overrideWebsiteUrl', e.target.value)}
+                            placeholder="https://..." className="cell-input w-full text-[11px] font-mono" style={{ minWidth: 180 }} />
+                        </td>
+                        <td className="p-0 border-r border-border">
+                          <input value={ad.overrideUtmParams || ''} onChange={e => setAdField(ad.id, 'overrideUtmParams', e.target.value)}
+                            placeholder="utm_source=meta&utm_medium=paid_social" className="cell-input w-full text-[10px] font-mono" style={{ minWidth: 220 }} />
+                        </td>
+                        <td className="px-2 py-1.5 border-r border-border">
+                          {published ? (
+                            <span className="text-[10px] font-mono text-blue-400">{ad.adId}</span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-muted-foreground italic opacity-40">auto</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {ad.previewLink ? (
+                            <a href={ad.previewLink} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline">Preview</a>
+                          ) : <span className="text-[10px] text-muted-foreground italic opacity-40">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       )}
@@ -242,7 +343,12 @@ function AdOverrideTable({ ads, onUpdate }: { ads: AdRow[]; onUpdate: (ads: AdRo
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ExportPanel({ state, onLaunch, launchProgress }: Props) {
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
-  const [localAds, setLocalAds] = useState<AdRow[]>(state.ads);
+  const [localAds, setLocalAds] = useState<AdRow[]>(() =>
+    state.ads.map(a => ({
+      ...a,
+      selectedForExport: a.selectedForExport ?? (!/^\d{8,}$/.test((a.adId || '').trim())),
+    }))
+  );
   const agentProfile = 'manus-1.6' as const;
   const [manusLaunch, setManusLaunch] = useState<ManusLaunchState>({
     phase: 'idle',
@@ -309,7 +415,18 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     const { settings, buildMode } = state;
     if (!settings.adAccountId.trim()) { toast.error('Ad Account ID is required.'); return; }
     if (!settings.facebookPageId?.trim()) { toast.error('Facebook Page ID is required in Settings.'); return; }
-    setManusLaunch({ phase: 'launching', statusMessages: ['Submitting build to Manus...'] });
+
+    // Filter ads to only include those selected for export
+    const exportAds = localAds.filter(a => a.selectedForExport !== false);
+    if (exportAds.length === 0 && (buildMode === 'ads-only' || buildMode === 'update')) {
+      toast.error('No ads selected for export. Select at least one ad to launch.');
+      return;
+    }
+
+    // Build a filtered state with only selected ads
+    const filteredState = { ...state, ads: exportAds };
+
+    setManusLaunch({ phase: 'launching', statusMessages: [`Submitting build to Manus... (${exportAds.length} ad${exportAds.length !== 1 ? 's' : ''} selected)`] });
     try {
       const result = await launchCampaignBuild.mutateAsync({
         adAccountId: settings.adAccountId,
@@ -319,7 +436,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
         instagramUserId: settings.instagramUserId,
         pixelId: settings.pixelId,
         buildMode,
-        stateJson: JSON.stringify(state),
+        stateJson: JSON.stringify(filteredState),
         agentProfile,
         projectId: 'Zb7DRexqB45QqDTQU2VV5Y', // pl-meta-builder project
       });
@@ -366,12 +483,19 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
     },
     {
       id: 'ads',
-      label: ads.length === 0 ? '0 ads assembled — ad sets only launch' : `${ads.length} ad${ads.length !== 1 ? 's' : ''} assembled`,
+      label: (() => {
+        const selectedForExport = localAds.filter(a => a.selectedForExport !== false).length;
+        if (ads.length === 0) return '0 ads assembled — ad sets only launch';
+        return `${selectedForExport} of ${ads.length} ad${ads.length !== 1 ? 's' : ''} selected for export`;
+      })(),
       pass: true,
       warn: ads.length === 0,
-      detail: ads.length === 0
-        ? 'No ads assembled. The build will launch campaigns and ad sets only. Go to the Ads tab to add ads if needed.'
-        : `${ads.length} ad${ads.length !== 1 ? 's' : ''} ready to traffic.`,
+      detail: (() => {
+        if (ads.length === 0) return 'No ads assembled. The build will launch campaigns and ad sets only. Go to the Ads tab to add ads if needed.';
+        const selectedForExport = localAds.filter(a => a.selectedForExport !== false).length;
+        const published = localAds.filter(a => /^\d{8,}$/.test((a.adId || '').trim())).length;
+        return `${selectedForExport} selected for export. ${published} already published (deselected by default).`;
+      })(),
     },
     {
       id: 'linkage',
@@ -412,7 +536,7 @@ export default function ExportPanel({ state, onLaunch, launchProgress }: Props) 
       pass: !!settings.accessToken.trim() || !!settings.tokenId,
       detail: settings.accessToken ? '••••••••' : settings.tokenId ? `Token ID #${settings.tokenId} selected` : 'Set in Settings (gear icon, bottom-left).',
     },
-  ], [filledCampaigns, filledAdSets, filledCreatives, ads, settings, buildMode]);
+  ], [filledCampaigns, filledAdSets, filledCreatives, ads, localAds, settings, buildMode]);
 
   const allPass = checks.every(c => c.pass);
   const passCount = checks.filter(c => c.pass).length;

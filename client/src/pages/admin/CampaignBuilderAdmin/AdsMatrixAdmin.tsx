@@ -492,10 +492,19 @@ function AdListView({ ads, adSets, creatives, campaigns, settings, onChange }: A
           </tr>
         </thead>
         <tbody>
-          {ads.map((ad, idx) => (
-            <tr key={ad.id} className={`border-b border-border group hover:bg-surface-2/40 transition-colors ${idx % 2 === 0 ? 'bg-surface-0' : 'bg-surface-1/30'}`}>
+          {ads.map((ad, idx) => {
+            const isPublished = /^\d{8,}$/.test((ad.adId || '').trim());
+            return (
+            <tr key={ad.id} className={`border-b border-border group hover:bg-surface-2/40 transition-colors ${isPublished ? 'opacity-60' : ''} ${idx % 2 === 0 ? 'bg-surface-0' : 'bg-surface-1/30'}`}>
               <td className="px-2 py-1.5 text-[10px] text-muted-foreground sticky left-0 bg-inherit border-r border-border z-10">
-                {idx + 1}
+                <div className="flex items-center gap-1">
+                  <span>{idx + 1}</span>
+                  {isPublished && (
+                    <span className="text-[7px] font-700 px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/30" title="Already published to Meta">
+                      LIVE
+                    </span>
+                  )}
+                </div>
               </td>
 
               {/* Status */}
@@ -731,7 +740,8 @@ function AdListView({ ads, adSets, creatives, campaigns, settings, onChange }: A
                 </div>
               </td>
             </tr>
-          ))}
+          );
+          })}
         </tbody>
       </table>
     </div>

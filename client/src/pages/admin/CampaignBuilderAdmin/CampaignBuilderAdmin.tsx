@@ -130,8 +130,14 @@ export default function CampaignBuilderAdmin() {
   };
 
   const handleLoad = (loaded: CampaignBuilderState) => {
+    // Normalize ads: ensure selectedForExport exists (legacy sessions may lack it)
+    const normalizedAds = (loaded.ads || []).map(ad => ({
+      ...ad,
+      selectedForExport: ad.selectedForExport ?? (!/^\d{8,}$/.test((ad.adId || '').trim())),
+    }));
     setState({
       ...loaded,
+      ads: normalizedAds,
       importedCampaigns: loaded.importedCampaigns ?? [],
       importedAdSets: loaded.importedAdSets ?? [],
     });

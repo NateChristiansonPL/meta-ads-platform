@@ -233,6 +233,8 @@ export interface AdRow {
   overrideCta?: string;
   leadGenFormId?: string;  // selected lead gen form ID for this ad
   needsUpdate: boolean;
+  /** Whether this ad is selected for export/launch. Defaults true for new ads, false for already-published. */
+  selectedForExport: boolean;
 }
 
 // ── Imported Meta structure ───────────────────────────────────────────────────
@@ -641,6 +643,7 @@ export function newAdRow(overrides: Partial<AdRow> = {}): AdRow {
     launchDate: currentLaunchDate(),
     previewLink: '',
     needsUpdate: false,
+    selectedForExport: true,
     ...overrides,
   };
 }

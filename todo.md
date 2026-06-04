@@ -900,3 +900,10 @@
 - [x] Creative Library: fix 9:16 asset positioning — always under Stories/Reels column, not nested under Feed
 - [x] Creative Library: multi-cell paste across text fields (Creative Concept, Length, Website, Headline, Primary Text, Description, Display Link, Link to UTM)
 - [x] Creative Library: DONE button at far right of each row to collapse it; click row to expand again
+
+## Campaign Builder — Selective Export for New Ads (Import Existing Flow)
+
+- [x] Detect already-published ads (those with an existing Ad ID) vs new ads (no Ad ID) in the Ads tab after importing existing
+- [x] Add selection UI (checkboxes) on the Ads tab/export step so users can select which ads to export to Meta
+- [x] Auto-select only new/unpublished ads by default; already-published ads should be unchecked and visually marked
+- [x] Prevent already-published ads from being re-published unless explicitly selected by the user
