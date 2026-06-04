@@ -934,3 +934,9 @@
 - [x] Download XLSX link appears when QA completes
 - [x] Add "QA Checklist" tab to Campaign Builder top nav (right of "Update Ads")
 - [x] Remove QA section from ExportPanel (moved entirely to dedicated QA Checklist tab)
+
+## Ad QA Checklist - Production Runtime Fix
+
+- [x] Inline Python script as string constant (adQaChecklistScript.ts) instead of fs.readFileSync at runtime
+- [x] Remove fs, path, fileURLToPath imports from manusTask.ts (no longer needed)
+- [x] TypeScript compiles clean, dev server restarts successfully

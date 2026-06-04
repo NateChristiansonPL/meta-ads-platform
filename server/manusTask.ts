@@ -12,12 +12,7 @@
  */
 
 import axios from "axios";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { AD_QA_CHECKLIST_SCRIPT } from "./skills/adQaChecklistScript";
 
 const MANUS_API_BASE = "https://api.manus.ai";
 
@@ -963,7 +958,7 @@ After running, please:
 ### The Python Script:
 
 \`\`\`python
-${fs.readFileSync(path.resolve(__dirname, "skills/ad-qa-checklist.py"), "utf-8")}
+${AD_QA_CHECKLIST_SCRIPT}
 \`\`\`
 `;
 }
