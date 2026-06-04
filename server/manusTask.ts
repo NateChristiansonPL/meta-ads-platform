@@ -779,7 +779,7 @@ export function buildAdminCampaignCreationPrompt(params: {
   facebookPageId: string;
   instagramUserId?: string;
   pixelId?: string;
-  buildMode: "full" | "ads-only" | "update";
+  buildMode: "full" | "ads-only" | "update" | "qa";
   stateJson: string;
 }): string {
   const { accessToken, adAccountId, facebookPageId, instagramUserId, pixelId, buildMode, stateJson } = params;
@@ -838,7 +838,7 @@ export function buildCampaignCreationPrompt(params: {
   facebookPageId: string;
   instagramUserId?: string;
   pixelId?: string;
-  buildMode: "full" | "ads-only" | "update";
+  buildMode: "full" | "ads-only" | "update" | "qa";
   stateJson: string; // full CampaignBuilderState as JSON
 }): string {
   const { accessToken, adAccountId, facebookPageId, instagramUserId, pixelId, buildMode, stateJson } = params;

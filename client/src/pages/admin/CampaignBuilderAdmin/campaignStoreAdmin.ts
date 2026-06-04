@@ -1,7 +1,7 @@
 // campaignStore.ts — Precision Tool Dark design system
 // All data is row-based for fast paste/copy operations
 
-export type BuildMode = 'full' | 'ads-only' | 'update';
+export type BuildMode = 'full' | 'ads-only' | 'update' | 'qa';
 export type Objective =
   | 'OUTCOME_AWARENESS' | 'OUTCOME_TRAFFIC' | 'OUTCOME_ENGAGEMENT'
   | 'OUTCOME_LEADS' | 'OUTCOME_APP_PROMOTION' | 'OUTCOME_SALES';

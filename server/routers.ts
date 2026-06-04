@@ -821,7 +821,7 @@ export const appRouter = router({
         facebookPageId: z.string().min(1),
         instagramUserId: z.string().optional(),
         pixelId: z.string().optional(),
-        buildMode: z.enum(["full", "ads-only", "update"]),
+        buildMode: z.enum(["full", "ads-only", "update", "qa"]),
         stateJson: z.string().min(1), // full CampaignBuilderState as JSON
         agentProfile: z.enum(["manus-1.6", "manus-1.6-lite"]).default("manus-1.6"),
         projectId: z.string().optional(), // override the Manus project ID (e.g. admin builder uses pl-meta-builder project)

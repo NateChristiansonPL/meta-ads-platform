@@ -42,7 +42,7 @@ import { useCreativeLibrarySync } from "./useCreativeLibrarySync";
 import { useUndoHistory } from "./useUndoHistory";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export" | "qa-checklist";
+type TabId = "campaigns" | "ad-sets" | "creative-library" | "ads" | "export";
 type ViewMode = "spreadsheet" | "pillar";
 
 const DEFAULT_TWEAKS: TweakSettings = {
@@ -278,7 +278,7 @@ export default function CampaignBuilderAdmin() {
     { id: "creative-library", label: "Creative Library",count: state.creatives.filter(c => c.concept).length + state.carouselCreatives.length },
     { id: "ads",              label: "Ads",             count: state.ads.filter(a => a.adName).length },
     { id: "export",           label: "Export & Launch" },
-    { id: "qa-checklist",      label: "QA Checklist" },
+
   ];
 
   // ── Build mode selector ──────────────────────────────────────────────────────
@@ -286,6 +286,7 @@ export default function CampaignBuilderAdmin() {
     { id: "full",     label: "Full Build",  sub: "Campaigns + ad sets + ads" },
     { id: "ads-only", label: "Ads Only",    sub: "Use existing ad set IDs" },
     { id: "update",   label: "Update Ads",  sub: "Swap creative on live ads" },
+    { id: "qa",       label: "QA Checklist", sub: "Verify ads after launch" },
   ];
 
   // ── Header actions ───────────────────────────────────────────────────────────
@@ -444,7 +445,8 @@ export default function CampaignBuilderAdmin() {
               Undo
             </button>
 
-            {/* Tabs */}
+            {/* Tabs (hidden in QA mode) */}
+            {state.buildMode !== 'qa' && (
             <div className="flex items-center gap-0.5">
               {TABS.map(tab => (
                 <button
@@ -470,6 +472,7 @@ export default function CampaignBuilderAdmin() {
                 </button>
               ))}
             </div>
+            )}
           </div>
         )}
 
@@ -489,8 +492,15 @@ export default function CampaignBuilderAdmin() {
             />
           )}
 
+          {/* QA Checklist mode */}
+          {viewMode === "spreadsheet" && state.buildMode === 'qa' && (
+            <div className="h-full overflow-auto">
+              <QaChecklistTab settings={state.settings} />
+            </div>
+          )}
+
           {/* Spreadsheet tabs */}
-          {viewMode === "spreadsheet" && (
+          {viewMode === "spreadsheet" && state.buildMode !== 'qa' && (
             <>
               {activeTab === "campaigns" && (
                 <div className="h-full overflow-auto">
@@ -564,11 +574,7 @@ export default function CampaignBuilderAdmin() {
                 </div>
               )}
 
-              {activeTab === "qa-checklist" && (
-                <div className="h-full overflow-auto">
-                  <QaChecklistTab settings={state.settings} />
-                </div>
-              )}
+
             </>
           )}
         </div>
