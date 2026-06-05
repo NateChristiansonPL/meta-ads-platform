@@ -96,16 +96,45 @@ function compareDof(actual: any, expected: any): string[] {
 
   const actualFeatures = actual.creative_features_spec || {};
   const expectedFeatures = expected.creative_features_spec || {};
+
+  // Check all fields in the expected spec
   for (const [name, expVal] of Object.entries<any>(expectedFeatures)) {
     const actVal = actualFeatures[name];
     if (!actVal) continue;
     if (actVal.enroll_status !== (expVal.enroll_status || "OPT_OUT")) {
       violations.push(`${name}: enroll_status=${actVal.enroll_status} (expected ${expVal.enroll_status || "OPT_OUT"})`);
     }
+    // Also check nested customizations (e.g., text_optimizations.customizations.text_extraction)
+    if (actVal.customizations && typeof actVal.customizations === 'object') {
+      for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
+        if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
+          violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (expected OPT_OUT)`);
+        }
+      }
+    }
   }
+
+  // Check any fields present in actual but NOT in expected — they should all be OPT_OUT
   for (const [name, actVal] of Object.entries<any>(actualFeatures)) {
     if (!(name in expectedFeatures) && actVal.enroll_status !== "OPT_OUT") {
       violations.push(`${name}: enroll_status=${actVal.enroll_status} (unexpected, not OPT_OUT)`);
+    }
+    // Also check nested customizations for unexpected fields
+    if (!(name in expectedFeatures) && actVal.customizations && typeof actVal.customizations === 'object') {
+      for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
+        if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
+          violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (unexpected, not OPT_OUT)`);
+        }
+      }
+    }
+  }
+
+  // Check for standard_enhancements (a top-level key Meta sometimes uses as a master toggle)
+  if (actualFeatures.standard_enhancements && actualFeatures.standard_enhancements.enroll_status !== "OPT_OUT") {
+    // Only add if not already caught above
+    const alreadyCaught = violations.some(v => v.startsWith('standard_enhancements:'));
+    if (!alreadyCaught) {
+      violations.push(`standard_enhancements: enroll_status=${actualFeatures.standard_enhancements.enroll_status} (expected OPT_OUT)`);
     }
   }
 
@@ -674,7 +703,46 @@ export function getExpectedSpec(specKey: string): any {
 }
 
 /**
+ * Build the minimal DOF spec that Meta accepts for writing.
+ * Uses the proven pattern from metaAdmin.ts buildDegreesOfFreedomSpec.
+ * This is a smaller subset than the full EXPECTED_SPECS (which is for READ comparison).
+ */
+function buildWritableDofSpec(specKey: string): Record<string, unknown> {
+  const off = { enroll_status: "OPT_OUT" };
+  // Core fields that Meta accepts on write (proven in the campaign builder)
+  const base: Record<string, unknown> = {
+    standard_enhancements:          off,
+    adapt_to_placement:             off,
+    add_text_overlay:               off,
+    audio:                          off,
+    creative_stickers:              off,
+    description_automation:         off,
+    enhance_cta:                    off,
+    generate_cta:                   off,
+    image_background_gen:           off,
+    image_brightness_and_contrast:  off,
+    image_templates:                off,
+    image_touchups:                 off,
+    image_uncrop:                   off,
+    inline_comment:                 off,
+    media_type_automation:          off,
+    pac_relaxation:                 off,
+    product_extensions:             off,
+    reveal_details_over_time:       off,
+    text_optimizations:             off,
+    text_translation:               off,
+    video_auto_crop:                off,
+  };
+  if (specKey.startsWith('VIDEO')) {
+    return { creative_features_spec: { ...base, video_filtering: off } };
+  }
+  return { creative_features_spec: base };
+}
+
+/**
  * Fix an ad's DOF spec by POSTing the correct spec to the creative.
+ * Uses the same pattern as the campaign builder update path:
+ * POST /{creativeId} with degrees_of_freedom_spec as a nested object (not stringified).
  */
 export async function fixAdDofSpec(params: {
   creativeId: string;
@@ -682,13 +750,13 @@ export async function fixAdDofSpec(params: {
   accessToken: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { creativeId, specKey, accessToken } = params;
-  const correctSpec = getExpectedSpec(specKey);
+  const writableSpec = buildWritableDofSpec(specKey);
 
   try {
     await axios.post(
       `${BASE_URL}/${creativeId}`,
       {
-        degrees_of_freedom_spec: JSON.stringify(correctSpec),
+        degrees_of_freedom_spec: writableSpec,
         access_token: accessToken,
       },
       { timeout: 30000 },

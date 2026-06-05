@@ -957,3 +957,10 @@
 - [x] Update QaChecklistTabAdmin.tsx: show violations panel after QA completes with ad name, setting, link, and Fix button
 - [x] Fix button calls fixAdDofViolation and marks the row as fixed in the UI
 - [x] TypeScript compiles clean, tests pass (70 tests)
+
+## QA Checklist Bug Fixes
+
+- [x] Fix "Invalid parameter" error on fixAdDofViolation — payload format rejected by Meta API
+- [x] Expand DOF detection to cover ALL Advantage+ creative fields: music, inline_comment, text_optimizations, text_extraction, standard_enhancements, enhance_cta
+- [x] Ensure the fix endpoint sends the correct payload structure that Meta accepts
+- [x] All 75 tests pass (5 new tests for nested customizations, standard_enhancements, audio, inline_comment)

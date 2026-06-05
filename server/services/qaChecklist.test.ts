@@ -67,16 +67,38 @@ describe("DOF comparison logic", () => {
 
     const actualFeatures = actual.creative_features_spec || {};
     const expectedFeatures = expected.creative_features_spec || {};
+
     for (const [name, expVal] of Object.entries<any>(expectedFeatures)) {
       const actVal = actualFeatures[name];
       if (!actVal) continue;
       if (actVal.enroll_status !== (expVal.enroll_status || "OPT_OUT")) {
         violations.push(`${name}: enroll_status=${actVal.enroll_status} (expected ${expVal.enroll_status || "OPT_OUT"})`);
       }
+      if (actVal.customizations && typeof actVal.customizations === 'object') {
+        for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
+          if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
+            violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (expected OPT_OUT)`);
+          }
+        }
+      }
     }
     for (const [name, actVal] of Object.entries<any>(actualFeatures)) {
       if (!(name in expectedFeatures) && actVal.enroll_status !== "OPT_OUT") {
         violations.push(`${name}: enroll_status=${actVal.enroll_status} (unexpected, not OPT_OUT)`);
+      }
+      if (!(name in expectedFeatures) && actVal.customizations && typeof actVal.customizations === 'object') {
+        for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
+          if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
+            violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (unexpected, not OPT_OUT)`);
+          }
+        }
+      }
+    }
+
+    if (actualFeatures.standard_enhancements && actualFeatures.standard_enhancements.enroll_status !== "OPT_OUT") {
+      const alreadyCaught = violations.some(v => v.startsWith('standard_enhancements:'));
+      if (!alreadyCaught) {
+        violations.push(`standard_enhancements: enroll_status=${actualFeatures.standard_enhancements.enroll_status} (expected OPT_OUT)`);
       }
     }
 
@@ -155,6 +177,85 @@ describe("DOF comparison logic", () => {
     const spec = {
       creative_features_spec: {
         new_feature: { enroll_status: "OPT_OUT" },
+      },
+    };
+    const expected = {
+      creative_features_spec: {},
+    };
+    expect(compareDof(spec, expected)).toEqual([]);
+  });
+
+  it("detects nested customization violations (e.g., text_optimizations.text_extraction)", () => {
+    const spec = {
+      creative_features_spec: {
+        text_optimizations: {
+          enroll_status: "OPT_IN",
+          customizations: {
+            text_extraction: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
+          },
+        },
+      },
+    };
+    const expected = {
+      creative_features_spec: {
+        text_optimizations: { enroll_status: "OPT_OUT" },
+      },
+    };
+    const violations = compareDof(spec, expected);
+    expect(violations.length).toBeGreaterThanOrEqual(2);
+    expect(violations.some(v => v.includes("text_optimizations:"))).toBe(true);
+    expect(violations.some(v => v.includes("text_optimizations.text_extraction:"))).toBe(true);
+  });
+
+  it("detects standard_enhancements OPT_IN as a violation", () => {
+    const spec = {
+      creative_features_spec: {
+        standard_enhancements: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
+      },
+    };
+    const expected = {
+      creative_features_spec: {},
+    };
+    const violations = compareDof(spec, expected);
+    expect(violations.some(v => v.includes("standard_enhancements"))).toBe(true);
+  });
+
+  it("detects inline_comment (relevant comments) OPT_IN", () => {
+    const spec = {
+      creative_features_spec: {
+        inline_comment: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
+      },
+    };
+    const expected = {
+      creative_features_spec: {
+        inline_comment: { enroll_status: "OPT_OUT" },
+      },
+    };
+    const violations = compareDof(spec, expected);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("inline_comment");
+  });
+
+  it("detects audio (music) OPT_IN", () => {
+    const spec = {
+      creative_features_spec: {
+        audio: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
+      },
+    };
+    const expected = {
+      creative_features_spec: {
+        audio: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
+      },
+    };
+    const violations = compareDof(spec, expected);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("audio");
+  });
+
+  it("does not flag standard_enhancements when it is OPT_OUT", () => {
+    const spec = {
+      creative_features_spec: {
+        standard_enhancements: { enroll_status: "OPT_OUT" },
       },
     };
     const expected = {
