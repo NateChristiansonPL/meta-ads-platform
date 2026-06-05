@@ -779,11 +779,11 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fix an ad's DOF spec by updating the creative in-place.
- * 1. GET the existing creative's object_story_spec / asset_feed_spec
- * 2. POST to /{creativeId} with the corrected DOF spec + existing content
+ * Fix an ad's DOF spec by POSTing the full correct degrees_of_freedom_spec
+ * to the AD ID via the creative param.
  *
- * Assumes each ad has its own unique creative ID (ensured by unique url_tags per ad).
+ * Uses the FULL expected spec (matching ads_qa.py EXPECTED_SPECS) with all
+ * ~55 creative_features_spec fields + creative_sourcing_spec + action_metadata wrappers.
  */
 export async function fixAdDofSpec(params: {
   adId: string;
@@ -793,47 +793,30 @@ export async function fixAdDofSpec(params: {
 }): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
 
-  const dofSpec = buildMinimalDofSpec(specKey);
+  const dofSpec = buildFullDofSpec(specKey);
 
   try {
-    // Step 1: GET the existing creative
-    const getUrl = `${BASE_URL}/${creativeId}`;
-    console.log("[fixAdDofSpec] Step 1: GET existing creative:", getUrl);
-    const getResp = await axios.get(getUrl, {
-      params: {
-        fields: "id,object_story_spec,asset_feed_spec",
-        access_token: accessToken,
-      },
-      timeout: 30000,
-    });
-    const existingCreative = getResp.data;
-    console.log("[fixAdDofSpec] Existing creative keys:", Object.keys(existingCreative));
-
-    // Step 2: POST to /{creativeId} with corrected DOF + existing content
-    const creativePayload: Record<string, unknown> = {
+    // POST to /{adId} with creative param containing the corrected DOF spec
+    const postUrl = `${BASE_URL}/${adId}`;
+    const creativeParam = {
+      creative_id: creativeId,
       degrees_of_freedom_spec: dofSpec,
-      contextual_multi_ads: { enroll_status: "OPT_OUT" },
     };
-    if (existingCreative.asset_feed_spec) {
-      creativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
-      if (existingCreative.object_story_spec) {
-        creativePayload.object_story_spec = existingCreative.object_story_spec;
-      }
-    } else if (existingCreative.object_story_spec) {
-      creativePayload.object_story_spec = existingCreative.object_story_spec;
-    }
+    const body = {
+      creative: JSON.stringify(creativeParam),
+      access_token: accessToken,
+    };
 
-    const postUrl = `${BASE_URL}/${creativeId}`;
-    console.log("[fixAdDofSpec] Step 2: POST to creative:", postUrl);
-    console.log("[fixAdDofSpec] Payload keys:", Object.keys(creativePayload));
-    const postResp = await axios.post(postUrl, { ...creativePayload, access_token: accessToken }, { timeout: 30000 });
-    console.log("[fixAdDofSpec] Creative update response:", JSON.stringify(postResp.data));
+    console.log("[fixAdDofSpec] POST to AD:", postUrl);
+    console.log("[fixAdDofSpec] creative_id:", creativeId, "specKey:", specKey);
+    const postResp = await axios.post(postUrl, body, { timeout: 60000 });
+    console.log("[fixAdDofSpec] Response:", JSON.stringify(postResp.data));
 
     return {
       success: true,
       debug: {
         url: postUrl,
-        body: { ...creativePayload, access_token: "[REDACTED]" },
+        body: { creative: creativeParam, access_token: "[REDACTED]" },
         response: postResp.data,
       },
     };
@@ -847,7 +830,7 @@ export async function fixAdDofSpec(params: {
       success: false,
       error: metaMsg,
       debug: {
-        url: `${BASE_URL}/${creativeId}`,
+        url: `${BASE_URL}/${adId}`,
         body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
@@ -856,36 +839,91 @@ export async function fixAdDofSpec(params: {
 }
 
 /**
- * Minimal DOF spec matching the WORKING format used in metaAdmin.ts buildDegreesOfFreedomSpec().
- * This uses simple { enroll_status: "OPT_OUT" } without action_metadata wrappers.
- * This is what actually works when POSTing to /{creativeId}.
+ * Full DOF spec matching ads_qa.py EXPECTED_SPECS.
+ * Includes all ~55 creative_features_spec fields with action_metadata wrappers
+ * AND creative_sourcing_spec. This is what Meta expects when updating via the ad ID.
  */
-function buildMinimalDofSpec(_specKey: string): Record<string, unknown> {
+function buildFullDofSpec(specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
-  // Same fields as metaAdmin.ts buildDegreesOfFreedomSpec for static/image
+  const offWithMeta = { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" };
+  const offManual = { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_OUT" };
+
+  // creative_features_spec — all fields from ads_qa.py EXPECTED_SPECS
+  const creative_features_spec: Record<string, unknown> = {
+    product_extensions: off,
+    adapt_to_placement: { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
+    add_text_overlay: off,
+    ads_with_benefits: offWithMeta,
+    advantage_plus_creative: offWithMeta,
+    app_highlights: offWithMeta,
+    audio: offWithMeta,
+    biz_ai: offWithMeta,
+    carousel_to_video: offWithMeta,
+    catalog_feed_tag: offWithMeta,
+    creative_stickers: off,
+    cv_transformation: offWithMeta,
+    description_automation: off,
+    dynamic_partner_content: offWithMeta,
+    enhance_cta: off,
+    feed_caption_optimization: offWithMeta,
+    generate_cta: off,
+    hide_price: offWithMeta,
+    ig_glados_feed: offWithMeta,
+    ig_video_native_subtitle: offWithMeta,
+    image_animation: offWithMeta,
+    image_auto_crop: offWithMeta,
+    image_background_gen: off,
+    image_brightness_and_contrast: off,
+    image_enhancement: offWithMeta,
+    image_templates: off,
+    image_text_translation: offWithMeta,
+    image_touchups: off,
+    image_uncrop: off,
+    inline_comment: off,
+    local_store_extension: offWithMeta,
+    media_liquidity_animated_image: offWithMeta,
+    media_order: offWithMeta,
+    media_type_automation: off,
+    multi_photo_to_video: offWithMeta,
+    pac_recomposition: offWithMeta,
+    pac_relaxation: off,
+    product_browsing: offWithMeta,
+    product_metadata_automation: offWithMeta,
+    profile_card: offWithMeta,
+    replace_media_text: offWithMeta,
+    reveal_details_over_time: off,
+    show_destination_blurbs: offWithMeta,
+    show_summary: offWithMeta,
+    site_extensions: offWithMeta,
+    standard_enhancements_catalog: offWithMeta,
+    text_optimizations: off,
+    // text_translation differs by spec: NO_PAC has action_metadata MANUAL, PAC has plain off
+    text_translation: specKey.includes("PAC") && !specKey.includes("NO_PAC") ? off : offManual,
+    translate_voiceover: offWithMeta,
+    video_auto_crop: off,
+    video_filtering: offWithMeta,
+    video_highlight: offWithMeta,
+    video_highlights: offWithMeta,
+    video_to_image: offWithMeta,
+    video_uncrop: offWithMeta,
+    wa_mm_image_filtering: offWithMeta,
+    enable_ncs_testimonials: offWithMeta,
+    dha_optimization: offWithMeta,
+  };
+
+  // creative_sourcing_spec — from ads_qa.py
+  const creative_sourcing_spec: Record<string, unknown> = {
+    app_info_spec: off,
+    brand: off,
+    dynamic_site_links_spec: off,
+    featured_offering_spec: { enroll_status: "OPT_OUT", media: [] },
+    website_media_spec: off,
+    website_summary_spec: off,
+    destination_screenshot_spec: off,
+  };
+
   return {
-    creative_features_spec: {
-      adapt_to_placement:            off,
-      add_text_overlay:              off,
-      creative_stickers:             off,
-      description_automation:        off,
-      enhance_cta:                   off,
-      generate_cta:                  off,
-      image_background_gen:          off,
-      image_brightness_and_contrast: off,
-      image_templates:               off,
-      image_touchups:                off,
-      image_uncrop:                  off,
-      inline_comment:                off,
-      media_type_automation:         off,
-      pac_relaxation:                off,
-      product_extensions:            off,
-      reveal_details_over_time:      off,
-      text_optimizations:            off,
-      text_translation:              off,
-      video_auto_crop:               off,
-      // Additional fields for video format
-      ...((_specKey.startsWith("VIDEO")) ? { video_filtering: off } : {}),
-    },
+    creative_features_spec,
+    creative_sourcing_spec,
   };
 }
