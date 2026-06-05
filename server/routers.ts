@@ -54,6 +54,7 @@ import {
 import axios from "axios";
 import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, buildAdQaChecklistPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
+import { runQaChecklist } from "./services/qaChecklist";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -1054,6 +1055,45 @@ export const appRouter = router({
         })();
 
         return { runId };
+      }),
+
+    /**
+     * runQaChecklistDirect: Runs the QA checklist natively on the server
+     * without Manus. Returns the XLSX download URL immediately.
+     */
+    runQaChecklistDirect: protectedProcedure
+      .input(z.object({
+        adAccountId: z.string().min(1),
+        tokenId: z.number().int().positive().optional(),
+        facebookPageId: z.string().optional(),
+        adIds: z.array(z.string().min(1)).min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Fetch the Meta access token
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No active Meta access token found.",
+          });
+        }
+
+        const result = await runQaChecklist({
+          adIds: input.adIds,
+          accessToken: metaAccessToken,
+          adAccountId: input.adAccountId,
+          facebookPageId: input.facebookPageId,
+        });
+
+        return result;
       }),
   }),
 

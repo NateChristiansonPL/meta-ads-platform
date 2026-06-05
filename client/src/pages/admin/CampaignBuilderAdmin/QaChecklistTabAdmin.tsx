@@ -66,10 +66,12 @@ export default function QaChecklistTab({ settings }: Props) {
   const [adsOpen, setAdsOpen] = useState(false);
 
   const [qaState, setQaState] = useState<{
-    phase: 'idle' | 'launching' | 'running' | 'done' | 'error';
-    runId?: number;
+    phase: 'idle' | 'launching' | 'done' | 'error';
     errorMessage?: string;
-    attachments?: Array<{ filename: string; url: string }>;
+    downloadUrl?: string;
+    totalAds?: number;
+    totalAdSets?: number;
+    violationCount?: number;
   }>({ phase: 'idle' });
 
   // ── Data fetching ──
@@ -186,36 +188,8 @@ export default function QaChecklistTab({ settings }: Props) {
     });
   }, [allAds]);
 
-  // ── QA Launch ──
-  const launchQaChecklist = trpc.runs.launchQaChecklist.useMutation();
-
-  const getQaRunStatus = trpc.runs.getRunStatus.useQuery(
-    { runId: qaState.runId! },
-    {
-      enabled: qaState.runId !== undefined && (qaState.phase === 'running' || qaState.phase === 'launching'),
-      refetchInterval: 4000,
-    }
-  );
-
-  useEffect(() => {
-    const run = getQaRunStatus.data;
-    if (!run) return;
-    if (run.status === 'success') {
-      setQaState(prev => ({
-        ...prev,
-        phase: 'done',
-        attachments: (run as any).attachments ?? [],
-      }));
-    } else if (run.status === 'error') {
-      setQaState(prev => ({
-        ...prev,
-        phase: 'error',
-        errorMessage: (run as any).errorMessage ?? 'Unknown error',
-      }));
-    } else {
-      setQaState(prev => ({ ...prev, phase: 'running' }));
-    }
-  }, [getQaRunStatus.data]);
+  // ── QA Launch (direct backend, no Manus) ──
+  const runQaDirect = trpc.runs.runQaChecklistDirect.useMutation();
 
   const handleRunQa = async () => {
     if (!hasCredentials) {
@@ -230,20 +204,24 @@ export default function QaChecklistTab({ settings }: Props) {
     const adIds = Array.from(selectedAdIds);
     setQaState({ phase: 'launching' });
     try {
-      const result = await launchQaChecklist.mutateAsync({
+      const result = await runQaDirect.mutateAsync({
         adAccountId: settings.adAccountId,
-        adAccountName: settings.adAccountName,
         tokenId: settings.tokenId ?? undefined,
         facebookPageId: settings.facebookPageId,
         adIds,
-        agentProfile: 'manus-1.6',
       });
-      setQaState({ phase: 'running', runId: result.runId });
-      toast.success(`QA Checklist started for ${adIds.length} ad${adIds.length !== 1 ? 's' : ''}`);
+      setQaState({
+        phase: 'done',
+        downloadUrl: result.downloadUrl,
+        totalAds: result.totalAds,
+        totalAdSets: result.totalAdSets,
+        violationCount: result.violationCount,
+      });
+      toast.success(`QA complete — ${result.totalAds} ads, ${result.totalAdSets} ad sets checked`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setQaState({ phase: 'error', errorMessage: msg });
-      toast.error(`QA launch failed: ${msg}`);
+      toast.error(`QA failed: ${msg}`);
     }
   };
 
@@ -308,36 +286,38 @@ export default function QaChecklistTab({ settings }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {qaState.phase === 'done' && qaState.attachments && qaState.attachments.length > 0 && (
+          {qaState.phase === 'done' && qaState.downloadUrl && (
             <a
-              href={qaState.attachments[0].url}
-              download={qaState.attachments[0].filename || 'ad_qa_checklist.xlsx'}
+              href={qaState.downloadUrl}
+              download="ad_qa_checklist.xlsx"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-700 border bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 cursor-pointer transition-all"
             >
               <Download className="w-3.5 h-3.5" />
               Download Report
+              {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
+                <span className="ml-1 text-[10px] text-amber-400">({qaState.violationCount} violations)</span>
+              )}
             </a>
           )}
           <button
             onClick={handleRunQa}
-            disabled={qaState.phase === 'launching' || qaState.phase === 'running' || selectedAdIds.size === 0}
+            disabled={qaState.phase === 'launching' || selectedAdIds.size === 0}
             title={selectedAdIds.size === 0 ? 'Select ads to QA' : `Run QA on ${selectedAdIds.size} ad${selectedAdIds.size !== 1 ? 's' : ''}`}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-700 border transition-all ${
-              qaState.phase === 'launching' || qaState.phase === 'running'
+              qaState.phase === 'launching'
                 ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 cursor-wait'
                 : selectedAdIds.size === 0
                 ? 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
                 : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/25 cursor-pointer'
             }`}
           >
-            {qaState.phase === 'launching' || qaState.phase === 'running'
+            {qaState.phase === 'launching'
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <ShieldCheck className="w-3.5 h-3.5" />
             }
-            {qaState.phase === 'launching' ? 'Submitting…'
-              : qaState.phase === 'running' ? 'QA Running…'
+            {qaState.phase === 'launching' ? 'Running QA…'
               : `Run QA (${selectedAdIds.size})`
             }
           </button>
@@ -349,10 +329,13 @@ export default function QaChecklistTab({ settings }: Props) {
           {qaState.errorMessage || 'QA failed'}
         </div>
       )}
-      {qaState.phase === 'running' && (
-        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2 text-[11px] text-cyan-400 flex items-center gap-2">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          QA analysis in progress… This may take a few minutes.
+      {qaState.phase === 'done' && qaState.totalAds !== undefined && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-[11px] text-emerald-400 flex items-center gap-2">
+          <ShieldCheck className="w-3 h-3" />
+          QA complete — {qaState.totalAds} ads, {qaState.totalAdSets} ad sets checked.
+          {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
+            <span className="text-amber-400 ml-1">{qaState.violationCount} violation{qaState.violationCount !== 1 ? 's' : ''} found.</span>
+          )}
         </div>
       )}
 
