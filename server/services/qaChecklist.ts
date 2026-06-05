@@ -711,7 +711,6 @@ function buildWritableDofSpec(specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
   // Core fields that Meta accepts on write (proven in the campaign builder)
   const base: Record<string, unknown> = {
-    standard_enhancements:          off,
     adapt_to_placement:             off,
     add_text_overlay:               off,
     audio:                          off,
