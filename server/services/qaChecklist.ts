@@ -772,15 +772,9 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
       enable_ncs_testimonials:         defaultOff,
       dha_optimization:                defaultOff,
     },
-    creative_sourcing_spec: {
-      app_info_spec:              off,
-      brand:                      off,
-      dynamic_site_links_spec:    off,
-      featured_offering_spec:     { enroll_status: "OPT_OUT", media: [] },
-      website_media_spec:         off,
-      website_summary_spec:       off,
-      destination_screenshot_spec: off,
-    },
+    // NOTE: creative_sourcing_spec is intentionally omitted here.
+    // Meta's API rejects it with "Unexpected key creative_sourcing_spec on param degrees_of_freedom_spec"
+    // when updating via POST /{adId} with the creative param.
   };
 }
 
