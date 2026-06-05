@@ -949,3 +949,11 @@
 - [ ] Remove old Manus-based launchQaChecklist procedure and related code (kept for backward compat)
 - [x] TypeScript compiles clean, dev server runs
 - [x] Vitest tests pass (21 tests covering format detection, DOF comparison, field extractors, UTM, geo)
+
+## QA Violations Inline Details + One-Click Fix
+
+- [x] Update qaChecklist.ts to return structured violations array (adId, adName, setting, currentValue, expectedValue, adsManagerUrl)
+- [x] Add tRPC procedure fixAdDofViolation that PATCHes the ad's degrees_of_freedom_spec via Meta Graph API
+- [x] Update QaChecklistTabAdmin.tsx: show violations panel after QA completes with ad name, setting, link, and Fix button
+- [x] Fix button calls fixAdDofViolation and marks the row as fixed in the UI
+- [x] TypeScript compiles clean, tests pass (70 tests)

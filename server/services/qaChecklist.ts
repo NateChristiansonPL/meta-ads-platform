@@ -200,7 +200,17 @@ function checkPartnershipAd(c: any): string {
   return (obj.sponsor_id || obj.branded_content_sponsor_page_id) ? "On" : "Off";
 }
 
-async function runAdsQa(adIds: string[], accessToken: string, expectedPageId: string): Promise<any[]> {
+interface AdsQaResult {
+  rows: any[];
+  violations: QaViolation[];
+}
+
+async function runAdsQaWithViolations(
+  adIds: string[],
+  accessToken: string,
+  expectedPageId: string,
+  adAccountId: string,
+): Promise<AdsQaResult> {
   // Batch 1: fetch all ads
   const adFields = "name,status,effective_status,creative,tracking_specs,preview_shareable_link";
   const adBatch = adIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${adFields}` }));
@@ -222,8 +232,11 @@ async function runAdsQa(adIds: string[], accessToken: string, expectedPageId: st
   const creativesData: Record<string, any> = {};
   creativeIds.forEach((id, i) => { creativesData[id] = creativeResults[i]; });
 
-  // Build rows
+  // Build rows + structured violations
   const rows: any[] = [];
+  const violations: QaViolation[] = [];
+  const cleanAccountId = adAccountId.replace(/^act_/, "");
+
   for (let idx = 0; idx < adIds.length; idx++) {
     const adId = adIds[idx];
     const ad = adsData[adId];
@@ -246,10 +259,37 @@ async function runAdsQa(adIds: string[], accessToken: string, expectedPageId: st
 
     const { format, isPac } = determineFormatAndPac(c);
     const specKey = getSpecKey(format, isPac);
-    const violations = compareDof(c.degrees_of_freedom_spec || {}, EXPECTED_SPECS[specKey]);
-    const advPlus = violations.length
-      ? "SETTINGS STILL ON:\n" + violations.map(v => `• ${v}`).join("\n")
+    const dofViolations = compareDof(c.degrees_of_freedom_spec || {}, EXPECTED_SPECS[specKey]);
+    const advPlus = dofViolations.length
+      ? "SETTINGS STILL ON:\n" + dofViolations.map(v => `\u2022 ${v}`).join("\n")
       : "N/A";
+
+    // Build structured violations for the UI
+    if (dofViolations.length > 0 && creativeId) {
+      const settings = dofViolations.map(v => {
+        // Parse "feature_name: enroll_status=OPT_IN (expected OPT_OUT)"
+        const match = v.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
+        if (match) {
+          return { name: match[1], currentValue: match[2], expectedValue: match[3] };
+        }
+        // Parse "feature_name: enroll_status=OPT_IN (unexpected, not OPT_OUT)"
+        const match2 = v.match(/^(.+?):\s*enroll_status=(\S+)\s*\(unexpected/);
+        if (match2) {
+          return { name: match2[1], currentValue: match2[2], expectedValue: "OPT_OUT" };
+        }
+        // Fallback for "degrees_of_freedom_spec is MISSING entirely"
+        return { name: v, currentValue: "MISSING", expectedValue: "OPT_OUT" };
+      });
+
+      violations.push({
+        adId,
+        adName: ad.name || adId,
+        creativeId,
+        specKey,
+        settings,
+        adsManagerUrl: `https://www.facebook.com/adsmanager/manage/ads?act=${cleanAccountId}&selected_ad_ids=${adId}`,
+      });
+    }
 
     const fbPage = extractFbPage(c);
     const correctPage = expectedPageId
@@ -288,7 +328,7 @@ async function runAdsQa(adIds: string[], accessToken: string, expectedPageId: st
       "Applied Pixel(s)": extractPixel(ad.tracking_specs || []),
     });
   }
-  return rows;
+  return { rows, violations };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -576,21 +616,33 @@ export interface QaChecklistParams {
   facebookPageId?: string;
 }
 
+export interface QaViolation {
+  adId: string;
+  adName: string;
+  creativeId: string;
+  specKey: string;
+  settings: Array<{ name: string; currentValue: string; expectedValue: string }>;
+  adsManagerUrl: string;
+}
+
 export interface QaChecklistResult {
   downloadUrl: string;
   totalAds: number;
   totalAdSets: number;
   violationCount: number;
+  violations: QaViolation[];
 }
 
 export async function runQaChecklist(params: QaChecklistParams): Promise<QaChecklistResult> {
-  const { adIds, accessToken, facebookPageId } = params;
+  const { adIds, accessToken, adAccountId, facebookPageId } = params;
 
   // Run both QA modules (4 batch API calls total)
-  const [adRows, adsetRows] = await Promise.all([
-    runAdsQa(adIds, accessToken, facebookPageId || ""),
+  const [adsQaResult, adsetRows] = await Promise.all([
+    runAdsQaWithViolations(adIds, accessToken, facebookPageId || "", adAccountId),
     runAdsetsQa(adIds, accessToken),
   ]);
+
+  const { rows: adRows, violations } = adsQaResult;
 
   // Generate XLSX
   const xlsxBuffer = await generateXlsx(adRows, adsetRows);
@@ -604,12 +656,48 @@ export async function runQaChecklist(params: QaChecklistParams): Promise<QaCheck
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
 
-  const violationCount = adRows.filter(r => r["Advantage Plus - Creative"] && r["Advantage Plus - Creative"] !== "N/A").length;
-
   return {
     downloadUrl: url,
     totalAds: adRows.length,
     totalAdSets: adsetRows.length,
-    violationCount,
+    violationCount: violations.length,
+    violations,
   };
+}
+
+/**
+ * Get the correct EXPECTED_SPECS for a given spec key.
+ * Used by the fix endpoint to know what to send to Meta.
+ */
+export function getExpectedSpec(specKey: string): any {
+  return EXPECTED_SPECS[specKey] || EXPECTED_SPECS["STATIC_NO_PAC"];
+}
+
+/**
+ * Fix an ad's DOF spec by POSTing the correct spec to the creative.
+ */
+export async function fixAdDofSpec(params: {
+  creativeId: string;
+  specKey: string;
+  accessToken: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const { creativeId, specKey, accessToken } = params;
+  const correctSpec = getExpectedSpec(specKey);
+
+  try {
+    await axios.post(
+      `${BASE_URL}/${creativeId}`,
+      {
+        degrees_of_freedom_spec: JSON.stringify(correctSpec),
+        access_token: accessToken,
+      },
+      { timeout: 30000 },
+    );
+    return { success: true };
+  } catch (err: any) {
+    const metaMsg = err?.response?.data?.error?.message
+      || err?.response?.data?.error?.error_user_msg
+      || (err instanceof Error ? err.message : String(err));
+    return { success: false, error: metaMsg };
+  }
 }

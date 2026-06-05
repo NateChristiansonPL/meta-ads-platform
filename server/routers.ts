@@ -54,7 +54,7 @@ import {
 import axios from "axios";
 import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, buildAdQaChecklistPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
-import { runQaChecklist } from "./services/qaChecklist";
+import { runQaChecklist, fixAdDofSpec } from "./services/qaChecklist";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -1094,6 +1094,49 @@ export const appRouter = router({
         });
 
         return result;
+      }),
+
+    /**
+     * fixAdDofViolation: Fixes a single ad's DOF spec by POSTing the correct
+     * degrees_of_freedom_spec to the creative via Meta Graph API.
+     */
+    fixAdDofViolation: protectedProcedure
+      .input(z.object({
+        creativeId: z.string().min(1),
+        specKey: z.string().min(1),
+        tokenId: z.number().int().positive().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No active Meta access token found.",
+          });
+        }
+
+        const result = await fixAdDofSpec({
+          creativeId: input.creativeId,
+          specKey: input.specKey,
+          accessToken: metaAccessToken,
+        });
+
+        if (!result.success) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: result.error || "Failed to fix DOF spec.",
+          });
+        }
+
+        return { success: true };
       }),
   }),
 

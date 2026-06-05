@@ -11,11 +11,20 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   ChevronDown, ChevronUp, Search, ShieldCheck, Loader2, ExternalLink,
-  CheckSquare, Square, Filter, RefreshCw, Download
+  CheckSquare, Square, Filter, RefreshCw, Download, Wrench, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { BuildSettings } from './campaignStoreAdmin';
+
+interface QaViolation {
+  adId: string;
+  adName: string;
+  creativeId: string;
+  specKey: string;
+  settings: Array<{ name: string; currentValue: string; expectedValue: string }>;
+  adsManagerUrl: string;
+}
 
 interface Props {
   settings: BuildSettings;
@@ -72,7 +81,12 @@ export default function QaChecklistTab({ settings }: Props) {
     totalAds?: number;
     totalAdSets?: number;
     violationCount?: number;
+    violations?: QaViolation[];
   }>({ phase: 'idle' });
+
+  // Track which violations have been fixed
+  const [fixedCreativeIds, setFixedCreativeIds] = useState<Set<string>>(new Set());
+  const [fixingCreativeIds, setFixingCreativeIds] = useState<Set<string>>(new Set());
 
   // ── Data fetching ──
   const { data: campaignData, isLoading: campaignsLoading, refetch: refetchCampaigns } =
@@ -216,12 +230,47 @@ export default function QaChecklistTab({ settings }: Props) {
         totalAds: result.totalAds,
         totalAdSets: result.totalAdSets,
         violationCount: result.violationCount,
+        violations: result.violations as QaViolation[] ?? [],
       });
+      setFixedCreativeIds(new Set());
+      setFixingCreativeIds(new Set());
       toast.success(`QA complete — ${result.totalAds} ads, ${result.totalAdSets} ad sets checked`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setQaState({ phase: 'error', errorMessage: msg });
       toast.error(`QA failed: ${msg}`);
+    }
+  };
+
+  // ── Fix violation handler ──
+  const fixViolation = trpc.runs.fixAdDofViolation.useMutation();
+
+  const handleFixViolation = async (violation: QaViolation) => {
+    setFixingCreativeIds(prev => { const next = new Set(Array.from(prev)); next.add(violation.creativeId); return next; });
+    try {
+      await fixViolation.mutateAsync({
+        creativeId: violation.creativeId,
+        specKey: violation.specKey,
+        tokenId: settings.tokenId ?? undefined,
+      });
+      setFixedCreativeIds(prev => { const next = new Set(Array.from(prev)); next.add(violation.creativeId); return next; });
+      toast.success(`Fixed: ${violation.adName}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Fix failed for ${violation.adName}: ${msg}`);
+    } finally {
+      setFixingCreativeIds(prev => {
+        const next = new Set(prev);
+        next.delete(violation.creativeId);
+        return next;
+      });
+    }
+  };
+
+  const handleFixAll = async () => {
+    const unfixed = (qaState.violations ?? []).filter(v => !fixedCreativeIds.has(v.creativeId));
+    for (const v of unfixed) {
+      await handleFixViolation(v);
     }
   };
 
@@ -336,6 +385,101 @@ export default function QaChecklistTab({ settings }: Props) {
           {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
             <span className="text-amber-400 ml-1">{qaState.violationCount} violation{qaState.violationCount !== 1 ? 's' : ''} found.</span>
           )}
+        </div>
+      )}
+
+      {/* ── Violations Panel ── */}
+      {qaState.phase === 'done' && qaState.violations && qaState.violations.length > 0 && (
+        <div className="bg-surface-1 border border-amber-500/30 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-amber-500/5 border-b border-amber-500/20">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-400" />
+              <span className="text-[12px] font-700 text-amber-400">
+                Advantage+ Creative Violations
+              </span>
+              <span className="text-[10px] text-muted-foreground">
+                {qaState.violations.length} ad{qaState.violations.length !== 1 ? 's' : ''} with settings that should be OFF
+              </span>
+            </div>
+            {qaState.violations.length > 1 && (
+              <button
+                onClick={handleFixAll}
+                disabled={fixedCreativeIds.size === qaState.violations.length}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-700 bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Wrench size={11} />
+                Fix All ({qaState.violations.length - fixedCreativeIds.size} remaining)
+              </button>
+            )}
+          </div>
+
+          <div className="divide-y divide-border/50 max-h-[400px] overflow-y-auto">
+            {qaState.violations.map(v => {
+              const isFixed = fixedCreativeIds.has(v.creativeId);
+              const isFixing = fixingCreativeIds.has(v.creativeId);
+              return (
+                <div key={v.adId} className={`px-4 py-3 ${isFixed ? 'bg-emerald-500/5' : 'hover:bg-surface-2/20'} transition-colors`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {isFixed
+                          ? <CheckCircle2 size={13} className="text-emerald-400 flex-shrink-0" />
+                          : <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" />
+                        }
+                        <span className="text-[11px] font-600 text-foreground truncate">{v.adName}</span>
+                        <a
+                          href={v.adsManagerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-0.5 text-[9px] text-cyan-400 hover:text-cyan-300 flex-shrink-0"
+                          title="Open in Ads Manager"
+                        >
+                          <ExternalLink size={9} />
+                          Ads Manager
+                        </a>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {v.settings.map((s, i) => (
+                          <span
+                            key={i}
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-500 ${
+                              isFixed
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            }`}
+                          >
+                            {s.name}: {isFixed ? 'OPT_OUT' : s.currentValue}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-1 text-[9px] text-muted-foreground/60">
+                        Creative ID: {v.creativeId} · Format: {v.specKey}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {isFixed ? (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-600">
+                          <CheckCircle2 size={12} /> Fixed
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleFixViolation(v)}
+                          disabled={isFixing}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-700 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all disabled:opacity-50"
+                        >
+                          {isFixing
+                            ? <Loader2 size={11} className="animate-spin" />
+                            : <Wrench size={11} />
+                          }
+                          {isFixing ? 'Fixing…' : 'Fix'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
