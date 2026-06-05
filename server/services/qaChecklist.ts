@@ -788,29 +788,43 @@ export async function fixAdDofSpec(params: {
   creativeId: string;
   specKey: string;
   accessToken: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
   const writableSpec = buildWritableDofSpec(specKey);
 
+  const url = `${BASE_URL}/${adId}`;
+  const body = {
+    creative: JSON.stringify({
+      creative_id: creativeId,
+      degrees_of_freedom_spec: writableSpec,
+    }),
+    access_token: accessToken,
+  };
+
+  // Log exactly what we're sending
+  console.log("[fixAdDofSpec] URL:", url);
+  console.log("[fixAdDofSpec] Body keys:", Object.keys(body));
+  console.log("[fixAdDofSpec] creative value (first 500 chars):", (body.creative as string).substring(0, 500));
+  console.log("[fixAdDofSpec] Full creative JSON length:", (body.creative as string).length);
+
   try {
-    // Update the ad with the creative param containing the existing creative_id
-    // plus the corrected degrees_of_freedom_spec
-    await axios.post(
-      `${BASE_URL}/${adId}`,
-      {
-        creative: JSON.stringify({
-          creative_id: creativeId,
-          degrees_of_freedom_spec: writableSpec,
-        }),
-        access_token: accessToken,
-      },
-      { timeout: 30000 },
-    );
-    return { success: true };
+    const resp = await axios.post(url, body, { timeout: 30000 });
+    console.log("[fixAdDofSpec] SUCCESS response:", JSON.stringify(resp.data));
+    return { success: true, debug: { url, body: { creative: JSON.parse(body.creative as string), access_token: "[REDACTED]" }, response: resp.data } };
   } catch (err: any) {
-    const metaMsg = err?.response?.data?.error?.message
-      || err?.response?.data?.error?.error_user_msg
+    const metaError = err?.response?.data?.error;
+    const metaMsg = metaError?.message
+      || metaError?.error_user_msg
       || (err instanceof Error ? err.message : String(err));
-    return { success: false, error: metaMsg };
+    console.error("[fixAdDofSpec] FAILED:", JSON.stringify(metaError || err?.response?.data || err?.message));
+    return {
+      success: false,
+      error: metaMsg,
+      debug: {
+        url,
+        body: { creative: JSON.parse(body.creative as string), access_token: "[REDACTED]" },
+        response: metaError || err?.response?.data,
+      },
+    };
   }
 }

@@ -1134,11 +1134,11 @@ export const appRouter = router({
         if (!result.success) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: result.error || "Failed to fix DOF spec.",
+            message: `${result.error || "Failed to fix DOF spec."}\n\nDEBUG:\n${JSON.stringify(result.debug, null, 2)}`,
           });
         }
 
-        return { success: true };
+        return { success: true, debug: result.debug };
       }),
   }),
 
