@@ -964,3 +964,7 @@
 - [x] Expand DOF detection to cover ALL Advantage+ creative fields: music, inline_comment, text_optimizations, text_extraction, standard_enhancements, enhance_cta
 - [x] Ensure the fix endpoint sends the correct payload structure that Meta accepts
 - [x] All 75 tests pass (5 new tests for nested customizations, standard_enhancements, audio, inline_comment)
+
+## Unique Creative IDs Per Ad
+
+- [x] Ensure each ad gets a unique creative ID at creation time (prevent Meta deduplication by adding unique differentiator to each creative)

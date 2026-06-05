@@ -1588,8 +1588,11 @@ export const metaAdminRouter = router({
       }
 
       // ── Create ad creative ─────────────────────────────────────────────────
+      // Add unique suffix to creative name to prevent Meta from deduplicating
+      // creatives that share identical content across multiple ads/ad sets.
+      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const creativePayload: Record<string, unknown> = {
-        name: `${name} Creative`,
+        name: `${name} Creative [${uniqueSuffix}]`,
         ...creativeSpec,
       };
 
