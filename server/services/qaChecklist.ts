@@ -779,9 +779,10 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fix an ad's DOF spec by updating the ad with a creative param that
- * references the existing creative but overrides the degrees_of_freedom_spec.
- * POST /{adId} with creative={"creative_id":"X","degrees_of_freedom_spec":{...}}
+ * Fix an ad's DOF spec:
+ * 1. GET the existing creative's object_story_spec
+ * 2. Update the creative in-place (POST /{creativeId}) with corrected DOF
+ * 3. POST to /{adId} to re-apply the creative so Meta registers the change on this specific ad
  */
 export async function fixAdDofSpec(params: {
   adId: string;
@@ -791,12 +792,10 @@ export async function fixAdDofSpec(params: {
 }): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
 
-  // Use the SAME minimal DOF spec format that works in metaAdmin.ts (no action_metadata wrappers)
   const dofSpec = buildMinimalDofSpec(specKey);
 
   try {
-    // Step 1: GET the existing creative to retrieve its object_story_spec / asset_feed_spec
-    // (Meta requires the full creative spec when updating via POST /{creativeId})
+    // Step 1: GET the existing creative
     const getUrl = `${BASE_URL}/${creativeId}`;
     console.log("[fixAdDofSpec] Step 1: GET existing creative:", getUrl);
     const getResp = await axios.get(getUrl, {
@@ -809,41 +808,42 @@ export async function fixAdDofSpec(params: {
     const existingCreative = getResp.data;
     console.log("[fixAdDofSpec] Existing creative keys:", Object.keys(existingCreative));
 
-    // Step 2: Build the update payload — same pattern as metaAdmin.ts line 1886
-    // POST to /{creativeId} with the full spec + corrected DOF
-    const updatePayload: Record<string, unknown> = {
+    // Step 2: Update the creative in-place with corrected DOF spec
+    const creativePayload: Record<string, unknown> = {
       degrees_of_freedom_spec: dofSpec,
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
       multi_advertiser_eligibility: "INELIGIBLE",
     };
-
-    // Include the existing object_story_spec or asset_feed_spec so Meta doesn't reject
     if (existingCreative.asset_feed_spec) {
-      updatePayload.asset_feed_spec = existingCreative.asset_feed_spec;
-      // asset_feed_spec also needs object_story_spec as anchor
+      creativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
       if (existingCreative.object_story_spec) {
-        updatePayload.object_story_spec = existingCreative.object_story_spec;
+        creativePayload.object_story_spec = existingCreative.object_story_spec;
       }
     } else if (existingCreative.object_story_spec) {
-      updatePayload.object_story_spec = existingCreative.object_story_spec;
+      creativePayload.object_story_spec = existingCreative.object_story_spec;
     }
 
-    const postUrl = `${BASE_URL}/${creativeId}`;
-    const body = { ...updatePayload, access_token: accessToken };
+    const creativeUrl = `${BASE_URL}/${creativeId}`;
+    console.log("[fixAdDofSpec] Step 2: POST to CREATIVE:", creativeUrl);
+    await axios.post(creativeUrl, { ...creativePayload, access_token: accessToken }, { timeout: 30000 });
+    console.log("[fixAdDofSpec] Creative updated successfully");
 
-    console.log("[fixAdDofSpec] Step 2: POST to:", postUrl);
-    console.log("[fixAdDofSpec] Payload keys:", Object.keys(updatePayload));
-    console.log("[fixAdDofSpec] DOF spec:", JSON.stringify(dofSpec).substring(0, 300));
-
-    const resp = await axios.post(postUrl, body, { timeout: 30000 });
-    console.log("[fixAdDofSpec] SUCCESS response:", JSON.stringify(resp.data));
+    // Step 3: POST to the AD ID to re-apply the updated creative
+    const adUrl = `${BASE_URL}/${adId}`;
+    const adBody = {
+      creative: JSON.stringify({ creative_id: creativeId }),
+      access_token: accessToken,
+    };
+    console.log("[fixAdDofSpec] Step 3: POST to AD:", adUrl);
+    const adResp = await axios.post(adUrl, adBody, { timeout: 30000 });
+    console.log("[fixAdDofSpec] Ad updated response:", JSON.stringify(adResp.data));
 
     return {
       success: true,
       debug: {
-        url: postUrl,
-        body: { ...updatePayload, access_token: "[REDACTED]" },
-        response: resp.data,
+        url: adUrl,
+        body: { creative: { creative_id: creativeId }, creativePayload, access_token: "[REDACTED]" },
+        response: adResp.data,
       },
     };
   } catch (err: any) {
@@ -856,7 +856,7 @@ export async function fixAdDofSpec(params: {
       success: false,
       error: metaMsg,
       debug: {
-        url: `${BASE_URL}/${creativeId}`,
+        url: `${BASE_URL}/${adId}`,
         body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
