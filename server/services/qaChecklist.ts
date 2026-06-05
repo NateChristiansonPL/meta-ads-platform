@@ -785,24 +785,29 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fix an ad's DOF spec by POSTing the correct spec to the creative.
- * Uses the same JSON body approach as the working metaAdmin.ts update path.
- * The degrees_of_freedom_spec is sent as a nested object in a JSON POST body.
+ * Fix an ad's DOF spec by updating the ad with a creative param that
+ * references the existing creative but overrides the degrees_of_freedom_spec.
+ * POST /{adId} with creative={"creative_id":"X","degrees_of_freedom_spec":{...}}
  */
 export async function fixAdDofSpec(params: {
+  adId: string;
   creativeId: string;
   specKey: string;
   accessToken: string;
 }): Promise<{ success: boolean; error?: string }> {
-  const { creativeId, specKey, accessToken } = params;
+  const { adId, creativeId, specKey, accessToken } = params;
   const writableSpec = buildWritableDofSpec(specKey);
 
   try {
-    // Send as JSON body — same pattern as metaPost in metaAdmin.ts
+    // Update the ad with the creative param containing the existing creative_id
+    // plus the corrected degrees_of_freedom_spec
     await axios.post(
-      `${BASE_URL}/${creativeId}`,
+      `${BASE_URL}/${adId}`,
       {
-        degrees_of_freedom_spec: writableSpec,
+        creative: JSON.stringify({
+          creative_id: creativeId,
+          degrees_of_freedom_spec: writableSpec,
+        }),
         access_token: accessToken,
       },
       { timeout: 30000 },

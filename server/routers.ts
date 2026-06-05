@@ -1102,6 +1102,7 @@ export const appRouter = router({
      */
     fixAdDofViolation: protectedProcedure
       .input(z.object({
+        adId: z.string().min(1),
         creativeId: z.string().min(1),
         specKey: z.string().min(1),
         tokenId: z.number().int().positive().optional(),
@@ -1124,6 +1125,7 @@ export const appRouter = router({
         }
 
         const result = await fixAdDofSpec({
+          adId: input.adId,
           creativeId: input.creativeId,
           specKey: input.specKey,
           accessToken: metaAccessToken,

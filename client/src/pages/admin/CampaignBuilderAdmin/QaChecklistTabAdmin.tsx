@@ -249,6 +249,7 @@ export default function QaChecklistTab({ settings }: Props) {
     setFixingCreativeIds(prev => { const next = new Set(Array.from(prev)); next.add(violation.creativeId); return next; });
     try {
       await fixViolation.mutateAsync({
+        adId: violation.adId,
         creativeId: violation.creativeId,
         specKey: violation.specKey,
         tokenId: settings.tokenId ?? undefined,
