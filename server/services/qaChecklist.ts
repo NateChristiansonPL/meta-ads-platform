@@ -790,27 +790,62 @@ export async function fixAdDofSpec(params: {
   accessToken: string;
 }): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
-  const writableSpec = buildWritableDofSpec(specKey);
 
-  const url = `${BASE_URL}/${adId}`;
-  const body = {
-    creative: JSON.stringify({
-      creative_id: creativeId,
-      degrees_of_freedom_spec: writableSpec,
-    }),
-    access_token: accessToken,
-  };
-
-  // Log exactly what we're sending
-  console.log("[fixAdDofSpec] URL:", url);
-  console.log("[fixAdDofSpec] Body keys:", Object.keys(body));
-  console.log("[fixAdDofSpec] creative value (first 500 chars):", (body.creative as string).substring(0, 500));
-  console.log("[fixAdDofSpec] Full creative JSON length:", (body.creative as string).length);
+  // Use the SAME minimal DOF spec format that works in metaAdmin.ts (no action_metadata wrappers)
+  const dofSpec = buildMinimalDofSpec(specKey);
 
   try {
-    const resp = await axios.post(url, body, { timeout: 30000 });
+    // Step 1: GET the existing creative to retrieve its object_story_spec / asset_feed_spec
+    // (Meta requires the full creative spec when updating via POST /{creativeId})
+    const getUrl = `${BASE_URL}/${creativeId}`;
+    console.log("[fixAdDofSpec] Step 1: GET existing creative:", getUrl);
+    const getResp = await axios.get(getUrl, {
+      params: {
+        fields: "id,object_story_spec,asset_feed_spec",
+        access_token: accessToken,
+      },
+      timeout: 30000,
+    });
+    const existingCreative = getResp.data;
+    console.log("[fixAdDofSpec] Existing creative keys:", Object.keys(existingCreative));
+
+    // Step 2: Build the update payload — same pattern as metaAdmin.ts line 1886
+    // POST to /{creativeId} with the full spec + corrected DOF
+    const updatePayload: Record<string, unknown> = {
+      degrees_of_freedom_spec: dofSpec,
+      contextual_multi_ads: { enroll_status: "OPT_OUT" },
+      multi_advertiser_eligibility: "INELIGIBLE",
+    };
+
+    // Include the existing object_story_spec or asset_feed_spec so Meta doesn't reject
+    if (existingCreative.asset_feed_spec) {
+      updatePayload.asset_feed_spec = existingCreative.asset_feed_spec;
+      // asset_feed_spec also needs object_story_spec as anchor
+      if (existingCreative.object_story_spec) {
+        updatePayload.object_story_spec = existingCreative.object_story_spec;
+      }
+    } else if (existingCreative.object_story_spec) {
+      updatePayload.object_story_spec = existingCreative.object_story_spec;
+    }
+
+    const postUrl = `${BASE_URL}/${creativeId}`;
+    const body = { ...updatePayload, access_token: accessToken };
+
+    console.log("[fixAdDofSpec] Step 2: POST to:", postUrl);
+    console.log("[fixAdDofSpec] Payload keys:", Object.keys(updatePayload));
+    console.log("[fixAdDofSpec] DOF spec:", JSON.stringify(dofSpec).substring(0, 300));
+
+    const resp = await axios.post(postUrl, body, { timeout: 30000 });
     console.log("[fixAdDofSpec] SUCCESS response:", JSON.stringify(resp.data));
-    return { success: true, debug: { url, body: { creative: JSON.parse(body.creative as string), access_token: "[REDACTED]" }, response: resp.data } };
+
+    return {
+      success: true,
+      debug: {
+        url: postUrl,
+        body: { ...updatePayload, access_token: "[REDACTED]" },
+        response: resp.data,
+      },
+    };
   } catch (err: any) {
     const metaError = err?.response?.data?.error;
     const metaMsg = metaError?.message
@@ -821,10 +856,45 @@ export async function fixAdDofSpec(params: {
       success: false,
       error: metaMsg,
       debug: {
-        url,
-        body: { creative: JSON.parse(body.creative as string), access_token: "[REDACTED]" },
+        url: `${BASE_URL}/${creativeId}`,
+        body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
     };
   }
+}
+
+/**
+ * Minimal DOF spec matching the WORKING format used in metaAdmin.ts buildDegreesOfFreedomSpec().
+ * This uses simple { enroll_status: "OPT_OUT" } without action_metadata wrappers.
+ * This is what actually works when POSTing to /{creativeId}.
+ */
+function buildMinimalDofSpec(_specKey: string): Record<string, unknown> {
+  const off = { enroll_status: "OPT_OUT" };
+  // Same fields as metaAdmin.ts buildDegreesOfFreedomSpec for static/image
+  return {
+    creative_features_spec: {
+      adapt_to_placement:            off,
+      add_text_overlay:              off,
+      creative_stickers:             off,
+      description_automation:        off,
+      enhance_cta:                   off,
+      generate_cta:                  off,
+      image_background_gen:          off,
+      image_brightness_and_contrast: off,
+      image_templates:               off,
+      image_touchups:                off,
+      image_uncrop:                  off,
+      inline_comment:                off,
+      media_type_automation:         off,
+      pac_relaxation:                off,
+      product_extensions:            off,
+      reveal_details_over_time:      off,
+      text_optimizations:            off,
+      text_translation:              off,
+      video_auto_crop:               off,
+      // Additional fields for video format
+      ...((_specKey.startsWith("VIDEO")) ? { video_filtering: off } : {}),
+    },
+  };
 }
