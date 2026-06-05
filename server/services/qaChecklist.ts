@@ -780,27 +780,31 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 
 /**
  * Fix an ad's DOF spec:
- * 1. GET the existing creative's object_story_spec
- * 2. Update the creative in-place (POST /{creativeId}) with corrected DOF
- * 3. POST to /{adId} to re-apply the creative so Meta registers the change on this specific ad
+ * 1. GET the existing creative's full spec
+ * 2. CREATE a new creative under the ad account with corrected DOF (all OPT_OUT)
+ * 3. POST to /{adId} with creative={"creative_id": "<new_id>"} to assign the new creative
+ *
+ * This gives each ad its own unique creative so shared creatives don't cause conflicts.
  */
 export async function fixAdDofSpec(params: {
   adId: string;
   creativeId: string;
   specKey: string;
+  adAccountId: string;
   accessToken: string;
 }): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
-  const { adId, creativeId, specKey, accessToken } = params;
+  const { adId, creativeId, specKey, adAccountId, accessToken } = params;
 
   const dofSpec = buildMinimalDofSpec(specKey);
+  const normalizedAccount = `act_${adAccountId.replace(/^act_/, "")}`;
 
   try {
-    // Step 1: GET the existing creative
+    // Step 1: GET the existing creative's full spec
     const getUrl = `${BASE_URL}/${creativeId}`;
     console.log("[fixAdDofSpec] Step 1: GET existing creative:", getUrl);
     const getResp = await axios.get(getUrl, {
       params: {
-        fields: "id,object_story_spec,asset_feed_spec",
+        fields: "id,name,object_story_spec,asset_feed_spec,url_tags",
         access_token: accessToken,
       },
       timeout: 30000,
@@ -808,33 +812,46 @@ export async function fixAdDofSpec(params: {
     const existingCreative = getResp.data;
     console.log("[fixAdDofSpec] Existing creative keys:", Object.keys(existingCreative));
 
-    // Step 2: Update the creative in-place with corrected DOF spec
-    const creativePayload: Record<string, unknown> = {
+    // Step 2: CREATE a new creative under the ad account with corrected DOF
+    const createUrl = `${BASE_URL}/${normalizedAccount}/adcreatives`;
+    const newCreativePayload: Record<string, unknown> = {
       degrees_of_freedom_spec: dofSpec,
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
-      multi_advertiser_eligibility: "INELIGIBLE",
     };
+    // Copy over the existing creative's content spec
     if (existingCreative.asset_feed_spec) {
-      creativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
+      newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
       if (existingCreative.object_story_spec) {
-        creativePayload.object_story_spec = existingCreative.object_story_spec;
+        newCreativePayload.object_story_spec = existingCreative.object_story_spec;
       }
     } else if (existingCreative.object_story_spec) {
-      creativePayload.object_story_spec = existingCreative.object_story_spec;
+      newCreativePayload.object_story_spec = existingCreative.object_story_spec;
+    }
+    if (existingCreative.url_tags) {
+      newCreativePayload.url_tags = existingCreative.url_tags;
     }
 
-    const creativeUrl = `${BASE_URL}/${creativeId}`;
-    console.log("[fixAdDofSpec] Step 2: POST to CREATIVE:", creativeUrl);
-    await axios.post(creativeUrl, { ...creativePayload, access_token: accessToken }, { timeout: 30000 });
-    console.log("[fixAdDofSpec] Creative updated successfully");
+    console.log("[fixAdDofSpec] Step 2: POST to create new creative:", createUrl);
+    console.log("[fixAdDofSpec] Payload keys:", Object.keys(newCreativePayload));
+    const createResp = await axios.post(createUrl, { ...newCreativePayload, access_token: accessToken }, { timeout: 60000 });
+    const newCreativeId = createResp.data?.id;
+    console.log("[fixAdDofSpec] New creative created:", newCreativeId);
 
-    // Step 3: POST to the AD ID to re-apply the updated creative
+    if (!newCreativeId) {
+      return {
+        success: false,
+        error: "Failed to create new creative — no ID returned",
+        debug: { url: createUrl, body: newCreativePayload, response: createResp.data },
+      };
+    }
+
+    // Step 3: POST to the AD ID to assign the new creative
     const adUrl = `${BASE_URL}/${adId}`;
     const adBody = {
-      creative: JSON.stringify({ creative_id: creativeId }),
+      creative: JSON.stringify({ creative_id: newCreativeId }),
       access_token: accessToken,
     };
-    console.log("[fixAdDofSpec] Step 3: POST to AD:", adUrl);
+    console.log("[fixAdDofSpec] Step 3: POST to AD:", adUrl, "with new creative:", newCreativeId);
     const adResp = await axios.post(adUrl, adBody, { timeout: 30000 });
     console.log("[fixAdDofSpec] Ad updated response:", JSON.stringify(adResp.data));
 
@@ -842,7 +859,7 @@ export async function fixAdDofSpec(params: {
       success: true,
       debug: {
         url: adUrl,
-        body: { creative: { creative_id: creativeId }, creativePayload, access_token: "[REDACTED]" },
+        body: { creative: { creative_id: newCreativeId }, originalCreativeId: creativeId, access_token: "[REDACTED]" },
         response: adResp.data,
       },
     };

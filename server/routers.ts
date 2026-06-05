@@ -1105,6 +1105,7 @@ export const appRouter = router({
         adId: z.string().min(1),
         creativeId: z.string().min(1),
         specKey: z.string().min(1),
+        adAccountId: z.string().min(1),
         tokenId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1128,6 +1129,7 @@ export const appRouter = router({
           adId: input.adId,
           creativeId: input.creativeId,
           specKey: input.specKey,
+          adAccountId: input.adAccountId,
           accessToken: metaAccessToken,
         });
 
