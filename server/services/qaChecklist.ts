@@ -703,39 +703,85 @@ export function getExpectedSpec(specKey: string): any {
 }
 
 /**
- * Build the minimal DOF spec that Meta accepts for writing.
- * Uses the proven pattern from metaAdmin.ts buildDegreesOfFreedomSpec.
- * This is a smaller subset than the full EXPECTED_SPECS (which is for READ comparison).
+ * Build the FULL DOF spec that Meta accepts for writing — all settings OFF.
+ * This matches the exact payload structure observed from Meta when all Advantage+
+ * creative settings are turned off for a static image ad.
  */
-function buildWritableDofSpec(specKey: string): Record<string, unknown> {
+function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
-  // Core fields that Meta accepts on write (proven in the campaign builder)
-  const base: Record<string, unknown> = {
-    adapt_to_placement:             off,
-    add_text_overlay:               off,
-    audio:                          off,
-    creative_stickers:              off,
-    description_automation:         off,
-    enhance_cta:                    off,
-    generate_cta:                   off,
-    image_background_gen:           off,
-    image_brightness_and_contrast:  off,
-    image_templates:                off,
-    image_touchups:                 off,
-    image_uncrop:                   off,
-    inline_comment:                 off,
-    media_type_automation:          off,
-    pac_relaxation:                 off,
-    product_extensions:             off,
-    reveal_details_over_time:       off,
-    text_optimizations:             off,
-    text_translation:               off,
-    video_auto_crop:                off,
+  const defaultOff = { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" };
+
+  return {
+    creative_features_spec: {
+      product_extensions:              off,
+      adapt_to_placement:              { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
+      add_text_overlay:                off,
+      ads_with_benefits:               defaultOff,
+      advantage_plus_creative:         defaultOff,
+      app_highlights:                  defaultOff,
+      audio:                           defaultOff,
+      biz_ai:                          defaultOff,
+      carousel_to_video:               defaultOff,
+      catalog_feed_tag:                defaultOff,
+      creative_stickers:               off,
+      cv_transformation:               defaultOff,
+      description_automation:          off,
+      dynamic_partner_content:         defaultOff,
+      enhance_cta:                     off,
+      feed_caption_optimization:       defaultOff,
+      generate_cta:                    off,
+      hide_price:                      defaultOff,
+      ig_glados_feed:                  defaultOff,
+      ig_video_native_subtitle:        defaultOff,
+      image_animation:                 defaultOff,
+      image_auto_crop:                 defaultOff,
+      image_background_gen:            off,
+      image_brightness_and_contrast:   off,
+      image_enhancement:               defaultOff,
+      image_templates:                 off,
+      image_text_translation:          defaultOff,
+      image_touchups:                  off,
+      image_uncrop:                    off,
+      inline_comment:                  off,
+      local_store_extension:           defaultOff,
+      media_liquidity_animated_image:  defaultOff,
+      media_order:                     defaultOff,
+      media_type_automation:           off,
+      multi_photo_to_video:            defaultOff,
+      pac_recomposition:               defaultOff,
+      pac_relaxation:                  off,
+      product_browsing:                defaultOff,
+      product_metadata_automation:     defaultOff,
+      profile_card:                    defaultOff,
+      replace_media_text:              defaultOff,
+      reveal_details_over_time:        off,
+      show_destination_blurbs:         defaultOff,
+      show_summary:                    defaultOff,
+      site_extensions:                 defaultOff,
+      standard_enhancements_catalog:   defaultOff,
+      text_optimizations:              off,
+      text_translation:                { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_OUT" },
+      translate_voiceover:             defaultOff,
+      video_auto_crop:                 off,
+      video_filtering:                 defaultOff,
+      video_highlight:                 defaultOff,
+      video_highlights:                defaultOff,
+      video_to_image:                  defaultOff,
+      video_uncrop:                    defaultOff,
+      wa_mm_image_filtering:           defaultOff,
+      enable_ncs_testimonials:         defaultOff,
+      dha_optimization:                defaultOff,
+    },
+    creative_sourcing_spec: {
+      app_info_spec:              off,
+      brand:                      off,
+      dynamic_site_links_spec:    off,
+      featured_offering_spec:     { enroll_status: "OPT_OUT", media: [] },
+      website_media_spec:         off,
+      website_summary_spec:       off,
+      destination_screenshot_spec: off,
+    },
   };
-  if (specKey.startsWith('VIDEO')) {
-    return { creative_features_spec: { ...base, video_filtering: off } };
-  }
-  return { creative_features_spec: base };
 }
 
 /**
