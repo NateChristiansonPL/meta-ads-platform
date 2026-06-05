@@ -786,8 +786,8 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 
 /**
  * Fix an ad's DOF spec by POSTing the correct spec to the creative.
- * Meta Graph API expects form-encoded params where nested objects are JSON-stringified.
- * We send degrees_of_freedom_spec as a JSON string in a form-urlencoded body.
+ * Uses the same JSON body approach as the working metaAdmin.ts update path.
+ * The degrees_of_freedom_spec is sent as a nested object in a JSON POST body.
  */
 export async function fixAdDofSpec(params: {
   creativeId: string;
@@ -797,19 +797,15 @@ export async function fixAdDofSpec(params: {
   const { creativeId, specKey, accessToken } = params;
   const writableSpec = buildWritableDofSpec(specKey);
 
-  // Meta Graph API requires form-encoded POST with nested objects as JSON strings
-  const formData = new URLSearchParams();
-  formData.append('degrees_of_freedom_spec', JSON.stringify(writableSpec));
-  formData.append('access_token', accessToken);
-
   try {
+    // Send as JSON body — same pattern as metaPost in metaAdmin.ts
     await axios.post(
       `${BASE_URL}/${creativeId}`,
-      formData.toString(),
       {
-        timeout: 30000,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        degrees_of_freedom_spec: writableSpec,
+        access_token: accessToken,
       },
+      { timeout: 30000 },
     );
     return { success: true };
   } catch (err: any) {
