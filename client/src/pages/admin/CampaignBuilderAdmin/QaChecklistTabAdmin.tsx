@@ -252,7 +252,6 @@ export default function QaChecklistTab({ settings }: Props) {
         adId: violation.adId,
         creativeId: violation.creativeId,
         specKey: violation.specKey,
-        adAccountId: settings.adAccountId,
         tokenId: settings.tokenId ?? undefined,
       });
       setFixedCreativeIds(prev => { const next = new Set(Array.from(prev)); next.add(violation.creativeId); return next; });
