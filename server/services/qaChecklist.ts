@@ -311,19 +311,15 @@ async function runAdsQaWithViolations(
     // Check contextual_multi_ads — should be OPT_OUT.
     // Only flag when the field is explicitly returned by Meta and is NOT OPT_OUT.
     // If the field is missing/undefined, Meta may not return it on read — don't flag.
-    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(c?.contextual_multi_ads), `| multi_advertiser_eligibility:`, c?.multi_advertiser_eligibility);
+    // Use separate multi-advertiser data (from Batch 3) to avoid breaking main DOF detection
+    const maData = creativeId ? (multiAdvData[creativeId] || {}) : {};
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| multi_advertiser_eligibility:`, maData?.multi_advertiser_eligibility);
     const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
     if (multiAdsViolation) {
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
 
-    // Check multi_advertiser_eligibility — should be INELIGIBLE
-    // Only flag when the field is explicitly present and not INELIGIBLE
-    const multiAdvEligibility = c?.multi_advertiser_eligibility;
-    if (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE") {
-      dofViolations.push(`multi_advertiser_eligibility: ${multiAdvEligibility} (expected INELIGIBLE)`);
-    }
 
     const advPlus = dofViolations.length
       ? "SETTINGS STILL ON:\n" + dofViolations.map(v => `\u2022 ${v}`).join("\n")
@@ -388,7 +384,7 @@ async function runAdsQaWithViolations(
       "Creative #": String(idx + 1),
       "Creative Status": c.status || "",
       "Partnership Ad Turned Off": checkPartnershipAd(c),
-      "Multi-Advertisers Unchecked": (multiAdsViolation || (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE")) ? "ON — VIOLATION" : "Off",
+      "Multi-Advertisers Unchecked": multiAdsViolation ? "ON — VIOLATION" : "Off",
       "Advantage Plus - Creative": advPlus,
       "Correct FB Page Selected": correctPage,
       "Headline": extractHeadline(c),
@@ -397,7 +393,6 @@ async function runAdsQaWithViolations(
       "CTA - Type": cta.type,
       "CTA - Link Caption": cta.caption,
       "Landing Page": landingPage,
-      "Multi-Advertisers Unchecked": multiAdsViolation ? "ON — VIOLATION" : "Off",
       "Permalink": extractPermalink(c),
       "Applied Pixel(s)": extractPixel(ad.tracking_specs || []),
     });
