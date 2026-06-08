@@ -149,6 +149,7 @@ function Router() {
           {/* Keep old non-admin builder accessible at legacy path */}
           <Route path="/campaign-builder-legacy" component={CampaignBuilder} />
           <Route path="/knowledge" component={KnowledgeBase} />
+          <Route path="/qa-verification" component={QaVerification} />
           <Route path="/404" component={NotFound} />
           <Route component={NotFound} />
         </Switch>

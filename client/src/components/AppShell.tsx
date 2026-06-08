@@ -407,6 +407,16 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                 active={location === "/campaign-builder"}
                 running={false}
               />
+              {/* QA Verification — standalone tool */}
+              <NavItem
+                icon={ShieldCheck}
+                label="QA Verification"
+                sub="A+ Creative & settings"
+                color="#00BEEF"
+                path="/qa-verification"
+                active={location === "/qa-verification"}
+                running={false}
+              />
               {/* Placeholder: Audience Saturation */}
               <button
                 onClick={() => toast.info("Feature coming soon")}
