@@ -300,11 +300,6 @@ async function runAdsQaWithViolations(
       }
     }
 
-<<<<<<< Updated upstream
-    // Check contextual_multi_ads — should be OPT_OUT
-    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    if (multiAdsStatus && multiAdsStatus !== "OPT_OUT") {
-=======
     // Check contextual_multi_ads — should be OPT_OUT.
     // Only flag when the field is explicitly returned by Meta and is NOT OPT_OUT.
     // If the field is missing/undefined, Meta may not return it on read — don't flag.
@@ -312,15 +307,11 @@ async function runAdsQaWithViolations(
     console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(c?.contextual_multi_ads), `| multi_advertiser_eligibility:`, c?.multi_advertiser_eligibility);
     const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
     if (multiAdsViolation) {
->>>>>>> Stashed changes
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
 
     // Check multi_advertiser_eligibility — should be INELIGIBLE
-<<<<<<< Updated upstream
-=======
     // Only flag when the field is explicitly present and not INELIGIBLE
->>>>>>> Stashed changes
     const multiAdvEligibility = c?.multi_advertiser_eligibility;
     if (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE") {
       dofViolations.push(`multi_advertiser_eligibility: ${multiAdvEligibility} (expected INELIGIBLE)`);
@@ -389,11 +380,7 @@ async function runAdsQaWithViolations(
       "Creative #": String(idx + 1),
       "Creative Status": c.status || "",
       "Partnership Ad Turned Off": checkPartnershipAd(c),
-<<<<<<< Updated upstream
-      "Multi-Advertisers Unchecked": (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off",
-=======
       "Multi-Advertisers Unchecked": (multiAdsViolation || (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE")) ? "ON — VIOLATION" : "Off",
->>>>>>> Stashed changes
       "Advantage Plus - Creative": advPlus,
       "Correct FB Page Selected": correctPage,
       "Headline": extractHeadline(c),

@@ -182,30 +182,6 @@ describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => 
   });
 });
 
-<<<<<<< Updated upstream
-describe("QA Checklist — Multi-Advertiser NOT_SET Parsing", () => {
-  it("should parse contextual_multi_ads NOT_SET violation string with standard DOF regex", () => {
-    // When field is missing, the code produces this violation string
-    const violationString = "contextual_multi_ads: enroll_status=NOT_SET (defaults to OPT_IN) (expected OPT_OUT)";
-    const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*.*\(expected\s+(\S+)\)/);
-    expect(match).not.toBeNull();
-    expect(match![1]).toBe("contextual_multi_ads");
-    // The first non-whitespace token after enroll_status=
-    expect(match![2]).toBe("NOT_SET");
-    expect(match![3]).toBe("OPT_OUT");
-  });
-
-  it("should detect violation for Multi-Advertisers Unchecked column when field is missing", () => {
-    const multiAdsStatus = undefined;
-    const result = (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off";
-    expect(result).toBe("ON — VIOLATION");
-  });
-
-  it("should show Off for Multi-Advertisers Unchecked column when OPT_OUT", () => {
-    const multiAdsStatus = "OPT_OUT";
-    const result = (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off";
-    expect(result).toBe("Off");
-=======
 describe("QA Checklist — Multi-Advertiser Detection", () => {
   it("should detect contextual_multi_ads violation when enroll_status is OPT_IN", () => {
     const c = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
@@ -213,33 +189,27 @@ describe("QA Checklist — Multi-Advertiser Detection", () => {
     expect(multiAdsStatus).toBe("OPT_IN");
     expect(multiAdsStatus && multiAdsStatus !== "OPT_OUT").toBe(true);
   });
-
   it("should NOT detect contextual_multi_ads violation when enroll_status is OPT_OUT", () => {
     const c = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
     const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
     expect(multiAdsStatus && multiAdsStatus !== "OPT_OUT").toBe(false);
   });
-
   it("should NOT detect contextual_multi_ads violation when field is missing (Meta may not return it on read)", () => {
     const c = {} as any;
     const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    // Only flag when explicitly present and NOT OPT_OUT
     const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
     expect(multiAdsViolation).toBeFalsy();
   });
-
   it("should detect multi_advertiser_eligibility violation when ELIGIBLE", () => {
     const c = { multi_advertiser_eligibility: "ELIGIBLE" } as any;
     const multiAdvEligibility = c?.multi_advertiser_eligibility;
     expect(multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE").toBe(true);
   });
-
   it("should NOT detect multi_advertiser_eligibility violation when INELIGIBLE", () => {
     const c = { multi_advertiser_eligibility: "INELIGIBLE" } as any;
     const multiAdvEligibility = c?.multi_advertiser_eligibility;
     expect(multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE").toBe(false);
   });
-
   it("should NOT detect multi_advertiser_eligibility violation when field is missing", () => {
     const c = {} as any;
     const multiAdvEligibility = c?.multi_advertiser_eligibility;
@@ -256,20 +226,15 @@ describe("QA Checklist — Multi-Advertiser Violation Parsing", () => {
     expect(match![2]).toBe("OPT_IN");
     expect(match![3]).toBe("OPT_OUT");
   });
-
   it("should parse multi_advertiser_eligibility violation string with dedicated regex", () => {
     const violationString = "multi_advertiser_eligibility: ELIGIBLE (expected INELIGIBLE)";
-    // Should NOT match the standard DOF regex (no enroll_status=)
     const dofMatch = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
     expect(dofMatch).toBeNull();
-
-    // Should match the multi_advertiser_eligibility regex
     const multiAdvMatch = violationString.match(/^multi_advertiser_eligibility:\s*(\S+)\s*\(expected\s+(\S+)\)/);
     expect(multiAdvMatch).not.toBeNull();
     expect(multiAdvMatch![1]).toBe("ELIGIBLE");
     expect(multiAdvMatch![2]).toBe("INELIGIBLE");
   });
-
   it("should produce correct structured violation for multi_advertiser_eligibility", () => {
     const violationString = "multi_advertiser_eligibility: ELIGIBLE (expected INELIGIBLE)";
     const multiAdvMatch = violationString.match(/^multi_advertiser_eligibility:\s*(\S+)\s*\(expected\s+(\S+)\)/);
@@ -280,7 +245,6 @@ describe("QA Checklist — Multi-Advertiser Violation Parsing", () => {
       expect(result.expectedValue).toBe("INELIGIBLE");
     }
   });
-
   it("should produce correct structured violation for contextual_multi_ads", () => {
     const violationString = "contextual_multi_ads: enroll_status=OPT_IN (expected OPT_OUT)";
     const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
@@ -290,6 +254,6 @@ describe("QA Checklist — Multi-Advertiser Violation Parsing", () => {
       expect(result.currentValue).toBe("OPT_IN");
       expect(result.expectedValue).toBe("OPT_OUT");
     }
->>>>>>> Stashed changes
   });
 });
+
