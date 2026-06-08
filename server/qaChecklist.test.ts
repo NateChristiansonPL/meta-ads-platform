@@ -1,5 +1,5 @@
 /**
- * Tests for QA Checklist — Add Music violation detection and fix payload
+ * Tests for QA Checklist — Add Music violation detection and DOF fix approach
  */
 import { describe, it, expect } from "vitest";
 
@@ -33,7 +33,6 @@ describe("QA Checklist — Add Music Violation Detection", () => {
       const result = { name: "Add Music (asset_feed_spec.audios)", currentValue: audioMatch[1], expectedValue: audioMatch[2] };
       expect(result.name).toBe("Add Music (asset_feed_spec.audios)");
       expect(result.currentValue).toBe("ENABLED");
-      // Note: the regex captures "opted_out)" with the trailing paren
     }
   });
 });
@@ -69,32 +68,69 @@ describe("QA Checklist — Add Music Detection Logic", () => {
   });
 });
 
-describe("QA Checklist — Fix Payload includes asset_feed_spec.audios", () => {
-  it("should include asset_feed_spec with audios opted_out in creative param", () => {
-    // Simulate what fixAdDofSpec builds
-    const creativeParam: Record<string, unknown> = {
-      creative_id: "123456",
-      degrees_of_freedom_spec: { creative_features_spec: {} },
-      asset_feed_spec: {
-        audios: [{ type: "opted_out" }],
+describe("QA Checklist — Fix Payload (POST to Ad ID with creative_id + DOF)", () => {
+  it("should include creative_id in the creative param (references existing creative)", () => {
+    // The confirmed working approach: POST to /{adId} with creative JSON param
+    // containing creative_id + degrees_of_freedom_spec
+    const creativeId = "1248555654023534";
+    const dofSpec = {
+      creative_features_spec: {
+        audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
+        advantage_plus_creative: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
       },
     };
 
-    expect(creativeParam.asset_feed_spec).toBeDefined();
-    const afs = creativeParam.asset_feed_spec as any;
-    expect(afs.audios).toEqual([{ type: "opted_out" }]);
-  });
-
-  it("should stringify correctly for the POST body", () => {
-    const creativeParam = {
-      creative_id: "123456",
-      degrees_of_freedom_spec: { creative_features_spec: { audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" } } },
-      asset_feed_spec: { audios: [{ type: "opted_out" }] },
+    const creativeParam: Record<string, unknown> = {
+      creative_id: creativeId,
+      degrees_of_freedom_spec: dofSpec,
     };
 
-    const body = { creative: JSON.stringify(creativeParam) };
+    // Verify creative_id IS present
+    expect(creativeParam.creative_id).toBe(creativeId);
+
+    // Verify DOF spec is present with only creative_features_spec (no creative_sourcing_spec)
+    expect(creativeParam.degrees_of_freedom_spec).toEqual(dofSpec);
+    expect((creativeParam.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
+  });
+
+  it("should stringify correctly for the POST body to /{adId}", () => {
+    const adId = "120215890270510534";
+    const creativeId = "1248555654023534";
+    const dofSpec = {
+      creative_features_spec: {
+        audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
+      },
+    };
+
+    const creativeParam = {
+      creative_id: creativeId,
+      degrees_of_freedom_spec: dofSpec,
+    };
+
+    const body = {
+      creative: JSON.stringify(creativeParam),
+      access_token: "test_token",
+    };
+
+    // Verify body structure
+    expect(typeof body.creative).toBe("string");
     const parsed = JSON.parse(body.creative);
-    expect(parsed.asset_feed_spec.audios[0].type).toBe("opted_out");
+    expect(parsed.creative_id).toBe(creativeId);
     expect(parsed.degrees_of_freedom_spec.creative_features_spec.audio.enroll_status).toBe("OPT_OUT");
+
+    // Verify no creative_sourcing_spec
+    expect(parsed.degrees_of_freedom_spec.creative_sourcing_spec).toBeUndefined();
+  });
+
+  it("should NOT include object_story_spec or asset_feed_spec (DOF-only update)", () => {
+    const creativeParam: Record<string, unknown> = {
+      creative_id: "1248555654023534",
+      degrees_of_freedom_spec: { creative_features_spec: {} },
+    };
+
+    // The fix only updates DOF spec — no need to include object_story_spec
+    expect(creativeParam).not.toHaveProperty("object_story_spec");
+    expect(creativeParam).not.toHaveProperty("asset_feed_spec");
+    expect(creativeParam).not.toHaveProperty("url_tags");
   });
 });

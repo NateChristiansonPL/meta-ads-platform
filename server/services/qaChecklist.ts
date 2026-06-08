@@ -811,16 +811,18 @@ export async function fixAdDofSpec(params: {
   const dofSpec = buildFullDofSpec(specKey);
 
   try {
-    // POST to /{adId} with creative param containing the corrected DOF spec
-    // Also fix asset_feed_spec.audios to turn off "Add Music"
+    // POST to /{adId} with creative JSON param containing creative_id + corrected DOF spec.
+    // This is the confirmed working approach:
+    // - Posts to the AD endpoint (not creative endpoint) to avoid shared-creative issues
+    // - Includes creative_id to reference the existing creative
+    // - Includes degrees_of_freedom_spec with ONLY creative_features_spec (no creative_sourcing_spec)
+    // - Meta accepts this and updates the DOF spec on the ad's creative
     const postUrl = `${BASE_URL}/${adId}`;
     const creativeParam: Record<string, unknown> = {
       creative_id: creativeId,
       degrees_of_freedom_spec: dofSpec,
-      asset_feed_spec: {
-        audios: [{ type: "opted_out" }],
-      },
     };
+
     const body = {
       creative: JSON.stringify(creativeParam),
       access_token: accessToken,
@@ -828,6 +830,8 @@ export async function fixAdDofSpec(params: {
 
     console.log("[fixAdDofSpec] POST to AD:", postUrl);
     console.log("[fixAdDofSpec] creative_id:", creativeId, "specKey:", specKey);
+    console.log("[fixAdDofSpec] DOF spec keys:", Object.keys(dofSpec));
+    console.log("[fixAdDofSpec] creative_features_spec field count:", Object.keys((dofSpec as any).creative_features_spec || {}).length);
     const postResp = await axios.post(postUrl, body, { timeout: 60000 });
     console.log("[fixAdDofSpec] Response:", JSON.stringify(postResp.data));
 
@@ -850,7 +854,7 @@ export async function fixAdDofSpec(params: {
       error: metaMsg,
       debug: {
         url: `${BASE_URL}/${adId}`,
-        body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
+        body: { creative: { creative_id: creativeId, degrees_of_freedom_spec: dofSpec }, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
     };
