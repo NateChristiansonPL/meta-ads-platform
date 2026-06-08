@@ -922,8 +922,10 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
     destination_screenshot_spec: off,
   };
 
+  // NOTE: creative_sourcing_spec is NOT accepted by Meta's API when updating via
+  // the ad ID or creative ID — it throws "Unexpected key creative_sourcing_spec".
+  // Only creative_features_spec is writable.
   return {
     creative_features_spec,
-    creative_sourcing_spec,
   };
 }
