@@ -66,11 +66,12 @@ describe("QA Checklist — Add Music Detection Logic", () => {
   });
 });
 
-describe("QA Checklist — Fix Payload (In-Place Creative Update)", () => {
-  it("should build update payload with object_story_spec + DOF + multi_advertiser settings", () => {
-    // The in-place approach:
-    // 1. Fetch existing creative content (object_story_spec, url_tags)
-    // 2. POST to /{creativeId} with full payload (same pattern as updateAdCreative)
+describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => {
+  it("should build new creative payload with object_story_spec + corrected DOF (no creative_id)", () => {
+    // The three-step approach:
+    // 1. Fetch existing creative content
+    // 2. Create NEW creative with same content + corrected DOF
+    // 3. Update ad to point to new creative
     const existingCreative = {
       name: "Syllables - Static - Jun-26",
       object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
@@ -85,50 +86,62 @@ describe("QA Checklist — Fix Payload (In-Place Creative Update)", () => {
       },
     };
 
-    // Build update payload (matches updateAdCreative pattern in metaAdmin.ts)
-    const updatePayload: Record<string, unknown> = {
+    // Build new creative payload (Step 2)
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
       object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: dofSpec,
-      contextual_multi_ads: { enroll_status: "OPT_OUT" },
-      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
     if (existingCreative.url_tags) {
-      updatePayload.url_tags = existingCreative.url_tags;
+      newCreativePayload.url_tags = existingCreative.url_tags;
     }
 
-    // Verify object_story_spec is present (required for Meta to accept DOF changes)
-    expect(updatePayload.object_story_spec).toEqual(existingCreative.object_story_spec);
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    // Verify NO creative_id (it's a new creative, not referencing an existing one)
+    expect(newCreativePayload).not.toHaveProperty("creative_id");
+
+    // Verify object_story_spec is present
+    expect(newCreativePayload.object_story_spec).toEqual(existingCreative.object_story_spec);
 
     // Verify DOF spec is present with only creative_features_spec
-    expect(updatePayload.degrees_of_freedom_spec).toEqual(dofSpec);
-    expect((updatePayload.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
-
-    // Verify multi-advertiser settings are explicitly set to OFF
-    expect(updatePayload.contextual_multi_ads).toEqual({ enroll_status: "OPT_OUT" });
-    expect(updatePayload.multi_advertiser_eligibility).toBe("INELIGIBLE");
+    expect(newCreativePayload.degrees_of_freedom_spec).toEqual(dofSpec);
+    expect((newCreativePayload.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
 
     // Verify url_tags preserved
-    expect(updatePayload.url_tags).toBe("utm_source=meta");
+    expect(newCreativePayload.url_tags).toBe("utm_source=meta");
 
-    // Verify NO creative_id in payload (we're updating the creative itself, not referencing another)
-    expect(updatePayload).not.toHaveProperty("creative_id");
+    // Verify asset_feed_spec.audios is fixed
+    const afs = newCreativePayload.asset_feed_spec as any;
+    expect(afs.audios).toEqual([{ type: "opted_out" }]);
+
+    // Verify name is appended with "(DOF fixed)"
+    expect(newCreativePayload.name).toBe("Syllables - Static - Jun-26 (DOF fixed)");
   });
 
-  it("should POST directly to /{creativeId} endpoint (not ad ID)", () => {
-    const creativeId = "1248555654023534";
-    const BASE_URL = "https://graph.facebook.com/v22.0";
-    const updateUrl = `${BASE_URL}/${creativeId}`;
+  it("should reassign ad to new creative via creative_id JSON param (Step 3)", () => {
+    const adId = "120215890270510534";
+    const newCreativeId = "9999999999999";
 
-    // Verify the URL targets the creative directly
-    expect(updateUrl).toBe(`https://graph.facebook.com/v22.0/${creativeId}`);
-    // Should NOT contain /act_ (that's for creating new creatives)
-    expect(updateUrl).not.toContain("/act_");
-    // Should NOT contain /adcreatives (that's for creating new creatives)
-    expect(updateUrl).not.toContain("/adcreatives");
+    // Step 3: Update ad to point to new creative
+    const body = {
+      creative: JSON.stringify({ creative_id: newCreativeId }),
+      access_token: "test_token",
+    };
+
+    const parsed = JSON.parse(body.creative);
+    expect(parsed.creative_id).toBe(newCreativeId);
+    // No DOF spec in the ad update — it's already baked into the new creative
+    expect(parsed.degrees_of_freedom_spec).toBeUndefined();
   });
 
-  it("should handle creative without url_tags", () => {
+  it("should handle creative without url_tags or asset_feed_spec", () => {
     const existingCreative = {
       name: "Test Creative",
       object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
@@ -136,32 +149,35 @@ describe("QA Checklist — Fix Payload (In-Place Creative Update)", () => {
       asset_feed_spec: undefined as any,
     };
 
-    const updatePayload: Record<string, unknown> = {
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
       object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: { creative_features_spec: {} },
-      contextual_multi_ads: { enroll_status: "OPT_OUT" },
-      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
     if (existingCreative.url_tags) {
-      updatePayload.url_tags = existingCreative.url_tags;
+      newCreativePayload.url_tags = existingCreative.url_tags;
     }
 
-    expect(updatePayload).not.toHaveProperty("url_tags");
-    expect(updatePayload.object_story_spec).toBeDefined();
-    expect(updatePayload.contextual_multi_ads).toEqual({ enroll_status: "OPT_OUT" });
-    expect(updatePayload.multi_advertiser_eligibility).toBe("INELIGIBLE");
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    expect(newCreativePayload).not.toHaveProperty("url_tags");
+    expect(newCreativePayload).not.toHaveProperty("asset_feed_spec");
+    expect(newCreativePayload.object_story_spec).toBeDefined();
   });
 
-  it("should preserve ad metrics by not creating a new creative or reassigning", () => {
-    // The key insight: updating a creative in-place preserves all ad-level metrics
-    // (impressions, clicks, spend, learning phase) because the creative ID stays the same.
-    // Creating a new creative and reassigning would reset these.
-    const creativeId = "1248555654023534";
-    const adId = "120215890270510534";
+  it("should create new creative at /act_{accountId}/adcreatives endpoint", () => {
+    const accountId = "1234567890";
+    const createUrl = `https://graph.facebook.com/v22.0/act_${accountId}/adcreatives`;
 
-    // The fix does NOT touch the ad at all — only the creative
-    const updateUrl = `https://graph.facebook.com/v22.0/${creativeId}`;
-    expect(updateUrl).not.toContain(adId);
+    // Verify the URL format matches what Meta expects
+    expect(createUrl).toContain("/act_");
+    expect(createUrl).toContain("/adcreatives");
+    expect(createUrl).toContain(accountId);
   });
 });

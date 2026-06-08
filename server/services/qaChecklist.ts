@@ -794,21 +794,17 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fixes a single ad's DOF spec by creating a NEW creative with corrected settings
- * and reassigning the ad to use it.
+ * Fix an ad's DOF spec by creating a NEW creative with corrected degrees_of_freedom_spec
+ * and reassigning the ad to use the new creative.
  *
- * Three-step approach:
+ * Three-step approach (same pattern as the campaign builder's ad creation flow):
  * 1. Fetch the existing creative's object_story_spec + url_tags from Meta
- * 2. Create a NEW creative under the ad account with:
- *    - Same object_story_spec (stripped of read-only fields)
- *    - Corrected degrees_of_freedom_spec (all OPT_OUT)
- *    - contextual_multi_ads: { enroll_status: "OPT_OUT" } (keep multi-advertiser OFF)
- *    - multi_advertiser_eligibility: "INELIGIBLE" (keep multi-advertiser eligibility OFF)
+ * 2. Create a NEW creative under the ad account with the same content + corrected DOF spec
  * 3. Update the ad to point to the new creative ID
  *
- * We cannot update an existing creative in-place because Meta rejects POST to /{creativeId}
- * with object_story_spec fetched from GET (contains read-only fields). The only reliable
- * approach is creating a new creative with the correct settings baked in from creation.
+ * This avoids the shared-creative problem (multiple ads using the same creative)
+ * and ensures Meta actually persists the DOF changes (unlike the creative_id + DOF approach
+ * which Meta silently ignores).
  */
 export async function fixAdDofSpec(params: {
   adId: string;
@@ -861,18 +857,11 @@ export async function fixAdDofSpec(params: {
       };
     }
 
-    // Strip read-only fields that Meta returns on GET but rejects on write
-    const objectStorySpec = { ...existingCreative.object_story_spec };
-    delete objectStorySpec.type;
-    delete objectStorySpec.id;
-
     // Step 2: Create a NEW creative under the ad account with corrected DOF spec
     const newCreativePayload: Record<string, unknown> = {
       name: existingCreative.name ? `${existingCreative.name} (DOF fixed)` : `Creative ${creativeId} (DOF fixed)`,
-      object_story_spec: objectStorySpec,
+      object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: dofSpec,
-      contextual_multi_ads: { enroll_status: "OPT_OUT" },
-      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
     // Preserve url_tags if present
@@ -882,16 +871,16 @@ export async function fixAdDofSpec(params: {
 
     // Fix asset_feed_spec.audios to turn off "Add Music"
     if (existingCreative.asset_feed_spec) {
-      const afs = { ...existingCreative.asset_feed_spec };
-      afs.audios = [{ type: "opted_out" }];
-      newCreativePayload.asset_feed_spec = afs;
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
     }
 
     const createUrl = `${BASE_URL}/act_${accountId}/adcreatives`;
     console.log("[fixAdDofSpec] Step 2: Creating new creative at:", createUrl);
     console.log("[fixAdDofSpec] DOF spec keys:", Object.keys(dofSpec));
     console.log("[fixAdDofSpec] creative_features_spec field count:", Object.keys((dofSpec as any).creative_features_spec || {}).length);
-    console.log("[fixAdDofSpec] Payload keys:", Object.keys(newCreativePayload));
 
     const createResp = await axios.post(createUrl, {
       ...newCreativePayload,
@@ -923,7 +912,7 @@ export async function fixAdDofSpec(params: {
         url: updateAdUrl,
         body: {
           step1: "Fetched creative content",
-          step2: `Created new creative ${newCreativeId} with DOF OFF + multi_advertiser OFF`,
+          step2: `Created new creative ${newCreativeId} at ${createUrl}`,
           step3: `Updated ad ${adId} to use creative ${newCreativeId}`,
           newCreativeId,
         },
