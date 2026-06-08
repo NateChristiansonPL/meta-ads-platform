@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   TrendingUp,
   Users,
-  Users,
   UserCircle2,
   Wrench,
   Zap,
@@ -407,6 +406,16 @@ export default function AppShell({ children, title, subtitle, badge, dateNote, h
                 color="#ED135F"
                 path="/campaign-builder"
                 active={location === "/campaign-builder"}
+                running={false}
+              />
+              {/* QA Verification — standalone tool */}
+              <NavItem
+                icon={ShieldCheck}
+                label="QA Verification"
+                sub="Pre-launch checks"
+                color="#10B981"
+                path="/qa-verification"
+                active={location === "/qa-verification"}
                 running={false}
               />
               {/* Placeholder: Audience Saturation */}
