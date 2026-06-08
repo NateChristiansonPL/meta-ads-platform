@@ -289,6 +289,16 @@ async function runAdsQaWithViolations(
     const { format, isPac } = determineFormatAndPac(c);
     const specKey = getSpecKey(format, isPac);
     const dofViolations = compareDof(c.degrees_of_freedom_spec || {}, EXPECTED_SPECS[specKey]);
+
+    // Check asset_feed_spec.audios — "Add Music" is enabled if audios is missing,
+    // empty, or contains anything other than [{"type":"opted_out"}]
+    const audios = c?.asset_feed_spec?.audios;
+    if (audios && Array.isArray(audios)) {
+      const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
+      if (!hasOptedOut && audios.length > 0) {
+        dofViolations.push(`audio (asset_feed_spec.audios): ENABLED (expected opted_out)`);
+      }
+    }
     const advPlus = dofViolations.length
       ? "SETTINGS STILL ON:\n" + dofViolations.map(v => `\u2022 ${v}`).join("\n")
       : "N/A";
