@@ -968,3 +968,8 @@
 ## Unique Creative IDs Per Ad
 
 - [x] Ensure each ad gets a unique creative ID at creation time (prevent Meta deduplication by adding unique differentiator to each creative)
+
+## QA Checklist — Add Music Fix
+- [x] Fix structured violations builder to properly parse Add Music violation string (regex match)
+- [x] Update fixAdDofSpec to include asset_feed_spec.audios = [{type: "opted_out"}] in fix payload
+- [x] Add unit tests for Add Music violation detection and fix payload

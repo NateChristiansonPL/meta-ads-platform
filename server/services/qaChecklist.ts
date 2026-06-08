@@ -316,6 +316,11 @@ async function runAdsQaWithViolations(
         if (match2) {
           return { name: match2[1], currentValue: match2[2], expectedValue: "OPT_OUT" };
         }
+        // Parse Add Music violation: "audio (asset_feed_spec.audios): ENABLED (expected opted_out)"
+        const audioMatch = v.match(/^audio \(asset_feed_spec\.audios\):\s*(\S+)\s*\(expected\s+(\S+)\)/);
+        if (audioMatch) {
+          return { name: "Add Music (asset_feed_spec.audios)", currentValue: audioMatch[1], expectedValue: audioMatch[2] };
+        }
         // Fallback for "degrees_of_freedom_spec is MISSING entirely"
         return { name: v, currentValue: "MISSING", expectedValue: "OPT_OUT" };
       });
@@ -807,10 +812,14 @@ export async function fixAdDofSpec(params: {
 
   try {
     // POST to /{adId} with creative param containing the corrected DOF spec
+    // Also fix asset_feed_spec.audios to turn off "Add Music"
     const postUrl = `${BASE_URL}/${adId}`;
-    const creativeParam = {
+    const creativeParam: Record<string, unknown> = {
       creative_id: creativeId,
       degrees_of_freedom_spec: dofSpec,
+      asset_feed_spec: {
+        audios: [{ type: "opted_out" }],
+      },
     };
     const body = {
       creative: JSON.stringify(creativeParam),
