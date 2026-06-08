@@ -299,6 +299,19 @@ async function runAdsQaWithViolations(
         dofViolations.push(`audio (asset_feed_spec.audios): ENABLED (expected opted_out)`);
       }
     }
+
+    // Check contextual_multi_ads — should be OPT_OUT
+    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
+    if (multiAdsStatus && multiAdsStatus !== "OPT_OUT") {
+      dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
+    }
+
+    // Check multi_advertiser_eligibility — should be INELIGIBLE
+    const multiAdvEligibility = c?.multi_advertiser_eligibility;
+    if (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE") {
+      dofViolations.push(`multi_advertiser_eligibility: ${multiAdvEligibility} (expected INELIGIBLE)`);
+    }
+
     const advPlus = dofViolations.length
       ? "SETTINGS STILL ON:\n" + dofViolations.map(v => `\u2022 ${v}`).join("\n")
       : "N/A";

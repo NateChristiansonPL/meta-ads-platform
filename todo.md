@@ -987,3 +987,4 @@
 - [x] Add QA Verification NavItem under Tools section in AppShell.tsx sidebar (ShieldCheck icon)
 - [x] Include contextual_multi_ads: OPT_OUT and multi_advertiser_eligibility: INELIGIBLE in new creative payload during fix
 - [x] TypeScript compiles clean, all 87 tests pass
+- [x] Add multi-advertiser ads detection to QA scan (fetch contextual_multi_ads field, report as violation if OPT_IN)
