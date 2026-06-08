@@ -263,11 +263,22 @@ async function runAdsQaWithViolations(
 
   // Batch 3: fetch multi-advertiser fields separately (these may not be readable on all creatives)
   // Kept separate so that if Meta returns errors for these fields, it doesn't break the main DOF detection
-  const multiAdvFields = "contextual_multi_ads,multi_advertiser_eligibility";
+  const multiAdvFields = "contextual_multi_ads";
   const multiAdvBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${multiAdvFields}` }));
   const multiAdvResults = creativeIds.length ? await batchRequest(multiAdvBatch, accessToken).catch(() => []) : [];
   const multiAdvData: Record<string, any> = {};
-  creativeIds.forEach((id, i) => { multiAdvData[id] = multiAdvResults[i] || {}; });
+  // Track which creative IDs had a Batch 3 error so we can write "Unknown" instead of "Off"
+  const multiAdvError: Record<string, boolean> = {};
+  creativeIds.forEach((id, i) => {
+    const result = multiAdvResults[i];
+    if (!result || result.error) {
+      multiAdvData[id] = {};
+      multiAdvError[id] = true;
+    } else {
+      multiAdvData[id] = result;
+      multiAdvError[id] = false;
+    }
+  });
 
   // Build rows + structured violationss
   const rows: any[] = [];
@@ -309,13 +320,28 @@ async function runAdsQaWithViolations(
     }
 
     // Check contextual_multi_ads — should be OPT_OUT.
-    // Only flag when the field is explicitly returned by Meta and is NOT OPT_OUT.
-    // If the field is missing/undefined, Meta may not return it on read — don't flag.
+    // Three-state logic:
+    //   - enroll_status === "OPT_OUT"  → "Off" (clean)
+    //   - enroll_status !== "OPT_OUT" and field is present → "ON — VIOLATION"
+    //   - field missing AND no Batch 3 error → "Unknown" (Meta didn't return it; state indeterminate)
+    //   - Batch 3 returned an error for this creative → "Unknown" (couldn't read)
     // Use separate multi-advertiser data (from Batch 3) to avoid breaking main DOF detection
     const maData = creativeId ? (multiAdvData[creativeId] || {}) : {};
+    const maBatchError = creativeId ? (multiAdvError[creativeId] ?? true) : true;
     const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
-    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| multi_advertiser_eligibility:`, maData?.multi_advertiser_eligibility);
-    const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| batchError:`, maBatchError);
+    // A violation is only flagged when the field is explicitly returned and is not OPT_OUT
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    // Excel cell value: Off / ON — VIOLATION / Unknown
+    let multiAdsExcelValue: string;
+    if (multiAdsStatus === "OPT_OUT") {
+      multiAdsExcelValue = "Off";
+    } else if (multiAdsViolation) {
+      multiAdsExcelValue = `ON — VIOLATION (${multiAdsStatus})`;
+    } else {
+      // Field was not returned by Meta (either not present or batch error)
+      multiAdsExcelValue = "Unknown";
+    }
     if (multiAdsViolation) {
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
@@ -384,7 +410,7 @@ async function runAdsQaWithViolations(
       "Creative #": String(idx + 1),
       "Creative Status": c.status || "",
       "Partnership Ad Turned Off": checkPartnershipAd(c),
-      "Multi-Advertisers Unchecked": multiAdsViolation ? "ON — VIOLATION" : "Off",
+      "Multi-Advertisers Unchecked": multiAdsExcelValue,
       "Advantage Plus - Creative": advPlus,
       "Correct FB Page Selected": correctPage,
       "Headline": extractHeadline(c),

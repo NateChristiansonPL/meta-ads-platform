@@ -182,38 +182,52 @@ describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => 
   });
 });
 
+// Helper that mirrors the three-state Excel value logic in qaChecklist.ts
+function getMultiAdsExcelValue(maData: any, maBatchError: boolean): string {
+  const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+  const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+  if (multiAdsStatus === "OPT_OUT") return "Off";
+  if (multiAdsViolation) return `ON \u2014 VIOLATION (${multiAdsStatus})`;
+  return "Unknown";
+}
+
 describe("QA Checklist — Multi-Advertiser Detection", () => {
+  // --- Violation detection ---
   it("should detect contextual_multi_ads violation when enroll_status is OPT_IN", () => {
-    const c = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
-    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    expect(multiAdsStatus).toBe("OPT_IN");
-    expect(multiAdsStatus && multiAdsStatus !== "OPT_OUT").toBe(true);
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    expect(multiAdsViolation).toBe(true);
   });
   it("should NOT detect contextual_multi_ads violation when enroll_status is OPT_OUT", () => {
-    const c = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
-    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    expect(multiAdsStatus && multiAdsStatus !== "OPT_OUT").toBe(false);
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    expect(multiAdsViolation).toBe(false);
   });
   it("should NOT detect contextual_multi_ads violation when field is missing (Meta may not return it on read)", () => {
-    const c = {} as any;
-    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
-    const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    const maData = {} as any;
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
     expect(multiAdsViolation).toBeFalsy();
   });
-  it("should detect multi_advertiser_eligibility violation when ELIGIBLE", () => {
-    const c = { multi_advertiser_eligibility: "ELIGIBLE" } as any;
-    const multiAdvEligibility = c?.multi_advertiser_eligibility;
-    expect(multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE").toBe(true);
+
+  // --- Excel cell value (three-state) ---
+  it("Excel value: 'Off' when contextual_multi_ads.enroll_status is OPT_OUT", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
+    expect(getMultiAdsExcelValue(maData, false)).toBe("Off");
   });
-  it("should NOT detect multi_advertiser_eligibility violation when INELIGIBLE", () => {
-    const c = { multi_advertiser_eligibility: "INELIGIBLE" } as any;
-    const multiAdvEligibility = c?.multi_advertiser_eligibility;
-    expect(multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE").toBe(false);
+  it("Excel value: 'ON \u2014 VIOLATION (OPT_IN)' when contextual_multi_ads.enroll_status is OPT_IN", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
+    expect(getMultiAdsExcelValue(maData, false)).toBe("ON \u2014 VIOLATION (OPT_IN)");
   });
-  it("should NOT detect multi_advertiser_eligibility violation when field is missing", () => {
-    const c = {} as any;
-    const multiAdvEligibility = c?.multi_advertiser_eligibility;
-    expect(multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE").toBeFalsy();
+  it("Excel value: 'Unknown' when contextual_multi_ads field is missing (no batch error)", () => {
+    const maData = {} as any;
+    expect(getMultiAdsExcelValue(maData, false)).toBe("Unknown");
+  });
+  it("Excel value: 'Unknown' when Batch 3 returned an error for this creative", () => {
+    const maData = {} as any; // error case — empty data
+    expect(getMultiAdsExcelValue(maData, true)).toBe("Unknown");
   });
 });
 
