@@ -979,3 +979,11 @@
 - [x] Previous approach (POST creative_id + DOF to ad ID) returned success but Meta silently ignored DOF changes
 - [x] New approach creates a fresh creative at /act_{accountId}/adcreatives with corrected degrees_of_freedom_spec baked in
 - [x] Update tests to match new three-step approach (87 tests pass)
+
+## Standalone QA Verification Tool (Under Tools Nav)
+- [x] Create standalone QA Verification page component with Business Manager selector at top
+- [x] Add Ad Account selector (cascading from BM selection)
+- [x] Add Campaign > Ad Set > Ads cascading selectors (same pattern as existing QA tab)
+- [x] Include all QA results display + Fix button functionality from existing QA tab
+- [x] Add route /qa-verification and sidebar nav entry under TOOLS section
+- [x] Keep existing Campaign Builder QA tab for backward compatibility

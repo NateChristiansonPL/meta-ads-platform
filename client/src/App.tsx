@@ -22,6 +22,7 @@ import AdminCreativeDecay from "./pages/admin/AdminCreativeDecay";
 import AdminCreativePerformanceSync from "./pages/admin/AdminCreativePerformanceSync";
 import AdminUserProfile from "./pages/admin/AdminUserProfile";
 import KnowledgeBase from "./pages/KnowledgeBase";
+import QaVerification from "./pages/QaVerification";
 import { useAuth } from "./_core/hooks/useAuth";
 import { useEffect } from "react";
 
@@ -146,6 +147,7 @@ function Router() {
           {/* Regular authenticated routes */}
           <Route path="/manus-ai" component={ManusAI} />
           <Route path="/campaign-builder" component={CampaignBuilderAdmin} />
+          <Route path="/qa-verification" component={QaVerification} />
           {/* Keep old non-admin builder accessible at legacy path */}
           <Route path="/campaign-builder-legacy" component={CampaignBuilder} />
           <Route path="/knowledge" component={KnowledgeBase} />
