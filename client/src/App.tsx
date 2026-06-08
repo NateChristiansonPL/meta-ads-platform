@@ -22,6 +22,7 @@ import AdminCreativeDecay from "./pages/admin/AdminCreativeDecay";
 import AdminCreativePerformanceSync from "./pages/admin/AdminCreativePerformanceSync";
 import AdminUserProfile from "./pages/admin/AdminUserProfile";
 import KnowledgeBase from "./pages/KnowledgeBase";
+import QaVerification from "./pages/QaVerification";
 import { useAuth } from "./_core/hooks/useAuth";
 import { useEffect } from "react";
 

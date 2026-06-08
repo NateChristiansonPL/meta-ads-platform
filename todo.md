@@ -979,3 +979,11 @@
 - [x] Previous approach (POST creative_id + DOF to ad ID) returned success but Meta silently ignored DOF changes
 - [x] New approach creates a fresh creative at /act_{accountId}/adcreatives with corrected degrees_of_freedom_spec baked in
 - [x] Update tests to match new three-step approach (87 tests pass)
+
+## QA Verification — Standalone Page
+
+- [x] Create standalone QaVerification.tsx page (938 lines) with BM token selector → Ad Account → Campaign → Ad Set → Ads cascading selectors
+- [x] Add route /qa-verification to App.tsx
+- [x] Add QA Verification NavItem under Tools section in AppShell.tsx sidebar (ShieldCheck icon)
+- [x] Include contextual_multi_ads: OPT_OUT and multi_advertiser_eligibility: INELIGIBLE in new creative payload during fix
+- [x] TypeScript compiles clean, all 87 tests pass

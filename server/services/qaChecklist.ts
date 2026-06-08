@@ -862,6 +862,8 @@ export async function fixAdDofSpec(params: {
       name: existingCreative.name ? `${existingCreative.name} (DOF fixed)` : `Creative ${creativeId} (DOF fixed)`,
       object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: dofSpec,
+      contextual_multi_ads: { enroll_status: "OPT_OUT" },
+      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
     // Preserve url_tags if present
