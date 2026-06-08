@@ -255,13 +255,21 @@ async function runAdsQaWithViolations(
   ));
 
   // Batch 2: fetch all creatives
-  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,contextual_multi_ads,multi_advertiser_eligibility";
+  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id";
   const creativeBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${creativeFields}` }));
   const creativeResults = creativeIds.length ? await batchRequest(creativeBatch, accessToken) : [];
   const creativesData: Record<string, any> = {};
   creativeIds.forEach((id, i) => { creativesData[id] = creativeResults[i]; });
 
-  // Build rows + structured violations
+  // Batch 3: fetch multi-advertiser fields separately (these may not be readable on all creatives)
+  // Kept separate so that if Meta returns errors for these fields, it doesn't break the main DOF detection
+  const multiAdvFields = "contextual_multi_ads,multi_advertiser_eligibility";
+  const multiAdvBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${multiAdvFields}` }));
+  const multiAdvResults = creativeIds.length ? await batchRequest(multiAdvBatch, accessToken).catch(() => []) : [];
+  const multiAdvData: Record<string, any> = {};
+  creativeIds.forEach((id, i) => { multiAdvData[id] = multiAdvResults[i] || {}; });
+
+  // Build rows + structured violationss
   const rows: any[] = [];
   const violations: QaViolation[] = [];
   const cleanAccountId = adAccountId.replace(/^act_/, "");
@@ -389,7 +397,7 @@ async function runAdsQaWithViolations(
       "CTA - Type": cta.type,
       "CTA - Link Caption": cta.caption,
       "Landing Page": landingPage,
-      "UTMs": extractUtms(landingPage),
+      "Multi-Advertisers Unchecked": multiAdsViolation ? "ON — VIOLATION" : "Off",
       "Permalink": extractPermalink(c),
       "Applied Pixel(s)": extractPixel(ad.tracking_specs || []),
     });
