@@ -17,8 +17,11 @@ import {
   RefreshCw,
   Shield,
   ShieldCheck,
+<<<<<<< Updated upstream
   ShieldCheck,
   ShieldCheck,
+=======
+>>>>>>> Stashed changes
   TrendingUp,
   Users,
   Users,
