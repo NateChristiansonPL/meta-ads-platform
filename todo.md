@@ -973,3 +973,9 @@
 - [x] Fix structured violations builder to properly parse Add Music violation string (regex match)
 - [x] Update fixAdDofSpec to include asset_feed_spec.audios = [{type: "opted_out"}] in fix payload
 - [x] Add unit tests for Add Music violation detection and fix payload
+
+## QA Checklist — Fix Actually Persisting DOF Changes
+- [x] Rewrite fixAdDofSpec to use three-step approach: fetch existing creative → create NEW creative with corrected DOF → reassign ad to new creative
+- [x] Previous approach (POST creative_id + DOF to ad ID) returned success but Meta silently ignored DOF changes
+- [x] New approach creates a fresh creative at /act_{accountId}/adcreatives with corrected degrees_of_freedom_spec baked in
+- [x] Update tests to match new three-step approach (87 tests pass)

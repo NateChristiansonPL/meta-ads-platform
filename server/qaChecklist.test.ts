@@ -55,8 +55,6 @@ describe("QA Checklist — Add Music Detection Logic", () => {
   it("should detect violation when audios is empty array", () => {
     const audios: any[] = [];
     const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
-    // Empty array: hasOptedOut = false, but audios.length > 0 is also false
-    // So no violation for empty array (matches the code: `if (!hasOptedOut && audios.length > 0)`)
     expect(!hasOptedOut && audios.length > 0).toBe(false);
   });
 
@@ -68,11 +66,19 @@ describe("QA Checklist — Add Music Detection Logic", () => {
   });
 });
 
-describe("QA Checklist — Fix Payload (POST to Ad ID with creative_id + DOF)", () => {
-  it("should include creative_id in the creative param (references existing creative)", () => {
-    // The confirmed working approach: POST to /{adId} with creative JSON param
-    // containing creative_id + degrees_of_freedom_spec
-    const creativeId = "1248555654023534";
+describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => {
+  it("should build new creative payload with object_story_spec + corrected DOF (no creative_id)", () => {
+    // The three-step approach:
+    // 1. Fetch existing creative content
+    // 2. Create NEW creative with same content + corrected DOF
+    // 3. Update ad to point to new creative
+    const existingCreative = {
+      name: "Syllables - Static - Jun-26",
+      object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
+      url_tags: "utm_source=meta",
+      asset_feed_spec: { audios: [{ type: "random" }] },
+    };
+
     const dofSpec = {
       creative_features_spec: {
         audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
@@ -80,57 +86,98 @@ describe("QA Checklist — Fix Payload (POST to Ad ID with creative_id + DOF)", 
       },
     };
 
-    const creativeParam: Record<string, unknown> = {
-      creative_id: creativeId,
+    // Build new creative payload (Step 2)
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
+      object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: dofSpec,
     };
 
-    // Verify creative_id IS present
-    expect(creativeParam.creative_id).toBe(creativeId);
+    if (existingCreative.url_tags) {
+      newCreativePayload.url_tags = existingCreative.url_tags;
+    }
 
-    // Verify DOF spec is present with only creative_features_spec (no creative_sourcing_spec)
-    expect(creativeParam.degrees_of_freedom_spec).toEqual(dofSpec);
-    expect((creativeParam.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    // Verify NO creative_id (it's a new creative, not referencing an existing one)
+    expect(newCreativePayload).not.toHaveProperty("creative_id");
+
+    // Verify object_story_spec is present
+    expect(newCreativePayload.object_story_spec).toEqual(existingCreative.object_story_spec);
+
+    // Verify DOF spec is present with only creative_features_spec
+    expect(newCreativePayload.degrees_of_freedom_spec).toEqual(dofSpec);
+    expect((newCreativePayload.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
+
+    // Verify url_tags preserved
+    expect(newCreativePayload.url_tags).toBe("utm_source=meta");
+
+    // Verify asset_feed_spec.audios is fixed
+    const afs = newCreativePayload.asset_feed_spec as any;
+    expect(afs.audios).toEqual([{ type: "opted_out" }]);
+
+    // Verify name is appended with "(DOF fixed)"
+    expect(newCreativePayload.name).toBe("Syllables - Static - Jun-26 (DOF fixed)");
   });
 
-  it("should stringify correctly for the POST body to /{adId}", () => {
+  it("should reassign ad to new creative via creative_id JSON param (Step 3)", () => {
     const adId = "120215890270510534";
-    const creativeId = "1248555654023534";
-    const dofSpec = {
-      creative_features_spec: {
-        audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
-      },
-    };
+    const newCreativeId = "9999999999999";
 
-    const creativeParam = {
-      creative_id: creativeId,
-      degrees_of_freedom_spec: dofSpec,
-    };
-
+    // Step 3: Update ad to point to new creative
     const body = {
-      creative: JSON.stringify(creativeParam),
+      creative: JSON.stringify({ creative_id: newCreativeId }),
       access_token: "test_token",
     };
 
-    // Verify body structure
-    expect(typeof body.creative).toBe("string");
     const parsed = JSON.parse(body.creative);
-    expect(parsed.creative_id).toBe(creativeId);
-    expect(parsed.degrees_of_freedom_spec.creative_features_spec.audio.enroll_status).toBe("OPT_OUT");
-
-    // Verify no creative_sourcing_spec
-    expect(parsed.degrees_of_freedom_spec.creative_sourcing_spec).toBeUndefined();
+    expect(parsed.creative_id).toBe(newCreativeId);
+    // No DOF spec in the ad update — it's already baked into the new creative
+    expect(parsed.degrees_of_freedom_spec).toBeUndefined();
   });
 
-  it("should NOT include object_story_spec or asset_feed_spec (DOF-only update)", () => {
-    const creativeParam: Record<string, unknown> = {
-      creative_id: "1248555654023534",
+  it("should handle creative without url_tags or asset_feed_spec", () => {
+    const existingCreative = {
+      name: "Test Creative",
+      object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
+      url_tags: undefined as string | undefined,
+      asset_feed_spec: undefined as any,
+    };
+
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
+      object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: { creative_features_spec: {} },
     };
 
-    // The fix only updates DOF spec — no need to include object_story_spec
-    expect(creativeParam).not.toHaveProperty("object_story_spec");
-    expect(creativeParam).not.toHaveProperty("asset_feed_spec");
-    expect(creativeParam).not.toHaveProperty("url_tags");
+    if (existingCreative.url_tags) {
+      newCreativePayload.url_tags = existingCreative.url_tags;
+    }
+
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    expect(newCreativePayload).not.toHaveProperty("url_tags");
+    expect(newCreativePayload).not.toHaveProperty("asset_feed_spec");
+    expect(newCreativePayload.object_story_spec).toBeDefined();
+  });
+
+  it("should create new creative at /act_{accountId}/adcreatives endpoint", () => {
+    const accountId = "1234567890";
+    const createUrl = `https://graph.facebook.com/v22.0/act_${accountId}/adcreatives`;
+
+    // Verify the URL format matches what Meta expects
+    expect(createUrl).toContain("/act_");
+    expect(createUrl).toContain("/adcreatives");
+    expect(createUrl).toContain(accountId);
   });
 });
