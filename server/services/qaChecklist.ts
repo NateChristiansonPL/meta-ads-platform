@@ -255,7 +255,7 @@ async function runAdsQaWithViolations(
   ));
 
   // Batch 2: fetch all creatives
-  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id";
+  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,contextual_multi_ads,multi_advertiser_eligibility";
   const creativeBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${creativeFields}` }));
   const creativeResults = creativeIds.length ? await batchRequest(creativeBatch, accessToken) : [];
   const creativesData: Record<string, any> = {};
@@ -300,13 +300,27 @@ async function runAdsQaWithViolations(
       }
     }
 
+<<<<<<< Updated upstream
     // Check contextual_multi_ads — should be OPT_OUT
     const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
     if (multiAdsStatus && multiAdsStatus !== "OPT_OUT") {
+=======
+    // Check contextual_multi_ads — should be OPT_OUT.
+    // Only flag when the field is explicitly returned by Meta and is NOT OPT_OUT.
+    // If the field is missing/undefined, Meta may not return it on read — don't flag.
+    const multiAdsStatus = c?.contextual_multi_ads?.enroll_status;
+    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(c?.contextual_multi_ads), `| multi_advertiser_eligibility:`, c?.multi_advertiser_eligibility);
+    const multiAdsViolation = multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    if (multiAdsViolation) {
+>>>>>>> Stashed changes
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
 
     // Check multi_advertiser_eligibility — should be INELIGIBLE
+<<<<<<< Updated upstream
+=======
+    // Only flag when the field is explicitly present and not INELIGIBLE
+>>>>>>> Stashed changes
     const multiAdvEligibility = c?.multi_advertiser_eligibility;
     if (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE") {
       dofViolations.push(`multi_advertiser_eligibility: ${multiAdvEligibility} (expected INELIGIBLE)`);
@@ -334,6 +348,11 @@ async function runAdsQaWithViolations(
         if (audioMatch) {
           return { name: "Add Music (asset_feed_spec.audios)", currentValue: audioMatch[1], expectedValue: audioMatch[2] };
         }
+        // Parse multi_advertiser_eligibility: "multi_advertiser_eligibility: ELIGIBLE (expected INELIGIBLE)"
+        const multiAdvMatch = v.match(/^multi_advertiser_eligibility:\s*(\S+)\s*\(expected\s+(\S+)\)/);
+        if (multiAdvMatch) {
+          return { name: "Multi-Advertiser Eligibility", currentValue: multiAdvMatch[1], expectedValue: multiAdvMatch[2] };
+        }
         // Fallback for "degrees_of_freedom_spec is MISSING entirely"
         return { name: v, currentValue: "MISSING", expectedValue: "OPT_OUT" };
       });
@@ -359,7 +378,6 @@ async function runAdsQaWithViolations(
       const sep = landingPage.includes("?") ? "&" : "?";
       landingPage = `${landingPage}${sep}${urlTags}`;
     }
-
     const formatDisplay = format === "static" ? "Static Image" : format.charAt(0).toUpperCase() + format.slice(1);
     const cta = extractCta(c);
 
@@ -371,7 +389,11 @@ async function runAdsQaWithViolations(
       "Creative #": String(idx + 1),
       "Creative Status": c.status || "",
       "Partnership Ad Turned Off": checkPartnershipAd(c),
+<<<<<<< Updated upstream
       "Multi-Advertisers Unchecked": (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off",
+=======
+      "Multi-Advertisers Unchecked": (multiAdsViolation || (multiAdvEligibility && multiAdvEligibility !== "INELIGIBLE")) ? "ON — VIOLATION" : "Off",
+>>>>>>> Stashed changes
       "Advantage Plus - Creative": advPlus,
       "Correct FB Page Selected": correctPage,
       "Headline": extractHeadline(c),
