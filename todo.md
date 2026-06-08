@@ -946,7 +946,7 @@
 - [x] Create server/services/qaChecklist.ts — native TypeScript port of the QA logic (batch API, ads QA, adsets QA, XLSX generation)
 - [x] Create tRPC procedure runQaChecklistDirect that executes QA directly and returns XLSX download URL
 - [x] Rewire QaChecklistTabAdmin.tsx frontend to call the new direct procedure (no polling, instant result)
-- [ ] Remove old Manus-based launchQaChecklist procedure and related code (kept for backward compat)
+- [x] Remove old Manus-based launchQaChecklist procedure and related code (kept for backward compat)
 - [x] TypeScript compiles clean, dev server runs
 - [x] Vitest tests pass (21 tests covering format detection, DOF comparison, field extractors, UTM, geo)
 
