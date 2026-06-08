@@ -371,7 +371,7 @@ async function runAdsQaWithViolations(
       "Creative #": String(idx + 1),
       "Creative Status": c.status || "",
       "Partnership Ad Turned Off": checkPartnershipAd(c),
-      "Multi-Advertisers Unchecked": "Off",
+      "Multi-Advertisers Unchecked": (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off",
       "Advantage Plus - Creative": advPlus,
       "Correct FB Page Selected": correctPage,
       "Headline": extractHeadline(c),

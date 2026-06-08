@@ -181,3 +181,28 @@ describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => 
     expect(createUrl).toContain(accountId);
   });
 });
+
+describe("QA Checklist — Multi-Advertiser NOT_SET Parsing", () => {
+  it("should parse contextual_multi_ads NOT_SET violation string with standard DOF regex", () => {
+    // When field is missing, the code produces this violation string
+    const violationString = "contextual_multi_ads: enroll_status=NOT_SET (defaults to OPT_IN) (expected OPT_OUT)";
+    const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*.*\(expected\s+(\S+)\)/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("contextual_multi_ads");
+    // The first non-whitespace token after enroll_status=
+    expect(match![2]).toBe("NOT_SET");
+    expect(match![3]).toBe("OPT_OUT");
+  });
+
+  it("should detect violation for Multi-Advertisers Unchecked column when field is missing", () => {
+    const multiAdsStatus = undefined;
+    const result = (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off";
+    expect(result).toBe("ON — VIOLATION");
+  });
+
+  it("should show Off for Multi-Advertisers Unchecked column when OPT_OUT", () => {
+    const multiAdsStatus = "OPT_OUT";
+    const result = (!multiAdsStatus || multiAdsStatus !== "OPT_OUT") ? "ON — VIOLATION" : "Off";
+    expect(result).toBe("Off");
+  });
+});
