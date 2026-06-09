@@ -1092,30 +1092,27 @@ export async function fixMultiAdvertiserOnly(params: {
     const url = `${BASE_URL}/${creativeId}`;
     console.log("[fixMultiAdv] Updating contextual_multi_ads on creative", creativeId);
     
-    // First, fetch the current creative with all fields
-    console.log("[fixMultiAdv] Fetching current creative...");
+    // First, fetch the current creative with status field explicitly requested
+    console.log("[fixMultiAdv] Fetching current creative status...");
     const getResp = await axios.get(url, {
-      params: { access_token: accessToken },
+      params: { access_token: accessToken, fields: "id,name,status" },
       timeout: 30000,
     });
     const currentCreative = getResp.data;
-    console.log("[fixMultiAdv] Current contextual_multi_ads:", JSON.stringify(currentCreative?.contextual_multi_ads));
+    console.log("[fixMultiAdv] Fetched creative:", JSON.stringify(currentCreative));
 
-    // Build the update payload - need to include the full degrees_of_freedom_spec
-    // and update contextual_multi_ads within it
+    // Meta requires name, status, or associated_adlabels when updating a creative.
+    // Use the fetched name (which is unique per creative) to satisfy this requirement.
+    // Do NOT use the ad name passed in — it may not match the creative's own name.
     const payload: any = {
       access_token: accessToken,
-    };
-    
-    // Include status to satisfy Meta's requirement for at least one of: name, status, or associated_adlabels
-    if (currentCreative?.status) {
-      payload.status = currentCreative.status;
-    }
-    
-    // Update contextual_multi_ads - set enroll_status to OPT_OUT to disable multi-advertiser
-    payload.contextual_multi_ads = { 
-      action_metadata: { type: "MANUAL" },
-      enroll_status: "OPT_OUT" 
+      // Use the creative's own name (guaranteed unique) to satisfy Meta's requirement
+      name: currentCreative?.name,
+      // Update contextual_multi_ads - set enroll_status to OPT_OUT to disable multi-advertiser
+      contextual_multi_ads: { 
+        action_metadata: { type: "MANUAL" },
+        enroll_status: "OPT_OUT" 
+      },
     };
     
     console.log("[fixMultiAdv] Sending payload:", JSON.stringify(payload));
