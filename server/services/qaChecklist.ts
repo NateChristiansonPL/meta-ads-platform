@@ -1092,8 +1092,17 @@ export async function fixMultiAdvertiserOnly(params: {
     const url = `${BASE_URL}/${creativeId}`;
     console.log("[fixMultiAdv] Updating contextual_multi_ads on creative", creativeId);
     
+    // First, fetch the current creative to get its status
+    console.log("[fixMultiAdv] Fetching current creative status...");
+    const getResp = await axios.get(url, {
+      params: { access_token: accessToken, fields: "status" },
+      timeout: 30000,
+    });
+    const currentStatus = getResp.data?.status;
+    console.log("[fixMultiAdv] Current status:", currentStatus);
+
     // contextual_multi_ads must include action_metadata with type MANUAL when setting to OPT_OUT
-    // Do NOT include the creative name - it can cause "name already taken" errors if the name is used elsewhere
+    // Include the current status to satisfy Meta's requirement for at least one of: name, status, or associated_adlabels
     const payload: any = {
       contextual_multi_ads: { 
         action_metadata: { type: "MANUAL" },
@@ -1101,6 +1110,11 @@ export async function fixMultiAdvertiserOnly(params: {
       },
       access_token: accessToken,
     };
+    
+    // Include status if we have it (even if unchanged, it satisfies the requirement)
+    if (currentStatus) {
+      payload.status = currentStatus;
+    }
     
     const resp = await axios.post(url, payload, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
