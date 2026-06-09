@@ -1101,7 +1101,7 @@ export async function fixMultiAdvertiserOnly(params: {
       creative_id: creativeId,
       contextual_multi_ads: {
         enroll_status: "OPT_OUT",
-        action_metadata: { type: "DEFAULT_OFF" },
+        action_metadata: { type: "STICKY_OPT_OUT" },
       },
     });
 
