@@ -1353,7 +1353,12 @@ export const metaAdminRouter = router({
         sourcePostId ? 'source_post' : adType
       );
       // ── contextual_multi_ads: always OPT_OUT (required by Meta spec) ─────────
-      const contextualMultiAds = { enroll_status: "OPT_OUT" };
+      // STICKY_OPT_OUT is the correct persistent user-set opt-out value.
+      // DEFAULT_OFF and MANUAL are invalid enum values for contextual_multi_ads.
+      const contextualMultiAds = {
+        enroll_status: "OPT_OUT",
+        action_metadata: { type: "STICKY_OPT_OUT" },
+      };
 
       // ── Pixel tracking ─────────────────────────────────────────────────────
       const trackingSpec = pixelId
