@@ -1084,16 +1084,26 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
 export async function fixMultiAdvertiserOnly(params: {
   creativeId: string;
   accessToken: string;
+  creativeName?: string;
 }): Promise<{ success: boolean; error?: string; debug?: unknown }> {
-  const { creativeId, accessToken } = params;
+  const { creativeId, accessToken, creativeName } = params;
 
   try {
     const url = `${BASE_URL}/${creativeId}`;
     console.log("[fixMultiAdv] Updating contextual_multi_ads on creative", creativeId);
-    const resp = await axios.post(url, {
+    
+    // Meta requires at least one of: name, status, or associated_adlabels when updating a creative
+    // Include the creative name to satisfy this requirement
+    const payload: any = {
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
       access_token: accessToken,
-    }, { timeout: 30000 });
+    };
+    
+    if (creativeName) {
+      payload.name = creativeName;
+    }
+    
+    const resp = await axios.post(url, payload, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
     return { success: true, debug: { url, response: resp.data } };

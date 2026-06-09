@@ -347,6 +347,7 @@ function QaVerificationContent() {
     try {
       await fixMultiAdv.mutateAsync({
         creativeId: violation.creativeId,
+        creativeName: violation.adName,
         tokenId: tokenId ?? undefined,
       });
       setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
