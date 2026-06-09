@@ -279,6 +279,7 @@ export default function QaChecklistTab({ settings }: Props) {
     setFixingMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
     try {
       await fixMultiAdv.mutateAsync({
+        adId: violation.adId,
         creativeId: violation.creativeId,
         tokenId: settings.tokenId ?? undefined,
       });

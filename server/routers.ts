@@ -1039,6 +1039,7 @@ export const appRouter = router({
      */
     fixMultiAdvertiserViolation: protectedProcedure
       .input(z.object({
+        adId: z.string().min(1),
         creativeId: z.string().min(1),
         tokenId: z.number().int().positive().optional(),
       }))
@@ -1060,6 +1061,7 @@ export const appRouter = router({
         }
 
         const result = await fixMultiAdvertiserOnly({
+          adId: input.adId,
           creativeId: input.creativeId,
           accessToken: metaAccessToken,
         });

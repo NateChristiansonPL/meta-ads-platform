@@ -1082,48 +1082,35 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
  * on the existing creative ID, preserving the creative ID for all linked ads.
  */
 export async function fixMultiAdvertiserOnly(params: {
+  adId: string;
   creativeId: string;
   accessToken: string;
-  creativeName?: string;
 }): Promise<{ success: boolean; error?: string; debug?: unknown }> {
-  const { creativeId, accessToken, creativeName } = params;
+  const { adId, creativeId, accessToken } = params;
 
   try {
-    const url = `${BASE_URL}/${creativeId}`;
-    console.log("[fixMultiAdv] Updating contextual_multi_ads on creative", creativeId);
-    
-    // Fetch the full creative to get all fields needed for the update
-    console.log("[fixMultiAdv] Fetching full creative...");
-    const getResp = await axios.get(url, {
-      params: {
-        access_token: accessToken,
-        fields: "id,name,degrees_of_freedom_spec,contextual_multi_ads,object_story_spec,asset_feed_spec",
-      },
-      timeout: 30000,
-    });
-    const currentCreative = getResp.data;
-    console.log("[fixMultiAdv] Current contextual_multi_ads:", JSON.stringify(currentCreative?.contextual_multi_ads));
+    // Per Meta API docs: update multi_advertiser_eligibility_status via the AD object,
+    // not the creative directly. POST to /{ad_id} with creative as a nested object.
+    const adUrl = `${BASE_URL}/${adId}`;
+    console.log("[fixMultiAdv] Updating multi_advertiser_eligibility_status via ad", adId, "creative", creativeId);
 
-    // Send ONLY name + contextual_multi_ads.
-    // Do NOT include degrees_of_freedom_spec or asset_feed_spec — sending those back
-    // causes Meta to reject or ignore the update for placement-customized creatives.
-    // The creative name (fetched directly from Meta) satisfies the "must specify name/status" requirement.
     const payload: any = {
       access_token: accessToken,
-      contextual_multi_ads: {
-        enroll_status: "OPT_OUT",
+      creative: {
+        creative_id: creativeId,
+        multi_advertiser_eligibility_status: "INELIGIBLE",
       },
-      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
-    console.log("[fixMultiAdv] Sending payload:", JSON.stringify({ name: payload.name, contextual_multi_ads: payload.contextual_multi_ads }));
+    console.log("[fixMultiAdv] Sending payload:", JSON.stringify({ creative: payload.creative }));
 
-    const resp = await axios.post(url, payload, { timeout: 30000 });
+    const resp = await axios.post(adUrl, payload, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
-    // Verify the update by re-fetching the creative
-    const verifyResp = await axios.get(url, {
-      params: { access_token: accessToken, fields: "id,name,contextual_multi_ads" },
+    // Verify by re-fetching the creative's contextual_multi_ads
+    const creativeUrl = `${BASE_URL}/${creativeId}`;
+    const verifyResp = await axios.get(creativeUrl, {
+      params: { access_token: accessToken, fields: "id,contextual_multi_ads" },
       timeout: 30000,
     });
     console.log("[fixMultiAdv] Verified contextual_multi_ads after update:", JSON.stringify(verifyResp.data?.contextual_multi_ads));
@@ -1131,7 +1118,7 @@ export async function fixMultiAdvertiserOnly(params: {
     return {
       success: true,
       debug: {
-        sentPayload: { name: payload.name, contextual_multi_ads: payload.contextual_multi_ads },
+        sentPayload: payload.creative,
         metaResponse: resp.data,
         verifiedAfter: verifyResp.data?.contextual_multi_ads,
       }

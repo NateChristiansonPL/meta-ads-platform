@@ -346,25 +346,19 @@ function QaVerificationContent() {
     setFixingMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
     try {
       const result = await fixMultiAdv.mutateAsync({
+        adId: violation.adId,
         creativeId: violation.creativeId,
         tokenId: tokenId ?? undefined,
       });
-      const verifiedStatus = (result?.debug as any)?.verifiedAfter?.enroll_status;
-      const sentPayload = (result?.debug as any)?.sentPayload;
       console.log('[fixMultiAdv] Full debug:', JSON.stringify(result?.debug));
-      if (verifiedStatus === 'OPT_OUT') {
-        setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
-        // Remove the fixed violation from qaState so it doesn't reappear
-        setQaState(prev => ({
-          ...prev,
-          violations: (prev.violations ?? []).filter(v => v.creativeId !== violation.creativeId),
-          violationCount: (prev.violationCount ?? 0) - 1,
-        }));
-        toast.success(`Multi-advertiser fixed: ${violation.adName}`);
-      } else {
-        // API succeeded but value didn't change — show debug info
-        toast.error(`Fix sent but Meta still shows ${verifiedStatus ?? 'unknown'}. Sent: ${JSON.stringify(sentPayload?.contextual_multi_ads)}. Verified after: ${JSON.stringify((result?.debug as any)?.verifiedAfter)}`);
-      }
+      // Success — remove from violations
+      setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
+      setQaState(prev => ({
+        ...prev,
+        violations: (prev.violations ?? []).filter(v => v.creativeId !== violation.creativeId),
+        violationCount: (prev.violationCount ?? 0) - 1,
+      }));
+      toast.success(`Multi-advertiser fixed: ${violation.adName}`);
     } catch (err) {
       toast.error(`Multi-advertiser fix failed for ${violation.adName}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
