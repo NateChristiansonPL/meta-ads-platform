@@ -1089,22 +1089,23 @@ export async function fixMultiAdvertiserOnly(params: {
   const { adId, creativeId, accessToken } = params;
 
   try {
-    // Per Meta API docs: update multi_advertiser_eligibility_status via the AD object,
-    // not the creative directly. POST to /{ad_id} with creative as a nested object.
+    // Per Meta API docs: update multi_advertiser_eligibility_status via the AD object.
+    // Must use form-encoded body with bracket notation:
+    // creative[creative_id]=X&creative[multi_advertiser_eligibility_status]=OPT_OUT
     const adUrl = `${BASE_URL}/${adId}`;
     console.log("[fixMultiAdv] Updating multi_advertiser_eligibility_status via ad", adId, "creative", creativeId);
 
-    const payload: any = {
-      access_token: accessToken,
-      creative: {
-        creative_id: creativeId,
-        multi_advertiser_eligibility_status: "INELIGIBLE",
-      },
-    };
+    const params = new URLSearchParams();
+    params.append("access_token", accessToken);
+    params.append("creative[creative_id]", creativeId);
+    params.append("creative[multi_advertiser_eligibility_status]", "OPT_OUT");
 
-    console.log("[fixMultiAdv] Sending payload:", JSON.stringify({ creative: payload.creative }));
+    console.log("[fixMultiAdv] Sending form body:", params.toString().replace(accessToken, "***"));
 
-    const resp = await axios.post(adUrl, payload, { timeout: 30000 });
+    const resp = await axios.post(adUrl, params.toString(), {
+      timeout: 30000,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
     // Verify by re-fetching the creative's contextual_multi_ads
@@ -1118,7 +1119,7 @@ export async function fixMultiAdvertiserOnly(params: {
     return {
       success: true,
       debug: {
-        sentPayload: payload.creative,
+        sentPayload: `creative[creative_id]=${creativeId}&creative[multi_advertiser_eligibility_status]=OPT_OUT`,
         metaResponse: resp.data,
         verifiedAfter: verifyResp.data?.contextual_multi_ads,
       }
