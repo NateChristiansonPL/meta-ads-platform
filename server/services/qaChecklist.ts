@@ -1094,8 +1094,12 @@ export async function fixMultiAdvertiserOnly(params: {
     
     // Meta requires at least one of: name, status, or associated_adlabels when updating a creative
     // Include the creative name to satisfy this requirement
+    // contextual_multi_ads must include action_metadata with type MANUAL when setting to OPT_OUT
     const payload: any = {
-      contextual_multi_ads: { enroll_status: "OPT_OUT" },
+      contextual_multi_ads: { 
+        action_metadata: { type: "MANUAL" },
+        enroll_status: "OPT_OUT" 
+      },
       access_token: accessToken,
     };
     
