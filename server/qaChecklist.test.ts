@@ -182,16 +182,8 @@ describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => 
   });
 });
 
-<<<<<<< Updated upstream
 // Helper that mirrors the three-state Excel value logic in qaChecklist.ts
-function getMultiAdsExcelValue(maData: any, maBatchError: boolean): string {
-  const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
-  const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
-  if (multiAdsStatus === "OPT_OUT") return "Off";
-  if (multiAdsViolation) return `ON \u2014 VIOLATION (${multiAdsStatus})`;
-=======
-// Helper that mirrors the combined multi-advertiser Excel value logic in qaChecklist.ts
-function getMultiAdsExcelValue(maData: any, _maBatchError: boolean, assetFeedMultiAdv?: string): string {
+function getMultiAdsExcelValue(maData: any, maBatchError: boolean, assetFeedMultiAdv?: string): string {
   const assetFeedViolation = !!assetFeedMultiAdv && assetFeedMultiAdv !== "INELIGIBLE";
   const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
   const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
@@ -203,16 +195,11 @@ function getMultiAdsExcelValue(maData: any, _maBatchError: boolean, assetFeedMul
     return `ON \u2014 VIOLATION (${parts.join(", ")})`;
   }
   if (assetFeedMultiAdv === "INELIGIBLE" || multiAdsStatus === "OPT_OUT") return "Off";
->>>>>>> Stashed changes
   return "Unknown";
 }
 
 describe("QA Checklist — Multi-Advertiser Detection", () => {
-<<<<<<< Updated upstream
   // --- Violation detection ---
-=======
-  // --- Violation detection: contextual_multi_ads ---
->>>>>>> Stashed changes
   it("should detect contextual_multi_ads violation when enroll_status is OPT_IN", () => {
     const maData = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
     const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
@@ -232,7 +219,6 @@ describe("QA Checklist — Multi-Advertiser Detection", () => {
     expect(multiAdsViolation).toBeFalsy();
   });
 
-<<<<<<< Updated upstream
   // --- Excel cell value (three-state) ---
   it("Excel value: 'Off' when contextual_multi_ads.enroll_status is OPT_OUT", () => {
     const maData = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
@@ -247,25 +233,8 @@ describe("QA Checklist — Multi-Advertiser Detection", () => {
     expect(getMultiAdsExcelValue(maData, false)).toBe("Unknown");
   });
   it("Excel value: 'Unknown' when Batch 3 returned an error for this creative", () => {
-    const maData = {} as any; // error case — empty data
+    const maData = {} as any; // error case \u2014 empty data
     expect(getMultiAdsExcelValue(maData, true)).toBe("Unknown");
-=======
-  // --- Violation detection: asset_feed_spec.multi_advertiser_eligibility ---
-  it("should detect asset_feed_spec violation when multi_advertiser_eligibility is ELIGIBLE", () => {
-    const assetFeedMultiAdv = "ELIGIBLE";
-    const violation = !!assetFeedMultiAdv && assetFeedMultiAdv !== "INELIGIBLE";
-    expect(violation).toBe(true);
-  });
-  it("should NOT detect asset_feed_spec violation when multi_advertiser_eligibility is INELIGIBLE", () => {
-    const assetFeedMultiAdv = "INELIGIBLE";
-    const violation = !!assetFeedMultiAdv && assetFeedMultiAdv !== "INELIGIBLE";
-    expect(violation).toBe(false);
-  });
-  it("should NOT detect asset_feed_spec violation when field is absent", () => {
-    const assetFeedMultiAdv = undefined;
-    const violation = !!assetFeedMultiAdv && assetFeedMultiAdv !== "INELIGIBLE";
-    expect(violation).toBe(false);
->>>>>>> Stashed changes
   });
 
   // --- Excel cell value (combined logic) ---
