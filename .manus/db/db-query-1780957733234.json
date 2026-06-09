@@ -1,0 +1,58 @@
+{
+  "query": "SELECT id, label, businessManagerId, businessManagerName, isActive, LEFT(accessToken, 30) as tokenPrefix FROM token_vault ORDER BY createdAt DESC LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3dMqJsm4KG1E8QU.03f2dd191437 --database UQDffrrvDgfhtLegk7yN6M --execute SELECT id, label, businessManagerId, businessManagerName, isActive, LEFT(accessToken, 30) as tokenPrefix FROM token_vault ORDER BY createdAt DESC LIMIT 10;",
+  "rows": [
+    {
+      "id": "90001",
+      "label": "CCF BM",
+      "businessManagerId": "399721250720481",
+      "businessManagerName": "CCF BM",
+      "isActive": "1",
+      "tokenPrefix": "EAAJaTpmDZB2YBRdff9rLlsLBvMidv"
+    },
+    {
+      "id": "60001",
+      "label": "MediaData BM",
+      "businessManagerId": "448939905645483",
+      "businessManagerName": "MediaData BM",
+      "isActive": "1",
+      "tokenPrefix": "EAAJaTpmDZB2YBRWz9IT9g1OHCzY28"
+    },
+    {
+      "id": "30002",
+      "label": "Iluminere BM",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "Iluminere BM",
+      "isActive": "1",
+      "tokenPrefix": "EAAJaTpmDZB2YBRlGZCUfZA8ZCFZBa"
+    },
+    {
+      "id": "30001",
+      "label": "LumenAd BM",
+      "businessManagerId": "1576238612655062",
+      "businessManagerName": "NULL",
+      "isActive": "1",
+      "tokenPrefix": "EAAJaTpmDZB2YBRCDtvXqz246wayEw"
+    },
+    {
+      "id": "2",
+      "label": "LumenAd BM",
+      "businessManagerId": "1576238612655062",
+      "businessManagerName": "NULL",
+      "isActive": "0",
+      "tokenPrefix": "EAAJaTpmDZB2YBRCDtvXqz246wayEw"
+    },
+    {
+      "id": "1",
+      "label": "Iluminere BM",
+      "businessManagerId": "237424740137561",
+      "businessManagerName": "Iluminere BM",
+      "isActive": "0",
+      "tokenPrefix": "EAAJaTpmDZB2YBRlGZCUfZA8ZCFZBa"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tlabel\tbusinessManagerId\tbusinessManagerName\tisActive\ttokenPrefix\n90001\tCCF BM\t399721250720481\tCCF BM\t1\tEAAJaTpmDZB2YBRdff9rLlsLBvMidv\n60001\tMediaData BM\t448939905645483\tMediaData BM\t1\tEAAJaTpmDZB2YBRWz9IT9g1OHCzY28\n30002\tIluminere BM\t237424740137561\tIluminere BM\t1\tEAAJaTpmDZB2YBRlGZCUfZA8ZCFZBa\n30001\tLumenAd BM\t1576238612655062\tNULL\t1\tEAAJaTpmDZB2YBRCDtvXqz246wayEw\n2\tLumenAd BM\t1576238612655062\tNULL\t0\tEAAJaTpmDZB2YBRCDtvXqz246wayEw\n1\tIluminere BM\t237424740137561\tIluminere BM\t0\tEAAJaTpmDZB2YBRlGZCUfZA8ZCFZBa\n",
+  "stderr": "",
+  "execution_time_ms": 288
+}

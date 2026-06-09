@@ -1,25 +1,24 @@
 /**
- * QA Verification — Standalone tool page for running Ad QA analysis
+ * QA Checklist Tab — Dedicated tab for running Ad QA analysis
  * Features:
- * - Business Manager token selector
- * - Ad Account selector (cascading from BM)
  * - Cascading Campaign → Ad Set → Ads dropdowns
  * - Status filters (Active/Inactive, Last 7 Days)
  * - Multi-select at each level
- * - Run QA button triggers the direct QA backend
+ * - Run QA button triggers the launchQaChecklist skill
  * - Download XLSX when complete
- * - Inline violations display + Fix button
  */
 
 import { useState, useMemo, useEffect } from 'react';
 import {
   ChevronDown, ChevronUp, Search, ShieldCheck, Loader2, ExternalLink,
-  CheckSquare, Square, Filter, RefreshCw, Download, Wrench, CheckCircle2, AlertTriangle,
-  Building2, CreditCard
+  CheckSquare, Square, Filter, RefreshCw, Download, Wrench, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
-import AppShell from '@/components/AppShell';
+
+interface BuildSettings {
+  [key: string]: any;
+}
 
 interface QaViolation {
   adId: string;
@@ -28,6 +27,10 @@ interface QaViolation {
   specKey: string;
   settings: Array<{ name: string; currentValue: string; expectedValue: string }>;
   adsManagerUrl: string;
+}
+
+interface Props {
+  settings: BuildSettings;
 }
 
 type StatusFilter = 'ACTIVE' | 'PAUSED' | 'ALL';
@@ -55,82 +58,10 @@ interface AdItem {
   adSetId: string;
 }
 
-const STORAGE_KEY = 'pl_qa_verification_account';
+export default function QaChecklistTab({ settings }: Props) {
+  const hasCredentials = !!(settings.accessToken && settings.adAccountId);
 
-function loadSaved() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as {
-      tokenId: number; bmId: string; adAccountId: string; adAccountName: string;
-    } | null;
-  } catch { return null; }
-}
-
-export default function QaVerification() {
-  return (
-    <AppShell title="QA Verification" subtitle="Advantage+ Creative & ad settings verification">
-      <QaVerificationContent />
-    </AppShell>
-  );
-}
-
-function QaVerificationContent() {
-  const saved = loadSaved();
-
-  // ── Account Selection State ──
-  const { data: activeTokens = [] } = trpc.tokens.listActive.useQuery();
-  const [tokenId, setTokenId] = useState<number | null>(saved?.tokenId ?? null);
-  const [bmId, setBmId] = useState(saved?.bmId ?? '');
-  const [adAccountId, setAdAccountId] = useState(saved?.adAccountId ?? '');
-  const [adAccountName, setAdAccountName] = useState(saved?.adAccountName ?? '');
-  const [adAccountSearch, setAdAccountSearch] = useState('');
-
-  // Resolve access token
-  const { data: tokenData } = trpc.meta.getBuilderToken.useQuery(
-    { tokenId: tokenId! },
-    { enabled: !!tokenId, staleTime: 300_000 }
-  );
-  const accessToken = tokenData?.accessToken ?? '';
-
-  // Fetch ad accounts
-  const { data: adAccountsData, isLoading: loadingAccounts } = trpc.meta.getAdAccountsByTokenId.useQuery(
-    { tokenId: tokenId! },
-    { enabled: !!tokenId, staleTime: 5 * 60 * 1000 }
-  );
-  const adAccounts: Array<{ id: string; name: string }> = adAccountsData?.accounts ?? [];
-
-  const selectedToken = activeTokens.find(t => t.id === tokenId);
-
-  const handleTokenChange = (id: number | null) => {
-    const t = activeTokens.find(x => x.id === id);
-    setTokenId(id);
-    setBmId(t?.businessManagerId ?? '');
-    setAdAccountId('');
-    setAdAccountName('');
-    setAdAccountSearch('');
-    setSelectedCampaignIds(new Set());
-    setSelectedAdSetIds(new Set());
-    setSelectedAdIds(new Set());
-    setQaState({ phase: 'idle' });
-  };
-
-  const handleAdAccountChange = (id: string) => {
-    const acc = adAccounts.find(a => a.id === id);
-    setAdAccountId(id);
-    setAdAccountName(acc?.name ?? id);
-    setAdAccountSearch('');
-    setSelectedCampaignIds(new Set());
-    setSelectedAdSetIds(new Set());
-    setSelectedAdIds(new Set());
-    setQaState({ phase: 'idle' });
-    // Persist
-    if (id && tokenId && bmId) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tokenId, bmId, adAccountId: id, adAccountName: acc?.name ?? id }));
-    }
-  };
-
-  const hasCredentials = !!(accessToken && adAccountId);
-
-  // ── Campaign/AdSet/Ads State ──
+  // ── State ──
   const [campaignFilter, setCampaignFilter] = useState<StatusFilter>('ACTIVE');
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<Set<string>>(new Set());
   const [campaignSearch, setCampaignSearch] = useState('');
@@ -156,15 +87,20 @@ function QaVerificationContent() {
     violations?: QaViolation[];
   }>({ phase: 'idle' });
 
+  // Track which violations have been fixed
   const [fixedCreativeIds, setFixedCreativeIds] = useState<Set<string>>(new Set());
   const [fixingCreativeIds, setFixingCreativeIds] = useState<Set<string>>(new Set());
   const [fixedMultiAdvIds, setFixedMultiAdvIds] = useState<Set<string>>(new Set());
   const [fixingMultiAdvIds, setFixingMultiAdvIds] = useState<Set<string>>(new Set());
 
+  const MULTI_ADV_NAMES = new Set(['contextual_multi_ads', 'Multi-Advertiser Eligibility']);
+  const hasDofSettings = (v: QaViolation) => v.settings.some(s => !MULTI_ADV_NAMES.has(s.name));
+  const hasMultiAdvSettings = (v: QaViolation) => v.settings.some(s => MULTI_ADV_NAMES.has(s.name));
+
   // ── Data fetching ──
   const { data: campaignData, isLoading: campaignsLoading, refetch: refetchCampaigns } =
     trpc.adminMeta.getCampaigns.useQuery(
-      { accessToken, adAccountId },
+      { accessToken: settings.accessToken, adAccountId: settings.adAccountId },
       { enabled: hasCredentials, staleTime: 2 * 60 * 1000 }
     );
 
@@ -174,7 +110,7 @@ function QaVerificationContent() {
   const selectedCampaignArray = useMemo(() => Array.from(selectedCampaignIds), [selectedCampaignIds]);
   const adSetQueries = trpc.useQueries((t) =>
     selectedCampaignArray.map(cId =>
-      t.adminMeta.getAdSets({ accessToken, campaignId: cId }, { enabled: hasCredentials && selectedCampaignIds.size > 0, staleTime: 2 * 60 * 1000 })
+      t.adminMeta.getAdSets({ accessToken: settings.accessToken, campaignId: cId }, { enabled: hasCredentials && selectedCampaignIds.size > 0, staleTime: 2 * 60 * 1000 })
     )
   );
 
@@ -196,7 +132,7 @@ function QaVerificationContent() {
   const selectedAdSetArray = useMemo(() => Array.from(selectedAdSetIds), [selectedAdSetIds]);
   const { data: adsData, isLoading: adsLoading, refetch: refetchAds } =
     trpc.adminMeta.getAds.useQuery(
-      { accessToken, adSetIds: selectedAdSetArray },
+      { accessToken: settings.accessToken, adSetIds: selectedAdSetArray },
       { enabled: hasCredentials && selectedAdSetArray.length > 0, staleTime: 2 * 60 * 1000 }
     );
 
@@ -256,6 +192,7 @@ function QaVerificationContent() {
 
   // ── Clear downstream selections when upstream changes ──
   useEffect(() => {
+    // Clear ad set selections that are no longer valid
     setSelectedAdSetIds(prev => {
       const validIds = new Set(allAdSets.map(a => a.id));
       const next = new Set(Array.from(prev).filter(id => validIds.has(id)));
@@ -265,6 +202,7 @@ function QaVerificationContent() {
   }, [allAdSets]);
 
   useEffect(() => {
+    // Clear ad selections that are no longer valid
     setSelectedAdIds(prev => {
       const validIds = new Set(allAds.map(a => a.id));
       const next = new Set(Array.from(prev).filter(id => validIds.has(id)));
@@ -273,12 +211,12 @@ function QaVerificationContent() {
     });
   }, [allAds]);
 
-  // ── QA Launch ──
+  // ── QA Launch (direct backend, no Manus) ──
   const runQaDirect = trpc.runs.runQaChecklistDirect.useMutation();
 
   const handleRunQa = async () => {
     if (!hasCredentials) {
-      toast.error('Select a Business Manager and Ad Account first.');
+      toast.error('Configure Meta credentials in Settings first.');
       return;
     }
     if (selectedAdIds.size === 0) {
@@ -290,9 +228,9 @@ function QaVerificationContent() {
     setQaState({ phase: 'launching' });
     try {
       const result = await runQaDirect.mutateAsync({
-        adAccountId,
-        tokenId: tokenId ?? undefined,
-        facebookPageId: '',
+        adAccountId: settings.adAccountId,
+        tokenId: settings.tokenId ?? undefined,
+        facebookPageId: settings.facebookPageId,
         adIds,
       });
       setQaState({
@@ -316,11 +254,6 @@ function QaVerificationContent() {
   };
 
   // ── Fix violation handlers ──
-  const MULTI_ADV_NAMES = new Set(['contextual_multi_ads', 'Multi-Advertiser Eligibility']);
-
-  const hasDofSettings = (v: QaViolation) => v.settings.some(s => !MULTI_ADV_NAMES.has(s.name));
-  const hasMultiAdvSettings = (v: QaViolation) => v.settings.some(s => MULTI_ADV_NAMES.has(s.name));
-
   const fixViolation = trpc.runs.fixAdDofViolation.useMutation();
   const fixMultiAdv = trpc.runs.fixMultiAdvertiserViolation.useMutation();
 
@@ -331,7 +264,7 @@ function QaVerificationContent() {
         adId: violation.adId,
         creativeId: violation.creativeId,
         specKey: violation.specKey,
-        tokenId: tokenId ?? undefined,
+        tokenId: settings.tokenId ?? undefined,
       });
       setFixedCreativeIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
       toast.success(`Creative settings fixed: ${violation.adName}`);
@@ -347,7 +280,7 @@ function QaVerificationContent() {
     try {
       await fixMultiAdv.mutateAsync({
         creativeId: violation.creativeId,
-        tokenId: tokenId ?? undefined,
+        tokenId: settings.tokenId ?? undefined,
       });
       setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
       toast.success(`Multi-advertiser fixed: ${violation.adName}`);
@@ -399,17 +332,31 @@ function QaVerificationContent() {
   const deselectAllAds = () => setSelectedAdIds(new Set());
 
   // ── Render ──
+  if (!hasCredentials) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center p-8">
+          <ShieldCheck className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+          <h3 className="text-sm font-700 text-foreground mb-1">Configure Meta Credentials</h3>
+          <p className="text-[11px] text-muted-foreground">
+            Add your Meta access token and ad account in Settings before running QA.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full overflow-auto p-6 space-y-5">
+    <div className="h-full overflow-auto p-5 space-y-4">
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-800 text-foreground flex items-center gap-2.5">
-            <ShieldCheck className="w-6 h-6 text-cyan-400" />
-            QA Verification
-          </h1>
-          <p className="text-[12px] text-muted-foreground mt-1">
-            Verify Advantage+ Creative settings, partnership ads, multi-advertiser status, and copy across your ads.
+          <h2 className="text-sm font-700 text-foreground flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            Ad QA Checklist
+          </h2>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Select campaigns, ad sets, and ads to verify Advantage+ Creative settings, partnership ads, multi-advertiser status, and copy.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -451,99 +398,6 @@ function QaVerificationContent() {
         </div>
       </div>
 
-      {/* ── Account Selection ── */}
-      <div className="bg-surface-1 border border-border rounded-xl p-4 space-y-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Building2 size={14} className="text-muted-foreground" />
-          <span className="text-[12px] font-700 text-foreground">Account Selection</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          {/* Business Manager */}
-          <div>
-            <label className="text-[11px] font-600 text-muted-foreground mb-1.5 block">Business Manager</label>
-            {activeTokens.length === 0 ? (
-              <div className="text-[11px] py-2 px-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
-                No tokens configured. Ask your admin to add one in the Token Vault.
-              </div>
-            ) : (
-              <select
-                value={tokenId?.toString() ?? ''}
-                onChange={e => handleTokenChange(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full px-3 py-2 text-[11px] bg-surface-2/60 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
-              >
-                <option value="">Select a Business Manager…</option>
-                {activeTokens.map(t => (
-                  <option key={t.id} value={t.id.toString()}>
-                    {t.label || t.businessManagerName || `BM ${t.businessManagerId}`}
-                  </option>
-                ))}
-              </select>
-            )}
-            {tokenId && bmId && (
-              <p className="text-[9px] text-muted-foreground/60 mt-1 font-mono">BM ID: {bmId}</p>
-            )}
-          </div>
-
-          {/* Ad Account */}
-          <div>
-            <label className="text-[11px] font-600 text-muted-foreground mb-1.5 block">Ad Account</label>
-            {!tokenId ? (
-              <div className="text-[11px] py-2 px-3 rounded-lg bg-surface-2/40 text-muted-foreground/50 border border-border">
-                Select a Business Manager first
-              </div>
-            ) : loadingAccounts ? (
-              <div className="flex items-center gap-2 text-[11px] py-2 px-3 text-muted-foreground">
-                <Loader2 size={12} className="animate-spin" /> Loading accounts…
-              </div>
-            ) : (
-              <div className="relative">
-                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
-                <input
-                  value={adAccountId ? `${adAccountName} (${adAccountId})` : adAccountSearch}
-                  onChange={e => {
-                    if (adAccountId) {
-                      setAdAccountId('');
-                      setAdAccountName('');
-                    }
-                    setAdAccountSearch(e.target.value);
-                  }}
-                  onFocus={() => {
-                    if (adAccountId) {
-                      setAdAccountId('');
-                      setAdAccountName('');
-                      setAdAccountSearch('');
-                    }
-                  }}
-                  placeholder="Search ad accounts…"
-                  className="w-full pl-7 pr-3 py-2 text-[11px] bg-surface-2/60 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/30"
-                />
-                {!adAccountId && adAccountSearch && (
-                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-surface-1 border border-border rounded-lg shadow-xl max-h-[200px] overflow-y-auto">
-                    {adAccounts
-                      .filter(a => {
-                        const q = adAccountSearch.toLowerCase();
-                        return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
-                      })
-                      .map(a => (
-                        <button
-                          key={a.id}
-                          onClick={() => handleAdAccountChange(a.id)}
-                          className="w-full px-3 py-2 text-left text-[11px] hover:bg-surface-2/50 transition-colors text-foreground"
-                        >
-                          {a.name} <span className="text-muted-foreground/50">({a.id})</span>
-                        </button>
-                      ))
-                    }
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Status Messages ── */}
       {qaState.phase === 'error' && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-[11px] text-red-400">
           {qaState.errorMessage || 'QA failed'}
@@ -672,171 +526,156 @@ function QaVerificationContent() {
         </div>
       )}
 
-      {/* ── Cascading Selectors (only when account is selected) ── */}
-      {!hasCredentials ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <CreditCard className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-            <h3 className="text-[12px] font-700 text-muted-foreground/50">Select an Account</h3>
-            <p className="text-[11px] text-muted-foreground/30 mt-1">
-              Choose a Business Manager and Ad Account above to load campaigns.
-            </p>
+      {/* ── Campaigns Section ── */}
+      <SelectorSection
+        title="Campaigns"
+        count={filteredCampaigns.length}
+        selectedCount={selectedCampaignIds.size}
+        open={campaignOpen}
+        onToggle={() => setCampaignOpen(!campaignOpen)}
+        loading={campaignsLoading}
+        filter={
+          <FilterPills
+            options={[
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'PAUSED', label: 'Inactive' },
+              { value: 'ALL', label: 'All' },
+            ]}
+            value={campaignFilter}
+            onChange={v => setCampaignFilter(v as StatusFilter)}
+          />
+        }
+        actions={
+          <>
+            <button onClick={selectAllCampaigns} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
+            <button onClick={deselectAllCampaigns} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
+            <button onClick={() => refetchCampaigns()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
+              <RefreshCw size={11} className={campaignsLoading ? 'animate-spin' : ''} />
+            </button>
+          </>
+        }
+        search={campaignSearch}
+        onSearch={setCampaignSearch}
+        searchPlaceholder="Search campaigns…"
+      >
+        {filteredCampaigns.map(c => (
+          <SelectableRow
+            key={c.id}
+            selected={selectedCampaignIds.has(c.id)}
+            onClick={() => toggleCampaign(c.id)}
+            label={c.name}
+            meta={`${c.status} · ${c.objective?.replace('OUTCOME_', '') || '—'}`}
+            id={c.id}
+          />
+        ))}
+        {filteredCampaigns.length === 0 && !campaignsLoading && (
+          <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
+            No campaigns found.
           </div>
-        </div>
-      ) : (
-        <>
-          {/* ── Campaigns Section ── */}
-          <SelectorSection
-            title="Campaigns"
-            count={filteredCampaigns.length}
-            selectedCount={selectedCampaignIds.size}
-            open={campaignOpen}
-            onToggle={() => setCampaignOpen(!campaignOpen)}
-            loading={campaignsLoading}
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                  { value: 'ALL', label: 'All' },
-                ]}
-                value={campaignFilter}
-                onChange={v => setCampaignFilter(v as StatusFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllCampaigns} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllCampaigns} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-                <button onClick={() => refetchCampaigns()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
-                  <RefreshCw size={11} className={campaignsLoading ? 'animate-spin' : ''} />
-                </button>
-              </>
-            }
-            search={campaignSearch}
-            onSearch={setCampaignSearch}
-            searchPlaceholder="Search campaigns…"
-          >
-            {filteredCampaigns.map(c => (
-              <SelectableRow
-                key={c.id}
-                selected={selectedCampaignIds.has(c.id)}
-                onClick={() => toggleCampaign(c.id)}
-                label={c.name}
-                meta={`${c.status} · ${c.objective?.replace('OUTCOME_', '') || '—'}`}
-                id={c.id}
-              />
-            ))}
-            {filteredCampaigns.length === 0 && !campaignsLoading && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No campaigns found.
-              </div>
-            )}
-          </SelectorSection>
+        )}
+      </SelectorSection>
 
-          {/* ── Ad Sets Section ── */}
-          <SelectorSection
-            title="Ad Sets"
-            count={filteredAdSets.length}
-            selectedCount={selectedAdSetIds.size}
-            open={adSetOpen}
-            onToggle={() => setAdSetOpen(!adSetOpen)}
-            loading={adSetsLoading}
-            disabled={selectedCampaignIds.size === 0}
-            disabledMessage="Select campaigns first"
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ALL', label: 'All' },
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                ]}
-                value={adSetFilter}
-                onChange={v => setAdSetFilter(v as StatusFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllAdSets} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllAdSets} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-              </>
-            }
-            search={adSetSearch}
-            onSearch={setAdSetSearch}
-            searchPlaceholder="Search ad sets…"
-          >
-            {filteredAdSets.map(a => (
-              <SelectableRow
-                key={a.id}
-                selected={selectedAdSetIds.has(a.id)}
-                onClick={() => toggleAdSet(a.id)}
-                label={a.name}
-                meta={a.status}
-                id={a.id}
-              />
-            ))}
-            {filteredAdSets.length === 0 && !adSetsLoading && selectedCampaignIds.size > 0 && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No ad sets found.
-              </div>
-            )}
-          </SelectorSection>
+      {/* ── Ad Sets Section ── */}
+      <SelectorSection
+        title="Ad Sets"
+        count={filteredAdSets.length}
+        selectedCount={selectedAdSetIds.size}
+        open={adSetOpen}
+        onToggle={() => setAdSetOpen(!adSetOpen)}
+        loading={adSetsLoading}
+        disabled={selectedCampaignIds.size === 0}
+        disabledMessage="Select campaigns first"
+        filter={
+          <FilterPills
+            options={[
+              { value: 'ALL', label: 'All' },
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'PAUSED', label: 'Inactive' },
+            ]}
+            value={adSetFilter}
+            onChange={v => setAdSetFilter(v as StatusFilter)}
+          />
+        }
+        actions={
+          <>
+            <button onClick={selectAllAdSets} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
+            <button onClick={deselectAllAdSets} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
+          </>
+        }
+        search={adSetSearch}
+        onSearch={setAdSetSearch}
+        searchPlaceholder="Search ad sets…"
+      >
+        {filteredAdSets.map(a => (
+          <SelectableRow
+            key={a.id}
+            selected={selectedAdSetIds.has(a.id)}
+            onClick={() => toggleAdSet(a.id)}
+            label={a.name}
+            meta={a.status}
+            id={a.id}
+          />
+        ))}
+        {filteredAdSets.length === 0 && !adSetsLoading && selectedCampaignIds.size > 0 && (
+          <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
+            No ad sets found.
+          </div>
+        )}
+      </SelectorSection>
 
-          {/* ── Ads Section ── */}
-          <SelectorSection
-            title="Ads"
-            count={filteredAds.length}
-            selectedCount={selectedAdIds.size}
-            open={adsOpen}
-            onToggle={() => setAdsOpen(!adsOpen)}
-            loading={adsLoading}
-            disabled={selectedAdSetIds.size === 0}
-            disabledMessage="Select ad sets first"
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                  { value: 'LAST_7_DAYS', label: 'Last 7 Days' },
-                  { value: 'ALL', label: 'All' },
-                ]}
-                value={adsFilter}
-                onChange={v => setAdsFilter(v as AdsFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllAds} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllAds} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-                {selectedAdSetArray.length > 0 && (
-                  <button onClick={() => refetchAds()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
-                    <RefreshCw size={11} className={adsLoading ? 'animate-spin' : ''} />
-                  </button>
-                )}
-              </>
-            }
-            search={adSearch}
-            onSearch={setAdSearch}
-            searchPlaceholder="Search ads…"
-          >
-            {filteredAds.map(a => (
-              <SelectableRow
-                key={a.id}
-                selected={selectedAdIds.has(a.id)}
-                onClick={() => toggleAd(a.id)}
-                label={a.name}
-                meta={`${a.status} · Created ${new Date(a.createdTime).toLocaleDateString()}`}
-                id={a.id}
-              />
-            ))}
-            {filteredAds.length === 0 && !adsLoading && selectedAdSetIds.size > 0 && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No ads found.
-              </div>
+      {/* ── Ads Section ── */}
+      <SelectorSection
+        title="Ads"
+        count={filteredAds.length}
+        selectedCount={selectedAdIds.size}
+        open={adsOpen}
+        onToggle={() => setAdsOpen(!adsOpen)}
+        loading={adsLoading}
+        disabled={selectedAdSetIds.size === 0}
+        disabledMessage="Select ad sets first"
+        filter={
+          <FilterPills
+            options={[
+              { value: 'ACTIVE', label: 'Active' },
+              { value: 'PAUSED', label: 'Inactive' },
+              { value: 'LAST_7_DAYS', label: 'Last 7 Days' },
+              { value: 'ALL', label: 'All' },
+            ]}
+            value={adsFilter}
+            onChange={v => setAdsFilter(v as AdsFilter)}
+          />
+        }
+        actions={
+          <>
+            <button onClick={selectAllAds} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
+            <button onClick={deselectAllAds} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
+            {selectedAdSetArray.length > 0 && (
+              <button onClick={() => refetchAds()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
+                <RefreshCw size={11} className={adsLoading ? 'animate-spin' : ''} />
+              </button>
             )}
-          </SelectorSection>
-        </>
-      )}
+          </>
+        }
+        search={adSearch}
+        onSearch={setAdSearch}
+        searchPlaceholder="Search ads…"
+      >
+        {filteredAds.map(a => (
+          <SelectableRow
+            key={a.id}
+            selected={selectedAdIds.has(a.id)}
+            onClick={() => toggleAd(a.id)}
+            label={a.name}
+            meta={`${a.status} · Created ${new Date(a.createdTime).toLocaleDateString()}`}
+            id={a.id}
+          />
+        ))}
+        {filteredAds.length === 0 && !adsLoading && selectedAdSetIds.size > 0 && (
+          <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
+            No ads found.
+          </div>
+        )}
+      </SelectorSection>
     </div>
   );
 }

@@ -54,7 +54,7 @@ import {
 import axios from "axios";
 import { buildSkillPrompt, buildCampaignCreationPrompt, buildAdminCampaignCreationPrompt, listManusSkills, runManusSkillTask, SKILL_IDS } from "./manusTask";
 import { ENV } from "./_core/env";
-import { runQaChecklist, fixAdDofSpec } from "./services/qaChecklist";
+import { runQaChecklist, fixAdDofSpec, fixMultiAdvertiserOnly } from "./services/qaChecklist";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -1030,6 +1030,48 @@ export const appRouter = router({
         }
 
         return { success: true, debug: result.debug };
+      }),
+
+    /**
+     * fixMultiAdvertiserViolation: Patches contextual_multi_ads and
+     * asset_feed_spec.multi_advertiser_eligibility directly on the existing
+     * creative — no new creative is created, preserving the creative ID.
+     */
+    fixMultiAdvertiserViolation: protectedProcedure
+      .input(z.object({
+        creativeId: z.string().min(1),
+        tokenId: z.number().int().positive().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        let metaAccessToken: string | undefined;
+        if (input.tokenId) {
+          const tokenEntry = await getTokenById(input.tokenId);
+          metaAccessToken = tokenEntry?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          const fallbackToken = await getFirstActiveTokenWithValue();
+          metaAccessToken = fallbackToken?.accessToken ?? undefined;
+        }
+        if (!metaAccessToken) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "No active Meta access token found.",
+          });
+        }
+
+        const result = await fixMultiAdvertiserOnly({
+          creativeId: input.creativeId,
+          accessToken: metaAccessToken,
+        });
+
+        if (!result.success) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `${result.error || "Failed to fix multi-advertiser."}\n\nDEBUG:\n${JSON.stringify(result.debug, null, 2)}`,
+          });
+        }
+
+        return { success: true };
       }),
   }),
 
