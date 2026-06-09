@@ -1095,33 +1095,42 @@ export async function fixMultiAdvertiserOnly(params: {
     const adUrl = `${BASE_URL}/${adId}`;
     console.log("[fixMultiAdv] Updating multi_advertiser_eligibility_status via ad", adId, "creative", creativeId);
 
-    const params = new URLSearchParams();
-    params.append("access_token", accessToken);
-    params.append("creative[creative_id]", creativeId);
-    params.append("creative[multi_advertiser_eligibility_status]", "OPT_OUT");
+    // The creative param MUST be a JSON string — Meta's ad endpoint does NOT accept
+    // bracket notation (creative[field]) for the creative param.
+    const creativeJson = JSON.stringify({
+      creative_id: creativeId,
+      contextual_multi_ads: {
+        enroll_status: "OPT_OUT",
+        action_metadata: { type: "DEFAULT_OFF" },
+      },
+    });
 
-    console.log("[fixMultiAdv] Sending form body:", params.toString().replace(accessToken, "***"));
+    const formBody = new URLSearchParams();
+    formBody.append("access_token", accessToken);
+    formBody.append("creative", creativeJson);
 
-    const resp = await axios.post(adUrl, params.toString(), {
+    console.log("[fixMultiAdv] Sending creative JSON:", creativeJson);
+
+    const resp = await axios.post(adUrl, formBody.toString(), {
       timeout: 30000,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
-    // Verify by re-fetching the creative's contextual_multi_ads
-    const creativeUrl = `${BASE_URL}/${creativeId}`;
-    const verifyResp = await axios.get(creativeUrl, {
-      params: { access_token: accessToken, fields: "id,contextual_multi_ads" },
+    // Verify by re-fetching the ad's creative to check contextual_multi_ads
+    const verifyResp = await axios.get(adUrl, {
+      params: { access_token: accessToken, fields: "creative{id,contextual_multi_ads}" },
       timeout: 30000,
     });
-    console.log("[fixMultiAdv] Verified contextual_multi_ads after update:", JSON.stringify(verifyResp.data?.contextual_multi_ads));
+    const verifiedCreative = verifyResp.data?.creative;
+    console.log("[fixMultiAdv] Verified after update:", JSON.stringify(verifiedCreative));
 
     return {
       success: true,
       debug: {
-        sentPayload: `creative[creative_id]=${creativeId}&creative[multi_advertiser_eligibility_status]=OPT_OUT`,
+        sentCreativeJson: creativeJson,
         metaResponse: resp.data,
-        verifiedAfter: verifyResp.data?.contextual_multi_ads,
+        verifiedAfter: verifiedCreative,
       }
     };
   } catch (err: any) {
