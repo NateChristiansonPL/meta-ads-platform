@@ -284,6 +284,12 @@ export default function QaChecklistTab({ settings }: Props) {
         tokenId: settings.tokenId ?? undefined,
       });
       setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
+      // Remove the fixed violation from qaState so it doesn't reappear
+      setQaState(prev => ({
+        ...prev,
+        violations: (prev.violations ?? []).filter(v => v.creativeId !== violation.creativeId),
+        violationCount: (prev.violationCount ?? 0) - 1,
+      }))
       toast.success(`Multi-advertiser fixed: ${violation.adName}`);
     } catch (err) {
       toast.error(`Multi-advertiser fix failed for ${violation.adName}: ${err instanceof Error ? err.message : String(err)}`);
