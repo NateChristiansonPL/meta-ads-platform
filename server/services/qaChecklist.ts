@@ -1089,14 +1089,27 @@ export async function fixMultiAdvertiserOnly(params: {
   const { adId, creativeId, accessToken } = params;
 
   try {
-    // Per Meta API docs: update multi_advertiser_eligibility_status via the AD object.
-    // Must use form-encoded body with bracket notation:
-    // creative[creative_id]=X&creative[multi_advertiser_eligibility_status]=OPT_OUT
     const adUrl = `${BASE_URL}/${adId}`;
-    console.log("[fixMultiAdv] Updating multi_advertiser_eligibility_status via ad", adId, "creative", creativeId);
+    console.log("[fixMultiAdv] Step 1: Fetch full creative to get ad_account_id and all fields", creativeId);
 
-    // The creative param MUST be a JSON string — Meta's ad endpoint does NOT accept
-    // bracket notation (creative[field]) for the creative param.
+    // Step 1: Fetch the full creative so we can duplicate it if needed
+    const creativeResp = await axios.get(`${BASE_URL}/${creativeId}`, {
+      params: {
+        access_token: accessToken,
+        fields: [
+          "id","name","object_story_spec","asset_feed_spec","degrees_of_freedom_spec",
+          "contextual_multi_ads","url_tags","call_to_action_type","image_hash",
+          "image_url","video_id","thumbnail_url","body","title","link_url",
+          "object_type","status","account_id",
+        ].join(","),
+      },
+      timeout: 30000,
+    });
+    const existingCreative = creativeResp.data;
+    const adAccountId = existingCreative?.account_id;
+    console.log("[fixMultiAdv] Existing creative:", JSON.stringify({ id: existingCreative?.id, contextual_multi_ads: existingCreative?.contextual_multi_ads, account_id: adAccountId }));
+
+    // Step 2: Try the ad-level update first (works for non-SHARE-locked creatives)
     const creativeJson = JSON.stringify({
       creative_id: creativeId,
       contextual_multi_ads: {
@@ -1104,34 +1117,91 @@ export async function fixMultiAdvertiserOnly(params: {
         action_metadata: { type: "STICKY_OPT_OUT" },
       },
     });
-
     const formBody = new URLSearchParams();
     formBody.append("access_token", accessToken);
     formBody.append("creative", creativeJson);
-
-    console.log("[fixMultiAdv] Sending creative JSON:", creativeJson);
-
-    const resp = await axios.post(adUrl, formBody.toString(), {
+    console.log("[fixMultiAdv] Step 2: Ad-level update with creative JSON:", creativeJson);
+    const updateResp = await axios.post(adUrl, formBody.toString(), {
       timeout: 30000,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
-    console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
+    console.log("[fixMultiAdv] Update response:", JSON.stringify(updateResp.data));
 
-    // Verify by re-fetching the ad's creative to check contextual_multi_ads
+    // Step 3: Verify — re-fetch the ad to get the current creative ID and its contextual_multi_ads
     const verifyResp = await axios.get(adUrl, {
       params: { access_token: accessToken, fields: "creative{id,contextual_multi_ads}" },
       timeout: 30000,
     });
     const verifiedCreative = verifyResp.data?.creative;
+    const newCreativeId = verifiedCreative?.id;
+    const enrollStatus = verifiedCreative?.contextual_multi_ads?.enroll_status;
     console.log("[fixMultiAdv] Verified after update:", JSON.stringify(verifiedCreative));
 
+    // If it's already fixed, we're done
+    if (enrollStatus === "OPT_OUT") {
+      return { success: true, debug: { method: "ad_level_update", verifiedAfter: verifiedCreative } };
+    }
+
+    // Step 4: SHARE-lock fallback — create a brand new creative with OPT_OUT, then point the ad to it
+    console.log("[fixMultiAdv] Step 4: SHARE-lock detected, creating new creative with OPT_OUT");
+    if (!adAccountId) {
+      return { success: false, error: "Could not determine ad account ID for creative duplication.", debug: { verifiedAfter: verifiedCreative } };
+    }
+
+    // Build the new creative payload from the existing one, overriding contextual_multi_ads
+    const newCreativePayload: Record<string, unknown> = {
+      name: existingCreative.name ? `${existingCreative.name} (MA-Fixed)` : "Creative (MA-Fixed)",
+      contextual_multi_ads: { enroll_status: "OPT_OUT", action_metadata: { type: "STICKY_OPT_OUT" } },
+    };
+    // Copy over the core creative fields if they exist
+    if (existingCreative.object_story_spec) newCreativePayload.object_story_spec = existingCreative.object_story_spec;
+    if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
+    if (existingCreative.degrees_of_freedom_spec) newCreativePayload.degrees_of_freedom_spec = existingCreative.degrees_of_freedom_spec;
+    if (existingCreative.url_tags) newCreativePayload.url_tags = existingCreative.url_tags;
+
+    const createFormBody = new URLSearchParams();
+    createFormBody.append("access_token", accessToken);
+    for (const [k, v] of Object.entries(newCreativePayload)) {
+      createFormBody.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
+
+    const createResp = await axios.post(`${BASE_URL}/act_${adAccountId}/adcreatives`, createFormBody.toString(), {
+      timeout: 30000,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    const newCreativeIdCreated = createResp.data?.id;
+    console.log("[fixMultiAdv] New creative created:", newCreativeIdCreated);
+
+    if (!newCreativeIdCreated) {
+      return { success: false, error: "Failed to create new creative.", debug: createResp.data };
+    }
+
+    // Step 5: Point the ad to the new creative
+    const pointFormBody = new URLSearchParams();
+    pointFormBody.append("access_token", accessToken);
+    pointFormBody.append("creative", JSON.stringify({ creative_id: newCreativeIdCreated }));
+    const pointResp = await axios.post(adUrl, pointFormBody.toString(), {
+      timeout: 30000,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    console.log("[fixMultiAdv] Pointed ad to new creative:", JSON.stringify(pointResp.data));
+
+    // Step 6: Final verify
+    const finalVerifyResp = await axios.get(adUrl, {
+      params: { access_token: accessToken, fields: "creative{id,contextual_multi_ads}" },
+      timeout: 30000,
+    });
+    const finalCreative = finalVerifyResp.data?.creative;
+    console.log("[fixMultiAdv] Final verified:", JSON.stringify(finalCreative));
+
+    if (finalCreative?.contextual_multi_ads?.enroll_status === "OPT_OUT") {
+      return { success: true, debug: { method: "new_creative", newCreativeId: newCreativeIdCreated, verifiedAfter: finalCreative } };
+    }
+
     return {
-      success: true,
-      debug: {
-        sentCreativeJson: creativeJson,
-        metaResponse: resp.data,
-        verifiedAfter: verifiedCreative,
-      }
+      success: false,
+      error: `Fix sent but Meta still shows ${finalCreative?.contextual_multi_ads?.enroll_status ?? "unknown"}. Sent: ${creativeJson}. Verified after: ${JSON.stringify(finalCreative?.contextual_multi_ads)}`,
+      debug: { verifiedAfter: finalCreative },
     };
   } catch (err: any) {
     const metaError = err?.response?.data?.error;
