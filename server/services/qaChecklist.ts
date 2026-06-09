@@ -1104,25 +1104,20 @@ export async function fixMultiAdvertiserOnly(params: {
     const currentCreative = getResp.data;
     console.log("[fixMultiAdv] Current contextual_multi_ads:", JSON.stringify(currentCreative?.contextual_multi_ads));
 
-    // The correct approach: send the full degrees_of_freedom_spec back with contextual_multi_ads set to OPT_OUT.
-    // Meta needs the complete spec — not just the contextual_multi_ads field in isolation.
+    // Send ONLY name + contextual_multi_ads.
+    // Do NOT include degrees_of_freedom_spec or asset_feed_spec — sending those back
+    // causes Meta to reject or ignore the update for placement-customized creatives.
+    // The creative name (fetched directly from Meta) satisfies the "must specify name/status" requirement.
     const payload: any = {
       access_token: accessToken,
       name: currentCreative?.name,
+      contextual_multi_ads: {
+        action_metadata: { type: "MANUAL" },
+        enroll_status: "OPT_OUT",
+      },
     };
 
-    // Merge the existing degrees_of_freedom_spec (preserving all other settings)
-    if (currentCreative?.degrees_of_freedom_spec) {
-      payload.degrees_of_freedom_spec = currentCreative.degrees_of_freedom_spec;
-    }
-
-    // Set contextual_multi_ads to OPT_OUT at the top level
-    payload.contextual_multi_ads = {
-      action_metadata: { type: "MANUAL" },
-      enroll_status: "OPT_OUT",
-    };
-
-    console.log("[fixMultiAdv] Sending payload contextual_multi_ads:", JSON.stringify(payload.contextual_multi_ads));
+    console.log("[fixMultiAdv] Sending payload:", JSON.stringify({ name: payload.name, contextual_multi_ads: payload.contextual_multi_ads }));
 
     const resp = await axios.post(url, payload, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
