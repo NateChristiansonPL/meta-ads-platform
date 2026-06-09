@@ -318,31 +318,6 @@ async function runAdsQaWithViolations(
         dofViolations.push(`audio (asset_feed_spec.audios): ENABLED (expected opted_out)`);
       }
     }
-
-<<<<<<< Updated upstream
-    // Check contextual_multi_ads — should be OPT_OUT.
-    // Three-state logic:
-    //   - enroll_status === "OPT_OUT"  → "Off" (clean)
-    //   - enroll_status !== "OPT_OUT" and field is present → "ON — VIOLATION"
-    //   - field missing AND no Batch 3 error → "Unknown" (Meta didn't return it; state indeterminate)
-    //   - Batch 3 returned an error for this creative → "Unknown" (couldn't read)
-    // Use separate multi-advertiser data (from Batch 3) to avoid breaking main DOF detection
-    const maData = creativeId ? (multiAdvData[creativeId] || {}) : {};
-    const maBatchError = creativeId ? (multiAdvError[creativeId] ?? true) : true;
-    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
-    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| batchError:`, maBatchError);
-    // A violation is only flagged when the field is explicitly returned and is not OPT_OUT
-    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
-    // Excel cell value: Off / ON — VIOLATION / Unknown
-    let multiAdsExcelValue: string;
-    if (multiAdsStatus === "OPT_OUT") {
-      multiAdsExcelValue = "Off";
-    } else if (multiAdsViolation) {
-      multiAdsExcelValue = `ON — VIOLATION (${multiAdsStatus})`;
-    } else {
-      // Field was not returned by Meta (either not present or batch error)
-      multiAdsExcelValue = "Unknown";
-=======
     // ── Multi-advertiser checks ──────────────────────────────────────────────
     // Source 1: asset_feed_spec.multi_advertiser_eligibility (Batch 2, already in creative data)
     const assetFeedMultiAdv: string | undefined = c?.asset_feed_spec?.multi_advertiser_eligibility;
@@ -358,14 +333,11 @@ async function runAdsQaWithViolations(
 
     if (assetFeedMultiAdvViolation) {
       dofViolations.push(`multi_advertiser_eligibility: ${assetFeedMultiAdv} (expected INELIGIBLE)`);
->>>>>>> Stashed changes
     }
     if (multiAdsViolation) {
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
 
-<<<<<<< Updated upstream
-=======
     // Excel cell value: combine both signals into a single readable value
     let multiAdsExcelValue: string;
     if (assetFeedMultiAdvViolation || multiAdsViolation) {
@@ -378,7 +350,6 @@ async function runAdsQaWithViolations(
     } else {
       multiAdsExcelValue = "Unknown";
     }
->>>>>>> Stashed changes
 
 
     const advPlus = dofViolations.length
