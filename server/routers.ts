@@ -1040,7 +1040,6 @@ export const appRouter = router({
     fixMultiAdvertiserViolation: protectedProcedure
       .input(z.object({
         creativeId: z.string().min(1),
-        creativeName: z.string().optional(),
         tokenId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1063,7 +1062,6 @@ export const appRouter = router({
         const result = await fixMultiAdvertiserOnly({
           creativeId: input.creativeId,
           accessToken: metaAccessToken,
-          creativeName: input.creativeName,
         });
 
         if (!result.success) {
@@ -1073,7 +1071,7 @@ export const appRouter = router({
           });
         }
 
-        return { success: true };
+        return { success: true, debug: result.debug };
       }),
   }),
 

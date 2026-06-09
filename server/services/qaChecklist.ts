@@ -1122,7 +1122,21 @@ export async function fixMultiAdvertiserOnly(params: {
     const resp = await axios.post(url, payload, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
-    return { success: true, debug: { url, response: resp.data } };
+    // Verify the update by re-fetching the creative
+    const verifyResp = await axios.get(url, {
+      params: { access_token: accessToken, fields: "id,name,contextual_multi_ads" },
+      timeout: 30000,
+    });
+    console.log("[fixMultiAdv] Verified contextual_multi_ads after update:", JSON.stringify(verifyResp.data?.contextual_multi_ads));
+
+    return {
+      success: true,
+      debug: {
+        sentPayload: { name: payload.name, contextual_multi_ads: payload.contextual_multi_ads },
+        metaResponse: resp.data,
+        verifiedAfter: verifyResp.data?.contextual_multi_ads,
+      }
+    };
   } catch (err: any) {
     const metaError = err?.response?.data?.error;
     const msg = metaError?.message || metaError?.error_user_msg || (err instanceof Error ? err.message : String(err));
