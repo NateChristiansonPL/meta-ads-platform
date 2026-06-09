@@ -1112,7 +1112,6 @@ export async function fixMultiAdvertiserOnly(params: {
       access_token: accessToken,
       name: currentCreative?.name,
       contextual_multi_ads: {
-        action_metadata: { type: "DEFAULT_OFF" },
         enroll_status: "OPT_OUT",
       },
     };
