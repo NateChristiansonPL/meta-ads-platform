@@ -1110,7 +1110,6 @@ export async function fixMultiAdvertiserOnly(params: {
     // The creative name (fetched directly from Meta) satisfies the "must specify name/status" requirement.
     const payload: any = {
       access_token: accessToken,
-      name: currentCreative?.name,
       contextual_multi_ads: {
         enroll_status: "OPT_OUT",
       },
