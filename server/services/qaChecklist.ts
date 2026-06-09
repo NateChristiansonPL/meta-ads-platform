@@ -318,35 +318,23 @@ async function runAdsQaWithViolations(
         dofViolations.push(`audio (asset_feed_spec.audios): ENABLED (expected opted_out)`);
       }
     }
-    // ── Multi-advertiser checks ──────────────────────────────────────────────
-    // Source 1: asset_feed_spec.multi_advertiser_eligibility (Batch 2, already in creative data)
-    const assetFeedMultiAdv: string | undefined = c?.asset_feed_spec?.multi_advertiser_eligibility;
-    const assetFeedMultiAdvViolation = !!assetFeedMultiAdv && assetFeedMultiAdv !== "INELIGIBLE";
 
-    // Source 2: contextual_multi_ads.enroll_status (Batch 3, separate to avoid breaking DOF detection)
+    // ── Multi-advertiser check ───────────────────────────────────────────────
+    // contextual_multi_ads is a top-level field on the creative (Batch 3).
+    // Three-state: OPT_OUT → "Off", anything else → violation, missing → "Unknown"
     const maData = creativeId ? (multiAdvData[creativeId] || {}) : {};
     const maBatchError = creativeId ? (multiAdvError[creativeId] ?? true) : true;
     const multiAdsStatus: string | undefined = maData?.contextual_multi_ads?.enroll_status;
+    console.log(`[QA] Ad ${ad.name || adId} | contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| batchError:`, maBatchError);
     const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
-
-    console.log(`[QA] Ad ${ad.name || adId} | asset_feed multi_advertiser_eligibility:`, assetFeedMultiAdv, `| contextual_multi_ads:`, JSON.stringify(maData?.contextual_multi_ads), `| batchError:`, maBatchError);
-
-    if (assetFeedMultiAdvViolation) {
-      dofViolations.push(`multi_advertiser_eligibility: ${assetFeedMultiAdv} (expected INELIGIBLE)`);
-    }
     if (multiAdsViolation) {
       dofViolations.push(`contextual_multi_ads: enroll_status=${multiAdsStatus} (expected OPT_OUT)`);
     }
-
-    // Excel cell value: combine both signals into a single readable value
     let multiAdsExcelValue: string;
-    if (assetFeedMultiAdvViolation || multiAdsViolation) {
-      const parts: string[] = [];
-      if (assetFeedMultiAdvViolation) parts.push(assetFeedMultiAdv!);
-      if (multiAdsViolation) parts.push(multiAdsStatus!);
-      multiAdsExcelValue = `ON — VIOLATION (${parts.join(", ")})`;
-    } else if (assetFeedMultiAdv === "INELIGIBLE" || multiAdsStatus === "OPT_OUT") {
+    if (multiAdsStatus === "OPT_OUT") {
       multiAdsExcelValue = "Off";
+    } else if (multiAdsViolation) {
+      multiAdsExcelValue = `ON — VIOLATION (${multiAdsStatus})`;
     } else {
       multiAdsExcelValue = "Unknown";
     }
@@ -927,12 +915,11 @@ export async function fixAdDofSpec(params: {
       newCreativePayload.url_tags = existingCreative.url_tags;
     }
 
-    // Fix asset_feed_spec: turn off "Add Music" and set multi_advertiser_eligibility
+    // Fix asset_feed_spec.audios to turn off "Add Music"
     if (existingCreative.asset_feed_spec) {
       newCreativePayload.asset_feed_spec = {
         ...existingCreative.asset_feed_spec,
         audios: [{ type: "opted_out" }],
-        multi_advertiser_eligibility: "INELIGIBLE",
       };
     }
 
@@ -1101,29 +1088,12 @@ export async function fixMultiAdvertiserOnly(params: {
   const { creativeId, accessToken } = params;
 
   try {
-    // Fetch current asset_feed_spec so we can patch it without clobbering other fields
-    console.log("[fixMultiAdv] Fetching creative", creativeId);
-    const creativeResp = await axios.get(`${BASE_URL}/${creativeId}`, {
-      params: { fields: "asset_feed_spec", access_token: accessToken },
-      timeout: 30000,
-    });
-    const existingAssetFeedSpec = creativeResp.data?.asset_feed_spec;
-
-    const updatePayload: Record<string, unknown> = {
+    const url = `${BASE_URL}/${creativeId}`;
+    console.log("[fixMultiAdv] Updating contextual_multi_ads on creative", creativeId);
+    const resp = await axios.post(url, {
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
       access_token: accessToken,
-    };
-
-    if (existingAssetFeedSpec) {
-      updatePayload.asset_feed_spec = {
-        ...existingAssetFeedSpec,
-        multi_advertiser_eligibility: "INELIGIBLE",
-      };
-    }
-
-    const url = `${BASE_URL}/${creativeId}`;
-    console.log("[fixMultiAdv] Updating creative", creativeId);
-    const resp = await axios.post(url, updatePayload, { timeout: 30000 });
+    }, { timeout: 30000 });
     console.log("[fixMultiAdv] Response:", JSON.stringify(resp.data));
 
     return { success: true, debug: { url, response: resp.data } };
