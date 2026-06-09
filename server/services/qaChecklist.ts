@@ -1113,6 +1113,7 @@ export async function fixMultiAdvertiserOnly(params: {
       contextual_multi_ads: {
         enroll_status: "OPT_OUT",
       },
+      multi_advertiser_eligibility: "INELIGIBLE",
     };
 
     console.log("[fixMultiAdv] Sending payload:", JSON.stringify({ name: payload.name, contextual_multi_ads: payload.contextual_multi_ads }));
