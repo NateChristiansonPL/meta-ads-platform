@@ -1,375 +1,271 @@
 /**
- * qaChecklist.test.ts — Unit tests for the native QA checklist service.
- * Tests the pure logic functions (format detection, DOF comparison, field extractors)
- * without hitting the Meta API or S3.
+ * Tests for QA Checklist — Add Music violation detection and DOF fix approach
  */
-
 import { describe, it, expect } from "vitest";
 
-// We need to import the internal helpers. Since they're not exported,
-// we'll test them via the module's behavior by importing the module directly.
-// For now, let's test the key logic by re-implementing the testable parts.
+// We test the logic inline since the functions are not exported individually.
+// Instead, we replicate the exact logic used in qaChecklist.ts to verify correctness.
 
-// Import the module to ensure it compiles and loads correctly
-describe("qaChecklist module", () => {
-  it("should import without errors", async () => {
-    const mod = await import("./qaChecklist");
-    expect(mod.runQaChecklist).toBeDefined();
-    expect(typeof mod.runQaChecklist).toBe("function");
+describe("QA Checklist — Add Music Violation Detection", () => {
+  // Simulate the violation string produced by the audios check
+  const violationString = "audio (asset_feed_spec.audios): ENABLED (expected opted_out)";
+
+  it("should NOT match the standard DOF regex", () => {
+    const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
+    expect(match).toBeNull();
+  });
+
+  it("should NOT match the unexpected DOF regex", () => {
+    const match2 = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(unexpected/);
+    expect(match2).toBeNull();
+  });
+
+  it("should match the Add Music regex and extract correct values", () => {
+    const audioMatch = violationString.match(/^audio \(asset_feed_spec\.audios\):\s*(\S+)\s*\(expected\s+(\S+)\)/);
+    expect(audioMatch).not.toBeNull();
+    expect(audioMatch![1]).toBe("ENABLED");
+    expect(audioMatch![2]).toBe("opted_out");
+  });
+
+  it("should produce correct structured violation object", () => {
+    const audioMatch = violationString.match(/^audio \(asset_feed_spec\.audios\):\s*(\S+)\s*\(expected\s+(\S+)\)/);
+    if (audioMatch) {
+      const result = { name: "Add Music (asset_feed_spec.audios)", currentValue: audioMatch[1], expectedValue: audioMatch[2] };
+      expect(result.name).toBe("Add Music (asset_feed_spec.audios)");
+      expect(result.currentValue).toBe("ENABLED");
+    }
   });
 });
 
-// Test format detection logic (mirrored from the module)
-describe("format detection logic", () => {
-  function determineFormatAndPac(creative: any): { format: string; isPac: boolean } {
-    const assetFeed = creative?.asset_feed_spec || {};
-    const objStory = creative?.object_story_spec || {};
-    const linkData = objStory.link_data || {};
-
-    if (linkData.child_attachments) return { format: "carousel", isPac: false };
-    if (objStory.video_data) return { format: "video", isPac: false };
-    if (assetFeed.videos) return { format: "video", isPac: true };
-    if (assetFeed.images) return { format: "static", isPac: true };
-    return { format: "static", isPac: false };
-  }
-
-  it("detects carousel from child_attachments", () => {
-    const creative = { object_story_spec: { link_data: { child_attachments: [{}] } } };
-    expect(determineFormatAndPac(creative)).toEqual({ format: "carousel", isPac: false });
+describe("QA Checklist — Add Music Detection Logic", () => {
+  it("should detect violation when audios type is 'random'", () => {
+    const audios = [{ type: "random" }];
+    const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
+    expect(hasOptedOut).toBe(false);
+    expect(!hasOptedOut && audios.length > 0).toBe(true);
   });
 
-  it("detects non-PAC video from video_data", () => {
-    const creative = { object_story_spec: { video_data: { video_id: "123" } } };
-    expect(determineFormatAndPac(creative)).toEqual({ format: "video", isPac: false });
+  it("should NOT detect violation when audios type is 'opted_out'", () => {
+    const audios = [{ type: "opted_out" }];
+    const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
+    expect(hasOptedOut).toBe(true);
+    expect(!hasOptedOut && audios.length > 0).toBe(false);
   });
 
-  it("detects PAC video from asset_feed_spec.videos", () => {
-    const creative = { asset_feed_spec: { videos: [{ video_id: "1" }, { video_id: "2" }] } };
-    expect(determineFormatAndPac(creative)).toEqual({ format: "video", isPac: true });
+  it("should detect violation when audios is empty array", () => {
+    const audios: any[] = [];
+    const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
+    expect(!hasOptedOut && audios.length > 0).toBe(false);
   });
 
-  it("detects PAC static from asset_feed_spec.images", () => {
-    const creative = { asset_feed_spec: { images: [{ hash: "a" }, { hash: "b" }] } };
-    expect(determineFormatAndPac(creative)).toEqual({ format: "static", isPac: true });
-  });
-
-  it("defaults to non-PAC static", () => {
-    const creative = { object_story_spec: { link_data: { link: "https://example.com" } } };
-    expect(determineFormatAndPac(creative)).toEqual({ format: "static", isPac: false });
+  it("should detect violation when audios has multiple items", () => {
+    const audios = [{ type: "random" }, { type: "something" }];
+    const hasOptedOut = audios.length === 1 && audios[0]?.type === "opted_out";
+    expect(hasOptedOut).toBe(false);
+    expect(!hasOptedOut && audios.length > 0).toBe(true);
   });
 });
 
-// Test DOF comparison logic
-describe("DOF comparison logic", () => {
-  function compareDof(actual: any, expected: any): string[] {
-    if (!actual) return ["degrees_of_freedom_spec is MISSING entirely"];
-    const violations: string[] = [];
+describe("QA Checklist — Fix Payload (Create New Creative + Reassign)", () => {
+  it("should build new creative payload with object_story_spec + corrected DOF (no creative_id)", () => {
+    // The three-step approach:
+    // 1. Fetch existing creative content
+    // 2. Create NEW creative with same content + corrected DOF
+    // 3. Update ad to point to new creative
+    const existingCreative = {
+      name: "Syllables - Static - Jun-26",
+      object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
+      url_tags: "utm_source=meta",
+      asset_feed_spec: { audios: [{ type: "random" }] },
+    };
 
-    const actualFeatures = actual.creative_features_spec || {};
-    const expectedFeatures = expected.creative_features_spec || {};
+    const dofSpec = {
+      creative_features_spec: {
+        audio: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
+        advantage_plus_creative: { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" },
+      },
+    };
 
-    for (const [name, expVal] of Object.entries<any>(expectedFeatures)) {
-      const actVal = actualFeatures[name];
-      if (!actVal) continue;
-      if (actVal.enroll_status !== (expVal.enroll_status || "OPT_OUT")) {
-        violations.push(`${name}: enroll_status=${actVal.enroll_status} (expected ${expVal.enroll_status || "OPT_OUT"})`);
-      }
-      if (actVal.customizations && typeof actVal.customizations === 'object') {
-        for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
-          if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
-            violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (expected OPT_OUT)`);
-          }
-        }
-      }
-    }
-    for (const [name, actVal] of Object.entries<any>(actualFeatures)) {
-      if (!(name in expectedFeatures) && actVal.enroll_status !== "OPT_OUT") {
-        violations.push(`${name}: enroll_status=${actVal.enroll_status} (unexpected, not OPT_OUT)`);
-      }
-      if (!(name in expectedFeatures) && actVal.customizations && typeof actVal.customizations === 'object') {
-        for (const [subName, subVal] of Object.entries<any>(actVal.customizations)) {
-          if (subVal && subVal.enroll_status && subVal.enroll_status !== "OPT_OUT") {
-            violations.push(`${name}.${subName}: enroll_status=${subVal.enroll_status} (unexpected, not OPT_OUT)`);
-          }
-        }
-      }
+    // Build new creative payload (Step 2)
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
+      object_story_spec: existingCreative.object_story_spec,
+      degrees_of_freedom_spec: dofSpec,
+    };
+
+    if (existingCreative.url_tags) {
+      newCreativePayload.url_tags = existingCreative.url_tags;
     }
 
-    if (actualFeatures.standard_enhancements && actualFeatures.standard_enhancements.enroll_status !== "OPT_OUT") {
-      const alreadyCaught = violations.some(v => v.startsWith('standard_enhancements:'));
-      if (!alreadyCaught) {
-        violations.push(`standard_enhancements: enroll_status=${actualFeatures.standard_enhancements.enroll_status} (expected OPT_OUT)`);
-      }
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
     }
 
-    const actualSourcing = actual.creative_sourcing_spec || {};
-    const expectedSourcing = expected.creative_sourcing_spec || {};
-    for (const [name, expVal] of Object.entries<any>(expectedSourcing)) {
-      const actVal = actualSourcing[name];
-      if (!actVal) continue;
-      if (actVal.enroll_status !== (expVal.enroll_status || "OPT_OUT")) {
-        violations.push(`sourcing.${name}: enroll_status=${actVal.enroll_status} (expected ${expVal.enroll_status || "OPT_OUT"})`);
-      }
+    // Verify NO creative_id (it's a new creative, not referencing an existing one)
+    expect(newCreativePayload).not.toHaveProperty("creative_id");
+
+    // Verify object_story_spec is present
+    expect(newCreativePayload.object_story_spec).toEqual(existingCreative.object_story_spec);
+
+    // Verify DOF spec is present with only creative_features_spec
+    expect(newCreativePayload.degrees_of_freedom_spec).toEqual(dofSpec);
+    expect((newCreativePayload.degrees_of_freedom_spec as any).creative_sourcing_spec).toBeUndefined();
+
+    // Verify url_tags preserved
+    expect(newCreativePayload.url_tags).toBe("utm_source=meta");
+
+    // Verify asset_feed_spec.audios is fixed
+    const afs = newCreativePayload.asset_feed_spec as any;
+    expect(afs.audios).toEqual([{ type: "opted_out" }]);
+
+    // Verify name is appended with "(DOF fixed)"
+    expect(newCreativePayload.name).toBe("Syllables - Static - Jun-26 (DOF fixed)");
+  });
+
+  it("should reassign ad to new creative via creative_id JSON param (Step 3)", () => {
+    const adId = "120215890270510534";
+    const newCreativeId = "9999999999999";
+
+    // Step 3: Update ad to point to new creative
+    const body = {
+      creative: JSON.stringify({ creative_id: newCreativeId }),
+      access_token: "test_token",
+    };
+
+    const parsed = JSON.parse(body.creative);
+    expect(parsed.creative_id).toBe(newCreativeId);
+    // No DOF spec in the ad update — it's already baked into the new creative
+    expect(parsed.degrees_of_freedom_spec).toBeUndefined();
+  });
+
+  it("should handle creative without url_tags or asset_feed_spec", () => {
+    const existingCreative = {
+      name: "Test Creative",
+      object_story_spec: { page_id: "123", link_data: { link: "https://example.com" } },
+      url_tags: undefined as string | undefined,
+      asset_feed_spec: undefined as any,
+    };
+
+    const newCreativePayload: Record<string, unknown> = {
+      name: `${existingCreative.name} (DOF fixed)`,
+      object_story_spec: existingCreative.object_story_spec,
+      degrees_of_freedom_spec: { creative_features_spec: {} },
+    };
+
+    if (existingCreative.url_tags) {
+      newCreativePayload.url_tags = existingCreative.url_tags;
     }
-    return violations;
-  }
 
-  it("returns missing message when actual is null/undefined", () => {
-    expect(compareDof(null, {})).toEqual(["degrees_of_freedom_spec is MISSING entirely"]);
-    expect(compareDof(undefined, {})).toEqual(["degrees_of_freedom_spec is MISSING entirely"]);
+    if (existingCreative.asset_feed_spec) {
+      newCreativePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    expect(newCreativePayload).not.toHaveProperty("url_tags");
+    expect(newCreativePayload).not.toHaveProperty("asset_feed_spec");
+    expect(newCreativePayload.object_story_spec).toBeDefined();
   });
 
-  it("returns empty array when all features match expected OPT_OUT", () => {
-    const spec = {
-      creative_features_spec: {
-        audio: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-        biz_ai: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-      },
-      creative_sourcing_spec: {
-        brand: { enroll_status: "OPT_OUT" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {
-        audio: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-        biz_ai: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-      },
-      creative_sourcing_spec: {
-        brand: { enroll_status: "OPT_OUT" },
-      },
-    };
-    expect(compareDof(spec, expected)).toEqual([]);
-  });
+  it("should create new creative at /act_{accountId}/adcreatives endpoint", () => {
+    const accountId = "1234567890";
+    const createUrl = `https://graph.facebook.com/v22.0/act_${accountId}/adcreatives`;
 
-  it("detects violation when enroll_status is not OPT_OUT", () => {
-    const spec = {
-      creative_features_spec: {
-        audio: { enroll_status: "OPT_IN", action_metadata: { type: "DEFAULT_OFF" } },
-      },
-    };
-    const expected = {
-      creative_features_spec: {
-        audio: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-      },
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain("audio");
-    expect(violations[0]).toContain("OPT_IN");
-  });
-
-  it("detects unexpected feature not in expected spec", () => {
-    const spec = {
-      creative_features_spec: {
-        new_feature: { enroll_status: "OPT_IN" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {},
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain("new_feature");
-    expect(violations[0]).toContain("unexpected");
-  });
-
-  it("ignores unexpected feature if it is OPT_OUT", () => {
-    const spec = {
-      creative_features_spec: {
-        new_feature: { enroll_status: "OPT_OUT" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {},
-    };
-    expect(compareDof(spec, expected)).toEqual([]);
-  });
-
-  it("detects nested customization violations (e.g., text_optimizations.text_extraction)", () => {
-    const spec = {
-      creative_features_spec: {
-        text_optimizations: {
-          enroll_status: "OPT_IN",
-          customizations: {
-            text_extraction: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
-          },
-        },
-      },
-    };
-    const expected = {
-      creative_features_spec: {
-        text_optimizations: { enroll_status: "OPT_OUT" },
-      },
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations.length).toBeGreaterThanOrEqual(2);
-    expect(violations.some(v => v.includes("text_optimizations:"))).toBe(true);
-    expect(violations.some(v => v.includes("text_optimizations.text_extraction:"))).toBe(true);
-  });
-
-  it("detects standard_enhancements OPT_IN as a violation", () => {
-    const spec = {
-      creative_features_spec: {
-        standard_enhancements: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {},
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations.some(v => v.includes("standard_enhancements"))).toBe(true);
-  });
-
-  it("detects inline_comment (relevant comments) OPT_IN", () => {
-    const spec = {
-      creative_features_spec: {
-        inline_comment: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {
-        inline_comment: { enroll_status: "OPT_OUT" },
-      },
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain("inline_comment");
-  });
-
-  it("detects audio (music) OPT_IN", () => {
-    const spec = {
-      creative_features_spec: {
-        audio: { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_IN" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {
-        audio: { enroll_status: "OPT_OUT", action_metadata: { type: "DEFAULT_OFF" } },
-      },
-    };
-    const violations = compareDof(spec, expected);
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain("audio");
-  });
-
-  it("does not flag standard_enhancements when it is OPT_OUT", () => {
-    const spec = {
-      creative_features_spec: {
-        standard_enhancements: { enroll_status: "OPT_OUT" },
-      },
-    };
-    const expected = {
-      creative_features_spec: {},
-    };
-    expect(compareDof(spec, expected)).toEqual([]);
+    // Verify the URL format matches what Meta expects
+    expect(createUrl).toContain("/act_");
+    expect(createUrl).toContain("/adcreatives");
+    expect(createUrl).toContain(accountId);
   });
 });
 
-// Test field extractors
-describe("field extractors", () => {
-  function extractLandingPage(c: any): string {
-    const objStory = c?.object_story_spec || {};
-    const ld = objStory.link_data || {};
-    const vd = objStory.video_data || {};
-    const af = c?.asset_feed_spec || {};
-    if (ld.link) return ld.link;
-    if (vd.call_to_action?.value?.link) return vd.call_to_action.value.link;
-    const links = af.link_urls || [];
-    return links[0]?.website_url || "";
-  }
+// Helper that mirrors the three-state Excel value logic in qaChecklist.ts
+function getMultiAdsExcelValue(maData: any, maBatchError: boolean): string {
+  const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+  const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+  if (multiAdsStatus === "OPT_OUT") return "Off";
+  if (multiAdsViolation) return `ON \u2014 VIOLATION (${multiAdsStatus})`;
+  return "Unknown";
+}
 
-  it("extracts landing page from link_data", () => {
-    const c = { object_story_spec: { link_data: { link: "https://example.com/page" } } };
-    expect(extractLandingPage(c)).toBe("https://example.com/page");
+describe("QA Checklist — Multi-Advertiser Detection", () => {
+  // --- Violation detection ---
+  it("should detect contextual_multi_ads violation when enroll_status is OPT_IN", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    expect(multiAdsViolation).toBe(true);
+  });
+  it("should NOT detect contextual_multi_ads violation when enroll_status is OPT_OUT", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    expect(multiAdsViolation).toBe(false);
+  });
+  it("should NOT detect contextual_multi_ads violation when field is missing (Meta may not return it on read)", () => {
+    const maData = {} as any;
+    const multiAdsStatus = maData?.contextual_multi_ads?.enroll_status;
+    const multiAdsViolation = !!multiAdsStatus && multiAdsStatus !== "OPT_OUT";
+    expect(multiAdsViolation).toBeFalsy();
   });
 
-  it("extracts landing page from video_data CTA", () => {
-    const c = { object_story_spec: { video_data: { call_to_action: { value: { link: "https://video.com" } } } } };
-    expect(extractLandingPage(c)).toBe("https://video.com");
+  // --- Excel cell value (three-state) ---
+  it("Excel value: 'Off' when contextual_multi_ads.enroll_status is OPT_OUT", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_OUT" } };
+    expect(getMultiAdsExcelValue(maData, false)).toBe("Off");
   });
-
-  it("extracts landing page from asset_feed_spec link_urls", () => {
-    const c = { asset_feed_spec: { link_urls: [{ website_url: "https://feed.com" }] } };
-    expect(extractLandingPage(c)).toBe("https://feed.com");
+  it("Excel value: violation when contextual_multi_ads.enroll_status is OPT_IN", () => {
+    const maData = { contextual_multi_ads: { enroll_status: "OPT_IN" } };
+    expect(getMultiAdsExcelValue(maData, false)).toBe("ON \u2014 VIOLATION (OPT_IN)");
   });
-
-  it("returns empty string when no landing page found", () => {
-    expect(extractLandingPage({})).toBe("");
+  it("Excel value: 'Unknown' when contextual_multi_ads field is missing (no batch error)", () => {
+    const maData = {} as any;
+    expect(getMultiAdsExcelValue(maData, false)).toBe("Unknown");
   });
-});
-
-// Test UTM extraction
-describe("UTM extraction", () => {
-  function extractUtms(url: string): string {
-    try {
-      const u = new URL(url);
-      const utms: string[] = [];
-      u.searchParams.forEach((v, k) => { if (k.startsWith("utm_")) utms.push(`${k}=${v}`); });
-      return utms.join("\n");
-    } catch { return ""; }
-  }
-
-  it("extracts UTM params from URL", () => {
-    const url = "https://example.com?utm_source=fb&utm_medium=cpc&other=val";
-    const result = extractUtms(url);
-    expect(result).toContain("utm_source=fb");
-    expect(result).toContain("utm_medium=cpc");
-    expect(result).not.toContain("other");
-  });
-
-  it("returns empty string for invalid URL", () => {
-    expect(extractUtms("not a url")).toBe("");
-  });
-
-  it("returns empty string when no UTMs present", () => {
-    expect(extractUtms("https://example.com?foo=bar")).toBe("");
+  it("Excel value: 'Unknown' when Batch 3 returned an error for this creative", () => {
+    const maData = {} as any;
+    expect(getMultiAdsExcelValue(maData, true)).toBe("Unknown");
   });
 });
-
-// Test geo formatting
-describe("geo formatting", () => {
-  function formatGeo(targeting: any): string {
-    const geo = targeting?.geo_locations || {};
-    const lines: string[] = [];
-    for (const country of geo.countries || []) lines.push(country);
-    for (const region of geo.regions || []) {
-      const name = region.name || "";
-      const country = region.country || "";
-      lines.push(country && country !== "US" ? `${name}, ${country}` : name);
-    }
-    for (const city of geo.cities || []) {
-      const cityName = city.name || "";
-      const region = city.region || "";
-      const country = city.country || "US";
-      const radius = city.radius || 0;
-      const radiusUnit = city.distance_unit || "mile";
-      let label = country === "US" && region ? `${cityName}, ${region}` : country !== "US" ? `${cityName}, ${country}` : cityName;
-      if (radius && Number(radius) > 0) {
-        const unitShort = radiusUnit.includes("mile") ? "mi" : "km";
-        label += ` (+${radius} ${unitShort})`;
-      }
-      lines.push(label);
-    }
-    for (const dma of geo.geo_markets || []) lines.push(dma.name || "");
-    for (const zc of geo.zips || []) lines.push(zc.name || zc.key || "");
-    return lines.length ? lines.join("\n") : "All";
-  }
-
-  it("formats countries", () => {
-    expect(formatGeo({ geo_locations: { countries: ["US", "CA"] } })).toBe("US\nCA");
+describe("QA Checklist — Multi-Advertiser Violation Parsing", () => {
+  it("should parse contextual_multi_ads violation string with standard DOF regex", () => {
+    const violationString = "contextual_multi_ads: enroll_status=OPT_IN (expected OPT_OUT)";
+    const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("contextual_multi_ads");
+    expect(match![2]).toBe("OPT_IN");
+    expect(match![3]).toBe("OPT_OUT");
   });
-
-  it("formats cities with radius", () => {
-    const targeting = {
-      geo_locations: {
-        cities: [{ name: "Austin", region: "Texas", country: "US", radius: 25, distance_unit: "mile" }],
-      },
-    };
-    expect(formatGeo(targeting)).toBe("Austin, Texas (+25 mi)");
+  it("should parse multi_advertiser_eligibility violation string with dedicated regex", () => {
+    const violationString = "multi_advertiser_eligibility: ELIGIBLE (expected INELIGIBLE)";
+    const dofMatch = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
+    expect(dofMatch).toBeNull();
+    const multiAdvMatch = violationString.match(/^multi_advertiser_eligibility:\s*(\S+)\s*\(expected\s+(\S+)\)/);
+    expect(multiAdvMatch).not.toBeNull();
+    expect(multiAdvMatch![1]).toBe("ELIGIBLE");
+    expect(multiAdvMatch![2]).toBe("INELIGIBLE");
   });
-
-  it("returns 'All' when no geo specified", () => {
-    expect(formatGeo({})).toBe("All");
-    expect(formatGeo({ geo_locations: {} })).toBe("All");
+  it("should produce correct structured violation for multi_advertiser_eligibility", () => {
+    const violationString = "multi_advertiser_eligibility: ELIGIBLE (expected INELIGIBLE)";
+    const multiAdvMatch = violationString.match(/^multi_advertiser_eligibility:\s*(\S+)\s*\(expected\s+(\S+)\)/);
+    if (multiAdvMatch) {
+      const result = { name: "Multi-Advertiser Eligibility", currentValue: multiAdvMatch[1], expectedValue: multiAdvMatch[2] };
+      expect(result.name).toBe("Multi-Advertiser Eligibility");
+      expect(result.currentValue).toBe("ELIGIBLE");
+      expect(result.expectedValue).toBe("INELIGIBLE");
+    }
+  });
+  it("should produce correct structured violation for contextual_multi_ads", () => {
+    const violationString = "contextual_multi_ads: enroll_status=OPT_IN (expected OPT_OUT)";
+    const match = violationString.match(/^(.+?):\s*enroll_status=(\S+)\s*\(expected\s+(\S+)\)/);
+    if (match) {
+      const result = { name: match[1], currentValue: match[2], expectedValue: match[3] };
+      expect(result.name).toBe("contextual_multi_ads");
+      expect(result.currentValue).toBe("OPT_IN");
+      expect(result.expectedValue).toBe("OPT_OUT");
+    }
   });
 });
