@@ -4,6 +4,18 @@
  * Ports the Python ad-qa-checklist skill to TypeScript.
  * Makes 4 batch API calls to Meta Graph API, validates degrees_of_freedom_spec,
  * generates a two-tab XLSX report, uploads to S3, and returns the download URL.
+ *
+ * CHANGELOG (v25.0 gap patch):
+ *   Added 6 fields present in the official Graph API v25.0 creative_features_spec
+ *   reference that were previously missing from all spec locations:
+ *     - music_generation            (AI music generation; distinct from `audio`)
+ *     - text_extraction_for_headline
+ *     - text_extraction_for_tap_target
+ *     - profile_extension           (separate from profile_card)
+ *     - customize_product_recommendation
+ *     - text_overlay_translation    (separate from text_translation)
+ *   Removed video_highlight (singular) — v25.0 only documents video_highlights (plural).
+ *   All three spec locations updated: EXPECTED_SPECS, buildWritableDofSpec, buildFullDofSpec.
  */
 
 import axios from "axios";
@@ -23,15 +35,15 @@ const BATCH_SIZE = 50;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const EXPECTED_SPECS: Record<string, any> = {
-  STATIC_NO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_translation":{"action_metadata":{"type":"MANUAL"},"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlight":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
+  STATIC_NO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"customize_product_recommendation":{"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"music_generation":{"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_extension":{"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_extraction_for_headline":{"enroll_status":"OPT_OUT"},"text_extraction_for_tap_target":{"enroll_status":"OPT_OUT"},"text_overlay_translation":{"enroll_status":"OPT_OUT"},"text_translation":{"action_metadata":{"type":"MANUAL"},"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
 
-  STATIC_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlight":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
+  STATIC_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"customize_product_recommendation":{"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"music_generation":{"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_extension":{"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_extraction_for_headline":{"enroll_status":"OPT_OUT"},"text_extraction_for_tap_target":{"enroll_status":"OPT_OUT"},"text_overlay_translation":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
 
-  VIDEO_NO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_translation":{"action_metadata":{"type":"MANUAL"},"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"enroll_status":"OPT_OUT"},"video_highlight":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
+  VIDEO_NO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"customize_product_recommendation":{"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"music_generation":{"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_extension":{"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_extraction_for_headline":{"enroll_status":"OPT_OUT"},"text_extraction_for_tap_target":{"enroll_status":"OPT_OUT"},"text_overlay_translation":{"enroll_status":"OPT_OUT"},"text_translation":{"action_metadata":{"type":"MANUAL"},"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
 
-  VIDEO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlight":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
+  VIDEO_PAC: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"customize_product_recommendation":{"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"music_generation":{"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_extension":{"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_extraction_for_headline":{"enroll_status":"OPT_OUT"},"text_extraction_for_tap_target":{"enroll_status":"OPT_OUT"},"text_overlay_translation":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
 
-  CAROUSEL: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlight":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
+  CAROUSEL: {"creative_features_spec":{"product_extensions":{"enroll_status":"OPT_OUT"},"adapt_to_placement":{"customizations":{"aspect_ratio_config":{}},"enroll_status":"OPT_OUT"},"add_text_overlay":{"enroll_status":"OPT_OUT"},"ads_with_benefits":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"advantage_plus_creative":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"app_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"audio":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"biz_ai":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"carousel_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"catalog_feed_tag":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"creative_stickers":{"enroll_status":"OPT_OUT"},"cv_transformation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"customize_product_recommendation":{"enroll_status":"OPT_OUT"},"description_automation":{"enroll_status":"OPT_OUT"},"dynamic_partner_content":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enhance_cta":{"enroll_status":"OPT_OUT"},"feed_caption_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"generate_cta":{"enroll_status":"OPT_OUT"},"hide_price":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_glados_feed":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"ig_video_native_subtitle":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_animation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_auto_crop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_background_gen":{"enroll_status":"OPT_OUT"},"image_brightness_and_contrast":{"enroll_status":"OPT_OUT"},"image_enhancement":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_templates":{"enroll_status":"OPT_OUT"},"image_text_translation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"image_touchups":{"enroll_status":"OPT_OUT"},"image_uncrop":{"enroll_status":"OPT_OUT"},"inline_comment":{"enroll_status":"OPT_OUT"},"local_store_extension":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_liquidity_animated_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_order":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"media_type_automation":{"enroll_status":"OPT_OUT"},"multi_photo_to_video":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"music_generation":{"enroll_status":"OPT_OUT"},"pac_recomposition":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"pac_relaxation":{"enroll_status":"OPT_OUT"},"product_browsing":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"product_metadata_automation":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_card":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"profile_extension":{"enroll_status":"OPT_OUT"},"replace_media_text":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"reveal_details_over_time":{"enroll_status":"OPT_OUT"},"show_destination_blurbs":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"show_summary":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"site_extensions":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"standard_enhancements_catalog":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"text_optimizations":{"enroll_status":"OPT_OUT"},"text_extraction_for_headline":{"enroll_status":"OPT_OUT"},"text_extraction_for_tap_target":{"enroll_status":"OPT_OUT"},"text_overlay_translation":{"enroll_status":"OPT_OUT"},"text_translation":{"enroll_status":"OPT_OUT"},"translate_voiceover":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_auto_crop":{"enroll_status":"OPT_OUT"},"video_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_highlights":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_to_image":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"video_uncrop":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"wa_mm_image_filtering":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"enable_ncs_testimonials":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"},"dha_optimization":{"action_metadata":{"type":"DEFAULT_OFF"},"enroll_status":"OPT_OUT"}},"creative_sourcing_spec":{"app_info_spec":{"enroll_status":"OPT_OUT"},"brand":{"enroll_status":"OPT_OUT"},"dynamic_site_links_spec":{"enroll_status":"OPT_OUT"},"featured_offering_spec":{"enroll_status":"OPT_OUT","media":[]},"website_media_spec":{"enroll_status":"OPT_OUT"},"website_summary_spec":{"enroll_status":"OPT_OUT"},"destination_screenshot_spec":{"enroll_status":"OPT_OUT"}}},
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -280,7 +292,7 @@ async function runAdsQaWithViolations(
     }
   });
 
-  // Build rows + structured violationss
+  // Build rows + structured violations
   const rows: any[] = [];
   const violations: QaViolation[] = [];
   const cleanAccountId = adAccountId.replace(/^act_/, "");
@@ -765,6 +777,11 @@ export function getExpectedSpec(specKey: string): any {
  * Build the FULL DOF spec that Meta accepts for writing — all settings OFF.
  * This matches the exact payload structure observed from Meta when all Advantage+
  * creative settings are turned off for a static image ad.
+ *
+ * Includes 6 additional fields from Graph API v25.0 reference:
+ *   music_generation, text_extraction_for_headline, text_extraction_for_tap_target,
+ *   profile_extension, customize_product_recommendation, text_overlay_translation.
+ * Removed video_highlight (singular) — only video_highlights (plural) is in v25.0.
  */
 function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
@@ -772,64 +789,70 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 
   return {
     creative_features_spec: {
-      product_extensions:              off,
-      adapt_to_placement:              { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
-      add_text_overlay:                off,
-      ads_with_benefits:               defaultOff,
-      advantage_plus_creative:         defaultOff,
-      app_highlights:                  defaultOff,
-      audio:                           defaultOff,
-      biz_ai:                          defaultOff,
-      carousel_to_video:               defaultOff,
-      catalog_feed_tag:                defaultOff,
-      creative_stickers:               off,
-      cv_transformation:               defaultOff,
-      description_automation:          off,
-      dynamic_partner_content:         defaultOff,
-      enhance_cta:                     off,
-      feed_caption_optimization:       defaultOff,
-      generate_cta:                    off,
-      hide_price:                      defaultOff,
-      ig_glados_feed:                  defaultOff,
-      ig_video_native_subtitle:        defaultOff,
-      image_animation:                 defaultOff,
-      image_auto_crop:                 defaultOff,
-      image_background_gen:            off,
-      image_brightness_and_contrast:   off,
-      image_enhancement:               defaultOff,
-      image_templates:                 off,
-      image_text_translation:          defaultOff,
-      image_touchups:                  off,
-      image_uncrop:                    off,
-      inline_comment:                  off,
-      local_store_extension:           defaultOff,
-      media_liquidity_animated_image:  defaultOff,
-      media_order:                     defaultOff,
-      media_type_automation:           off,
-      multi_photo_to_video:            defaultOff,
-      pac_recomposition:               defaultOff,
-      pac_relaxation:                  off,
-      product_browsing:                defaultOff,
-      product_metadata_automation:     defaultOff,
-      profile_card:                    defaultOff,
-      replace_media_text:              defaultOff,
-      reveal_details_over_time:        off,
-      show_destination_blurbs:         defaultOff,
-      show_summary:                    defaultOff,
-      site_extensions:                 defaultOff,
-      standard_enhancements_catalog:   defaultOff,
-      text_optimizations:              off,
-      text_translation:                { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_OUT" },
-      translate_voiceover:             defaultOff,
-      video_auto_crop:                 off,
-      video_filtering:                 defaultOff,
-      video_highlight:                 defaultOff,
-      video_highlights:                defaultOff,
-      video_to_image:                  defaultOff,
-      video_uncrop:                    defaultOff,
-      wa_mm_image_filtering:           defaultOff,
-      enable_ncs_testimonials:         defaultOff,
-      dha_optimization:                defaultOff,
+      product_extensions:                   off,
+      adapt_to_placement:                   { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
+      add_text_overlay:                     off,
+      ads_with_benefits:                    defaultOff,
+      advantage_plus_creative:              defaultOff,
+      app_highlights:                       defaultOff,
+      audio:                                defaultOff,
+      biz_ai:                               defaultOff,
+      carousel_to_video:                    defaultOff,
+      catalog_feed_tag:                     defaultOff,
+      creative_stickers:                    off,
+      cv_transformation:                    defaultOff,
+      customize_product_recommendation:     off,       // v25.0 — no action_metadata in official spec
+      description_automation:               off,
+      dynamic_partner_content:              defaultOff,
+      enhance_cta:                          off,
+      feed_caption_optimization:            defaultOff,
+      generate_cta:                         off,
+      hide_price:                           defaultOff,
+      ig_glados_feed:                       defaultOff,
+      ig_video_native_subtitle:             defaultOff,
+      image_animation:                      defaultOff,
+      image_auto_crop:                      defaultOff,
+      image_background_gen:                 off,
+      image_brightness_and_contrast:        off,
+      image_enhancement:                    defaultOff,
+      image_templates:                      off,
+      image_text_translation:               defaultOff,
+      image_touchups:                       off,
+      image_uncrop:                         off,
+      inline_comment:                       off,
+      local_store_extension:                defaultOff,
+      media_liquidity_animated_image:       defaultOff,
+      media_order:                          defaultOff,
+      media_type_automation:                off,
+      multi_photo_to_video:                 defaultOff,
+      music_generation:                     off,       // v25.0 — distinct from audio
+      pac_recomposition:                    defaultOff,
+      pac_relaxation:                       off,
+      product_browsing:                     defaultOff,
+      product_metadata_automation:          defaultOff,
+      profile_card:                         defaultOff,
+      profile_extension:                    off,       // v25.0 — separate from profile_card
+      replace_media_text:                   defaultOff,
+      reveal_details_over_time:             off,
+      show_destination_blurbs:              defaultOff,
+      show_summary:                         defaultOff,
+      site_extensions:                      defaultOff,
+      standard_enhancements_catalog:        defaultOff,
+      text_optimizations:                   off,
+      text_extraction_for_headline:         off,       // v25.0
+      text_extraction_for_tap_target:       off,       // v25.0
+      text_overlay_translation:             off,       // v25.0 — separate from text_translation
+      text_translation:                     { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_OUT" },
+      translate_voiceover:                  defaultOff,
+      video_auto_crop:                      off,
+      video_filtering:                      defaultOff,
+      // video_highlight (singular) removed — only video_highlights (plural) exists in v25.0
+      video_highlights:                     defaultOff,
+      video_to_image:                       defaultOff,
+      video_uncrop:                         defaultOff,
+      wa_mm_image_filtering:                defaultOff,
+      enable_ncs_testimonials:              defaultOff,
+      dha_optimization:                     defaultOff,
     },
     // NOTE: creative_sourcing_spec is intentionally omitted here.
     // Meta's API rejects it with "Unexpected key creative_sourcing_spec on param degrees_of_freedom_spec"
@@ -987,83 +1010,94 @@ export async function fixAdDofSpec(params: {
  * Full DOF spec matching ads_qa.py EXPECTED_SPECS.
  * Includes all ~55 creative_features_spec fields with action_metadata wrappers
  * AND creative_sourcing_spec. This is what Meta expects when updating via the ad ID.
+ *
+ * Updated to include 6 additional fields from Graph API v25.0 reference:
+ *   music_generation, text_extraction_for_headline, text_extraction_for_tap_target,
+ *   profile_extension, customize_product_recommendation, text_overlay_translation.
+ * Removed video_highlight (singular) — only video_highlights (plural) is in v25.0.
  */
 function buildFullDofSpec(specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
   const offWithMeta = { action_metadata: { type: "DEFAULT_OFF" }, enroll_status: "OPT_OUT" };
   const offManual = { action_metadata: { type: "MANUAL" }, enroll_status: "OPT_OUT" };
 
-  // creative_features_spec — all fields from ads_qa.py EXPECTED_SPECS
+  // creative_features_spec — all fields from ads_qa.py EXPECTED_SPECS + v25.0 additions
   const creative_features_spec: Record<string, unknown> = {
-    product_extensions: off,
-    adapt_to_placement: { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
-    add_text_overlay: off,
-    ads_with_benefits: offWithMeta,
-    advantage_plus_creative: offWithMeta,
-    app_highlights: offWithMeta,
-    audio: offWithMeta,
-    biz_ai: offWithMeta,
-    carousel_to_video: offWithMeta,
-    catalog_feed_tag: offWithMeta,
-    creative_stickers: off,
-    cv_transformation: offWithMeta,
-    description_automation: off,
-    dynamic_partner_content: offWithMeta,
-    enhance_cta: off,
-    feed_caption_optimization: offWithMeta,
-    generate_cta: off,
-    hide_price: offWithMeta,
-    ig_glados_feed: offWithMeta,
-    ig_video_native_subtitle: offWithMeta,
-    image_animation: offWithMeta,
-    image_auto_crop: offWithMeta,
-    image_background_gen: off,
-    image_brightness_and_contrast: off,
-    image_enhancement: offWithMeta,
-    image_templates: off,
-    image_text_translation: offWithMeta,
-    image_touchups: off,
-    image_uncrop: off,
-    inline_comment: off,
-    local_store_extension: offWithMeta,
-    media_liquidity_animated_image: offWithMeta,
-    media_order: offWithMeta,
-    media_type_automation: off,
-    multi_photo_to_video: offWithMeta,
-    pac_recomposition: offWithMeta,
-    pac_relaxation: off,
-    product_browsing: offWithMeta,
-    product_metadata_automation: offWithMeta,
-    profile_card: offWithMeta,
-    replace_media_text: offWithMeta,
-    reveal_details_over_time: off,
-    show_destination_blurbs: offWithMeta,
-    show_summary: offWithMeta,
-    site_extensions: offWithMeta,
-    standard_enhancements_catalog: offWithMeta,
-    text_optimizations: off,
+    product_extensions:                   off,
+    adapt_to_placement:                   { customizations: { aspect_ratio_config: {} }, enroll_status: "OPT_OUT" },
+    add_text_overlay:                     off,
+    ads_with_benefits:                    offWithMeta,
+    advantage_plus_creative:              offWithMeta,
+    app_highlights:                       offWithMeta,
+    audio:                                offWithMeta,
+    biz_ai:                               offWithMeta,
+    carousel_to_video:                    offWithMeta,
+    catalog_feed_tag:                     offWithMeta,
+    creative_stickers:                    off,
+    cv_transformation:                    offWithMeta,
+    customize_product_recommendation:     off,         // v25.0 — no action_metadata in official spec
+    description_automation:               off,
+    dynamic_partner_content:              offWithMeta,
+    enhance_cta:                          off,
+    feed_caption_optimization:            offWithMeta,
+    generate_cta:                         off,
+    hide_price:                           offWithMeta,
+    ig_glados_feed:                       offWithMeta,
+    ig_video_native_subtitle:             offWithMeta,
+    image_animation:                      offWithMeta,
+    image_auto_crop:                      offWithMeta,
+    image_background_gen:                 off,
+    image_brightness_and_contrast:        off,
+    image_enhancement:                    offWithMeta,
+    image_templates:                      off,
+    image_text_translation:               offWithMeta,
+    image_touchups:                       off,
+    image_uncrop:                         off,
+    inline_comment:                       off,
+    local_store_extension:                offWithMeta,
+    media_liquidity_animated_image:       offWithMeta,
+    media_order:                          offWithMeta,
+    media_type_automation:                off,
+    multi_photo_to_video:                 offWithMeta,
+    music_generation:                     off,         // v25.0 — distinct from audio
+    pac_recomposition:                    offWithMeta,
+    pac_relaxation:                       off,
+    product_browsing:                     offWithMeta,
+    product_metadata_automation:          offWithMeta,
+    profile_card:                         offWithMeta,
+    profile_extension:                    off,         // v25.0 — separate from profile_card
+    replace_media_text:                   offWithMeta,
+    reveal_details_over_time:             off,
+    show_destination_blurbs:              offWithMeta,
+    show_summary:                         offWithMeta,
+    site_extensions:                      offWithMeta,
+    standard_enhancements_catalog:        offWithMeta,
+    text_optimizations:                   off,
+    text_extraction_for_headline:         off,         // v25.0
+    text_extraction_for_tap_target:       off,         // v25.0
+    text_overlay_translation:             off,         // v25.0 — separate from text_translation
     // text_translation differs by spec: NO_PAC has action_metadata MANUAL, PAC has plain off
-    text_translation: specKey.includes("PAC") && !specKey.includes("NO_PAC") ? off : offManual,
-    translate_voiceover: offWithMeta,
-    video_auto_crop: off,
-    video_filtering: offWithMeta,
-    video_highlight: offWithMeta,
-    video_highlights: offWithMeta,
-    video_to_image: offWithMeta,
-    video_uncrop: offWithMeta,
-    wa_mm_image_filtering: offWithMeta,
-    enable_ncs_testimonials: offWithMeta,
-    dha_optimization: offWithMeta,
+    text_translation:                     specKey.includes("PAC") && !specKey.includes("NO_PAC") ? off : offManual,
+    translate_voiceover:                  offWithMeta,
+    video_auto_crop:                      off,
+    video_filtering:                      offWithMeta,
+    // video_highlight (singular) removed — only video_highlights (plural) exists in v25.0
+    video_highlights:                     offWithMeta,
+    video_to_image:                       offWithMeta,
+    video_uncrop:                         offWithMeta,
+    wa_mm_image_filtering:                offWithMeta,
+    enable_ncs_testimonials:              offWithMeta,
+    dha_optimization:                     offWithMeta,
   };
 
   // creative_sourcing_spec — from ads_qa.py
   const creative_sourcing_spec: Record<string, unknown> = {
-    app_info_spec: off,
-    brand: off,
-    dynamic_site_links_spec: off,
-    featured_offering_spec: { enroll_status: "OPT_OUT", media: [] },
-    website_media_spec: off,
-    website_summary_spec: off,
+    app_info_spec:              off,
+    brand:                      off,
+    dynamic_site_links_spec:    off,
+    featured_offering_spec:     { enroll_status: "OPT_OUT", media: [] },
+    website_media_spec:         off,
+    website_summary_spec:       off,
     destination_screenshot_spec: off,
   };
 
