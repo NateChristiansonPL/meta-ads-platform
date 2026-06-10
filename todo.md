@@ -988,3 +988,12 @@
 - [x] Include contextual_multi_ads: OPT_OUT and multi_advertiser_eligibility: INELIGIBLE in new creative payload during fix
 - [x] TypeScript compiles clean, all 87 tests pass
 - [x] Add multi-advertiser ads detection to QA scan (fetch contextual_multi_ads field, report as violation if OPT_IN)
+
+## QA Verification — Layout Redesign & Inline Results
+
+- [x] Redesign QaVerification.tsx to two-column layout: left panel (inputs/selectors, fixed width ~360px), right panel (results, flex-1) — matching SkillRunner layout
+- [x] Default ads filter to LAST_7_DAYS when ad sets are selected (instead of ACTIVE)
+- [x] Add inline QA results display in right panel: summary card + violations list + ad rows table rendered as readable markdown/structured view
+- [x] Add Download Excel button in right panel header (replaces top-bar download button)
+- [x] Show idle state in right panel when no QA run yet (matching SkillRunner idle placeholder)
+- [x] Show loading/running state in right panel when QA is in progress

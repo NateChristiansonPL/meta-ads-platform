@@ -1,21 +1,21 @@
 /**
  * QA Verification — Standalone tool page for running Ad QA analysis
+ * Layout: Left panel (inputs/selectors) + Right panel (results) — matches Skills layout
  * Features:
  * - Business Manager token selector
  * - Ad Account selector (cascading from BM)
  * - Cascading Campaign → Ad Set → Ads dropdowns
- * - Status filters (Active/Inactive, Last 7 Days)
+ * - Status filters (Active/Inactive, Last 7 Days — default)
  * - Multi-select at each level
  * - Run QA button triggers the direct QA backend
- * - Download XLSX when complete
- * - Inline violations display + Fix button
+ * - Right panel: inline results (summary + violations + ad rows) with Download XLSX button
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ChevronDown, ChevronUp, Search, ShieldCheck, Loader2, ExternalLink,
-  CheckSquare, Square, Filter, RefreshCw, Download, Wrench, CheckCircle2, AlertTriangle,
-  Building2, CreditCard
+  CheckSquare, Square, Filter, RefreshCw, Download, Wrench, CheckCircle2,
+  AlertTriangle, Building2, Play, RotateCcw, FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
@@ -83,6 +83,8 @@ function QaVerificationContent() {
   const [adAccountId, setAdAccountId] = useState(saved?.adAccountId ?? '');
   const [adAccountName, setAdAccountName] = useState(saved?.adAccountName ?? '');
   const [adAccountSearch, setAdAccountSearch] = useState('');
+  const adAccountSearchRef = useRef<HTMLDivElement>(null);
+  const [adAccountDropdownOpen, setAdAccountDropdownOpen] = useState(false);
 
   // Resolve access token
   const { data: tokenData } = trpc.meta.getBuilderToken.useQuery(
@@ -97,8 +99,6 @@ function QaVerificationContent() {
     { enabled: !!tokenId, staleTime: 5 * 60 * 1000 }
   );
   const adAccounts: Array<{ id: string; name: string }> = adAccountsData?.accounts ?? [];
-
-  const selectedToken = activeTokens.find(t => t.id === tokenId);
 
   const handleTokenChange = (id: number | null) => {
     const t = activeTokens.find(x => x.id === id);
@@ -118,15 +118,26 @@ function QaVerificationContent() {
     setAdAccountId(id);
     setAdAccountName(acc?.name ?? id);
     setAdAccountSearch('');
+    setAdAccountDropdownOpen(false);
     setSelectedCampaignIds(new Set());
     setSelectedAdSetIds(new Set());
     setSelectedAdIds(new Set());
     setQaState({ phase: 'idle' });
-    // Persist
     if (id && tokenId && bmId) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ tokenId, bmId, adAccountId: id, adAccountName: acc?.name ?? id }));
     }
   };
+
+  // Close ad account dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (adAccountSearchRef.current && !adAccountSearchRef.current.contains(e.target as Node)) {
+        setAdAccountDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const hasCredentials = !!(accessToken && adAccountId);
 
@@ -141,7 +152,8 @@ function QaVerificationContent() {
   const [adSetSearch, setAdSetSearch] = useState('');
   const [adSetOpen, setAdSetOpen] = useState(false);
 
-  const [adsFilter, setAdsFilter] = useState<AdsFilter>('ACTIVE');
+  // Default to LAST_7_DAYS when ads are loaded
+  const [adsFilter, setAdsFilter] = useState<AdsFilter>('LAST_7_DAYS');
   const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set());
   const [adSearch, setAdSearch] = useState('');
   const [adsOpen, setAdsOpen] = useState(false);
@@ -170,7 +182,6 @@ function QaVerificationContent() {
 
   const campaigns: CampaignItem[] = (campaignData?.campaigns ?? []) as CampaignItem[];
 
-  // Fetch ad sets for selected campaigns
   const selectedCampaignArray = useMemo(() => Array.from(selectedCampaignIds), [selectedCampaignIds]);
   const adSetQueries = trpc.useQueries((t) =>
     selectedCampaignArray.map(cId =>
@@ -192,7 +203,6 @@ function QaVerificationContent() {
 
   const adSetsLoading = adSetQueries.some(q => q.isLoading);
 
-  // Fetch ads for selected ad sets
   const selectedAdSetArray = useMemo(() => Array.from(selectedAdSetIds), [selectedAdSetIds]);
   const { data: adsData, isLoading: adsLoading, refetch: refetchAds } =
     trpc.adminMeta.getAds.useQuery(
@@ -205,9 +215,7 @@ function QaVerificationContent() {
   // ── Filtering ──
   const filteredCampaigns = useMemo(() => {
     let list = campaigns;
-    if (campaignFilter !== 'ALL') {
-      list = list.filter(c => c.status === campaignFilter);
-    }
+    if (campaignFilter !== 'ALL') list = list.filter(c => c.status === campaignFilter);
     if (campaignSearch.trim()) {
       const q = campaignSearch.toLowerCase();
       list = list.filter(c => c.name.toLowerCase().includes(q) || c.id.includes(q));
@@ -217,9 +225,7 @@ function QaVerificationContent() {
 
   const filteredAdSets = useMemo(() => {
     let list = allAdSets;
-    if (adSetFilter !== 'ALL') {
-      list = list.filter(a => a.status === adSetFilter);
-    }
+    if (adSetFilter !== 'ALL') list = list.filter(a => a.status === adSetFilter);
     if (adSetSearch.trim()) {
       const q = adSetSearch.toLowerCase();
       list = list.filter(a => a.name.toLowerCase().includes(q) || a.id.includes(q));
@@ -288,6 +294,10 @@ function QaVerificationContent() {
 
     const adIds = Array.from(selectedAdIds);
     setQaState({ phase: 'launching' });
+    setFixedCreativeIds(new Set());
+    setFixingCreativeIds(new Set());
+    setFixedMultiAdvIds(new Set());
+    setFixingMultiAdvIds(new Set());
     try {
       const result = await runQaDirect.mutateAsync({
         adAccountId,
@@ -303,16 +313,20 @@ function QaVerificationContent() {
         violationCount: result.violationCount,
         violations: result.violations as QaViolation[] ?? [],
       });
-      setFixedCreativeIds(new Set());
-      setFixingCreativeIds(new Set());
-      setFixedMultiAdvIds(new Set());
-      setFixingMultiAdvIds(new Set());
       toast.success(`QA complete — ${result.totalAds} ads, ${result.totalAdSets} ad sets checked`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setQaState({ phase: 'error', errorMessage: msg });
       toast.error(`QA failed: ${msg}`);
     }
+  };
+
+  const handleReset = () => {
+    setQaState({ phase: 'idle' });
+    setFixedCreativeIds(new Set());
+    setFixingCreativeIds(new Set());
+    setFixedMultiAdvIds(new Set());
+    setFixingMultiAdvIds(new Set());
   };
 
   // ── Fix violation handlers ──
@@ -351,7 +365,6 @@ function QaVerificationContent() {
         tokenId: tokenId ?? undefined,
       });
       console.log('[fixMultiAdv] Full debug:', JSON.stringify(result?.debug));
-      // Success — remove from violations
       setFixedMultiAdvIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
       setQaState(prev => ({
         ...prev,
@@ -375,29 +388,9 @@ function QaVerificationContent() {
   };
 
   // ── Toggle helpers ──
-  const toggleCampaign = (id: string) => {
-    setSelectedCampaignIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAdSet = (id: string) => {
-    setSelectedAdSetIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAd = (id: string) => {
-    setSelectedAdIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const toggleCampaign = (id: string) => setSelectedCampaignIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAdSet = (id: string) => setSelectedAdSetIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAd = (id: string) => setSelectedAdIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const selectAllCampaigns = () => setSelectedCampaignIds(new Set(filteredCampaigns.map(c => c.id)));
   const deselectAllCampaigns = () => setSelectedCampaignIds(new Set());
@@ -406,140 +399,103 @@ function QaVerificationContent() {
   const selectAllAds = () => setSelectedAdIds(new Set(filteredAds.map(a => a.id)));
   const deselectAllAds = () => setSelectedAdIds(new Set());
 
+  const canRun = hasCredentials && selectedAdIds.size > 0 && qaState.phase !== 'launching';
+
   // ── Render ──
   return (
-    <div className="h-full overflow-auto p-6 space-y-5">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-800 text-foreground flex items-center gap-2.5">
-            <ShieldCheck className="w-6 h-6 text-cyan-400" />
-            QA Verification
-          </h1>
-          <p className="text-[12px] text-muted-foreground mt-1">
-            Verify Advantage+ Creative settings, partnership ads, multi-advertiser status, and copy across your ads.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {qaState.phase === 'done' && qaState.downloadUrl && (
-            <a
-              href={qaState.downloadUrl}
-              download="ad_qa_checklist.xlsx"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-700 border bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25 cursor-pointer transition-all"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download Report
-              {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
-                <span className="ml-1 text-[10px] text-amber-400">({qaState.violationCount} violations)</span>
-              )}
-            </a>
-          )}
-          <button
-            onClick={handleRunQa}
-            disabled={qaState.phase === 'launching' || selectedAdIds.size === 0}
-            title={selectedAdIds.size === 0 ? 'Select ads to QA' : `Run QA on ${selectedAdIds.size} ad${selectedAdIds.size !== 1 ? 's' : ''}`}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-700 border transition-all ${
-              qaState.phase === 'launching'
-                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 cursor-wait'
-                : selectedAdIds.size === 0
-                ? 'bg-surface-2 text-muted-foreground cursor-not-allowed border-border opacity-50'
-                : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40 hover:bg-cyan-500/25 cursor-pointer'
-            }`}
-          >
-            {qaState.phase === 'launching'
-              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              : <ShieldCheck className="w-3.5 h-3.5" />
-            }
-            {qaState.phase === 'launching' ? 'Running QA…'
-              : `Run QA (${selectedAdIds.size})`
-            }
-          </button>
-        </div>
-      </div>
+    <div className="flex gap-6 h-full">
 
-      {/* ── Account Selection ── */}
-      <div className="bg-surface-1 border border-border rounded-xl p-4 space-y-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Building2 size={14} className="text-muted-foreground" />
-          <span className="text-[12px] font-700 text-foreground">Account Selection</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+      {/* ── LEFT: Config Panel ─────────────────────────────────────────────── */}
+      <div
+        className="flex flex-col gap-4 shrink-0 overflow-y-auto pb-6"
+        style={{ width: 360 }}
+      >
+        {/* Account Selection */}
+        <ConfigSection title="Account Selection">
           {/* Business Manager */}
-          <div>
-            <label className="text-[11px] font-600 text-muted-foreground mb-1.5 block">Business Manager</label>
+          <FormField label="Business Manager Token">
             {activeTokens.length === 0 ? (
-              <div className="text-[11px] py-2 px-3 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+              <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(237,19,95,0.1)", color: "#ED135F", border: "1px solid rgba(237,19,95,0.2)" }}>
                 No tokens configured. Ask your admin to add one in the Token Vault.
               </div>
             ) : (
-              <select
-                value={tokenId?.toString() ?? ''}
-                onChange={e => handleTokenChange(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full px-3 py-2 text-[11px] bg-surface-2/60 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground"
-              >
-                <option value="">Select a Business Manager…</option>
-                {activeTokens.map(t => (
-                  <option key={t.id} value={t.id.toString()}>
-                    {t.label || t.businessManagerName || `BM ${t.businessManagerId}`}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={tokenId?.toString() ?? ''}
+                  onChange={e => handleTokenChange(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full text-xs rounded-lg px-3 py-2.5 appearance-none outline-none pr-8"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: tokenId ? "#FAFAFA" : "rgba(255,255,255,0.35)",
+                    fontFamily: "'Montserrat', sans-serif",
+                  }}
+                >
+                  <option value="">Select a Business Manager…</option>
+                  {activeTokens.map(t => (
+                    <option key={t.id} value={t.id.toString()} style={{ background: "#141349" }}>
+                      {t.label || t.businessManagerName || `BM ${t.businessManagerId}`}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(255,255,255,0.3)" }} />
+              </div>
             )}
             {tokenId && bmId && (
-              <p className="text-[9px] text-muted-foreground/60 mt-1 font-mono">BM ID: {bmId}</p>
+              <p className="text-[9px] mt-1 font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>BM ID: {bmId}</p>
             )}
-          </div>
+          </FormField>
 
           {/* Ad Account */}
-          <div>
-            <label className="text-[11px] font-600 text-muted-foreground mb-1.5 block">Ad Account</label>
+          <FormField label="Ad Account">
             {!tokenId ? (
-              <div className="text-[11px] py-2 px-3 rounded-lg bg-surface-2/40 text-muted-foreground/50 border border-border">
+              <div className="text-xs py-2 px-3 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.3)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 Select a Business Manager first
               </div>
             ) : loadingAccounts ? (
-              <div className="flex items-center gap-2 text-[11px] py-2 px-3 text-muted-foreground">
+              <div className="flex items-center gap-2 text-xs py-2 px-3" style={{ color: "rgba(255,255,255,0.4)" }}>
                 <Loader2 size={12} className="animate-spin" /> Loading accounts…
               </div>
             ) : (
-              <div className="relative">
-                <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
-                <input
-                  value={adAccountId ? `${adAccountName} (${adAccountId})` : adAccountSearch}
-                  onChange={e => {
-                    if (adAccountId) {
-                      setAdAccountId('');
-                      setAdAccountName('');
-                    }
-                    setAdAccountSearch(e.target.value);
-                  }}
-                  onFocus={() => {
-                    if (adAccountId) {
-                      setAdAccountId('');
-                      setAdAccountName('');
-                      setAdAccountSearch('');
-                    }
-                  }}
-                  placeholder="Search ad accounts…"
-                  className="w-full pl-7 pr-3 py-2 text-[11px] bg-surface-2/60 border border-border rounded-lg outline-none focus:border-primary/50 text-foreground placeholder:text-muted-foreground/30"
-                />
-                {!adAccountId && adAccountSearch && (
-                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-surface-1 border border-border rounded-lg shadow-xl max-h-[200px] overflow-y-auto">
+              <div className="relative" ref={adAccountSearchRef}>
+                <div
+                  className="flex items-center rounded-lg px-3 py-2 gap-2"
+                  style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${adAccountDropdownOpen ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.12)"}` }}
+                >
+                  <Search size={11} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+                  <input
+                    value={adAccountId ? `${adAccountName} (${adAccountId})` : adAccountSearch}
+                    onChange={e => {
+                      if (adAccountId) { setAdAccountId(''); setAdAccountName(''); }
+                      setAdAccountSearch(e.target.value);
+                      setAdAccountDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      if (adAccountId) { setAdAccountId(''); setAdAccountName(''); setAdAccountSearch(''); }
+                      setAdAccountDropdownOpen(true);
+                    }}
+                    placeholder="Search ad accounts…"
+                    className="flex-1 min-w-0 bg-transparent outline-none text-xs"
+                    style={{ color: adAccountId ? "#FAFAFA" : "rgba(255,255,255,0.6)", fontFamily: "'Montserrat', sans-serif" }}
+                  />
+                </div>
+                {adAccountDropdownOpen && !adAccountId && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg shadow-xl max-h-[200px] overflow-y-auto" style={{ background: "#1a1960", border: "1px solid rgba(255,255,255,0.15)" }}>
                     {adAccounts
                       .filter(a => {
                         const q = adAccountSearch.toLowerCase();
-                        return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
+                        return !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
                       })
                       .map(a => (
                         <button
                           key={a.id}
                           onClick={() => handleAdAccountChange(a.id)}
-                          className="w-full px-3 py-2 text-left text-[11px] hover:bg-surface-2/50 transition-colors text-foreground"
+                          className="w-full px-3 py-2 text-left text-xs transition-colors"
+                          style={{ color: "rgba(255,255,255,0.8)" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                         >
-                          {a.name} <span className="text-muted-foreground/50">({a.id})</span>
+                          {a.name} <span style={{ color: "rgba(255,255,255,0.35)" }}>({a.id})</span>
                         </button>
                       ))
                     }
@@ -547,309 +503,657 @@ function QaVerificationContent() {
                 )}
               </div>
             )}
-          </div>
+          </FormField>
+        </ConfigSection>
+
+        {/* Ad Selection — only when account is selected */}
+        {hasCredentials && (
+          <>
+            {/* Campaigns */}
+            <ConfigSection title="Campaigns">
+              <SelectorSection
+                title="Campaigns"
+                count={filteredCampaigns.length}
+                selectedCount={selectedCampaignIds.size}
+                open={campaignOpen}
+                onToggle={() => setCampaignOpen(!campaignOpen)}
+                loading={campaignsLoading}
+                filter={
+                  <FilterPills
+                    options={[
+                      { value: 'ACTIVE', label: 'Active' },
+                      { value: 'PAUSED', label: 'Inactive' },
+                      { value: 'ALL', label: 'All' },
+                    ]}
+                    value={campaignFilter}
+                    onChange={v => setCampaignFilter(v as StatusFilter)}
+                  />
+                }
+                actions={
+                  <>
+                    <button onClick={selectAllCampaigns} className="text-[10px]" style={{ color: "#00BEEF" }}>Select All</button>
+                    <button onClick={deselectAllCampaigns} className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Clear</button>
+                    <button onClick={() => refetchCampaigns()} className="p-1 rounded" title="Refresh" style={{ color: "rgba(255,255,255,0.4)" }}>
+                      <RefreshCw size={11} className={campaignsLoading ? 'animate-spin' : ''} />
+                    </button>
+                  </>
+                }
+                search={campaignSearch}
+                onSearch={setCampaignSearch}
+                searchPlaceholder="Search campaigns…"
+              >
+                {filteredCampaigns.map(c => (
+                  <SelectableRow
+                    key={c.id}
+                    selected={selectedCampaignIds.has(c.id)}
+                    onClick={() => toggleCampaign(c.id)}
+                    label={c.name}
+                    meta={`${c.status} · ${c.objective?.replace('OUTCOME_', '') || '—'}`}
+                    id={c.id}
+                  />
+                ))}
+                {filteredCampaigns.length === 0 && !campaignsLoading && (
+                  <div className="text-xs py-4 text-center" style={{ color: "rgba(255,255,255,0.3)" }}>No campaigns found.</div>
+                )}
+              </SelectorSection>
+            </ConfigSection>
+
+            {/* Ad Sets */}
+            <ConfigSection title="Ad Sets">
+              <SelectorSection
+                title="Ad Sets"
+                count={filteredAdSets.length}
+                selectedCount={selectedAdSetIds.size}
+                open={adSetOpen}
+                onToggle={() => setAdSetOpen(!adSetOpen)}
+                loading={adSetsLoading}
+                disabled={selectedCampaignIds.size === 0}
+                disabledMessage="Select campaigns first"
+                filter={
+                  <FilterPills
+                    options={[
+                      { value: 'ALL', label: 'All' },
+                      { value: 'ACTIVE', label: 'Active' },
+                      { value: 'PAUSED', label: 'Inactive' },
+                    ]}
+                    value={adSetFilter}
+                    onChange={v => setAdSetFilter(v as StatusFilter)}
+                  />
+                }
+                actions={
+                  <>
+                    <button onClick={selectAllAdSets} className="text-[10px]" style={{ color: "#00BEEF" }}>Select All</button>
+                    <button onClick={deselectAllAdSets} className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Clear</button>
+                  </>
+                }
+                search={adSetSearch}
+                onSearch={setAdSetSearch}
+                searchPlaceholder="Search ad sets…"
+              >
+                {filteredAdSets.map(a => (
+                  <SelectableRow
+                    key={a.id}
+                    selected={selectedAdSetIds.has(a.id)}
+                    onClick={() => toggleAdSet(a.id)}
+                    label={a.name}
+                    meta={a.status}
+                    id={a.id}
+                  />
+                ))}
+                {filteredAdSets.length === 0 && !adSetsLoading && selectedCampaignIds.size > 0 && (
+                  <div className="text-xs py-4 text-center" style={{ color: "rgba(255,255,255,0.3)" }}>No ad sets found.</div>
+                )}
+              </SelectorSection>
+            </ConfigSection>
+
+            {/* Ads */}
+            <ConfigSection title="Ads">
+              <SelectorSection
+                title="Ads"
+                count={filteredAds.length}
+                selectedCount={selectedAdIds.size}
+                open={adsOpen}
+                onToggle={() => setAdsOpen(!adsOpen)}
+                loading={adsLoading}
+                disabled={selectedAdSetIds.size === 0}
+                disabledMessage="Select ad sets first"
+                filter={
+                  <FilterPills
+                    options={[
+                      { value: 'LAST_7_DAYS', label: 'Last 7 Days' },
+                      { value: 'ACTIVE', label: 'Active' },
+                      { value: 'PAUSED', label: 'Inactive' },
+                      { value: 'ALL', label: 'All' },
+                    ]}
+                    value={adsFilter}
+                    onChange={v => setAdsFilter(v as AdsFilter)}
+                  />
+                }
+                actions={
+                  <>
+                    <button onClick={selectAllAds} className="text-[10px]" style={{ color: "#00BEEF" }}>Select All</button>
+                    <button onClick={deselectAllAds} className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Clear</button>
+                    {selectedAdSetArray.length > 0 && (
+                      <button onClick={() => refetchAds()} className="p-1 rounded" title="Refresh" style={{ color: "rgba(255,255,255,0.4)" }}>
+                        <RefreshCw size={11} className={adsLoading ? 'animate-spin' : ''} />
+                      </button>
+                    )}
+                  </>
+                }
+                search={adSearch}
+                onSearch={setAdSearch}
+                searchPlaceholder="Search ads…"
+              >
+                {filteredAds.map(a => (
+                  <SelectableRow
+                    key={a.id}
+                    selected={selectedAdIds.has(a.id)}
+                    onClick={() => toggleAd(a.id)}
+                    label={a.name}
+                    meta={`${a.status} · Created ${new Date(a.createdTime).toLocaleDateString()}`}
+                    id={a.id}
+                  />
+                ))}
+                {filteredAds.length === 0 && !adsLoading && selectedAdSetIds.size > 0 && (
+                  <div className="text-xs py-4 text-center" style={{ color: "rgba(255,255,255,0.3)" }}>No ads found.</div>
+                )}
+              </SelectorSection>
+            </ConfigSection>
+          </>
+        )}
+
+        {/* Run Button */}
+        <div className="flex flex-col gap-1.5 mt-2">
+          <button
+            onClick={handleRunQa}
+            disabled={!canRun}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all"
+            style={{
+              background: canRun ? "#00BEEF" : "rgba(255,255,255,0.08)",
+              color: canRun ? "#141349" : "rgba(255,255,255,0.25)",
+              cursor: canRun ? "pointer" : "not-allowed",
+            }}
+          >
+            {qaState.phase === 'launching'
+              ? <Loader2 size={14} className="animate-spin" />
+              : <Play size={14} fill="currentColor" />
+            }
+            {qaState.phase === 'launching'
+              ? 'Running QA…'
+              : `Run QA${selectedAdIds.size > 0 ? ` (${selectedAdIds.size} ad${selectedAdIds.size !== 1 ? 's' : ''})` : ''}`
+            }
+          </button>
+          {!hasCredentials && (
+            <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Select a Business Manager and Ad Account to enable
+            </p>
+          )}
+          {hasCredentials && selectedAdIds.size === 0 && (
+            <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Select ads above to enable
+            </p>
+          )}
+          {qaState.phase !== 'idle' && (
+            <div className="flex justify-end">
+              <button
+                onClick={handleReset}
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: "rgba(255,255,255,0.4)" }}
+                title="Reset results"
+              >
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Status Messages ── */}
-      {qaState.phase === 'error' && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-[11px] text-red-400">
-          {qaState.errorMessage || 'QA failed'}
-        </div>
-      )}
-      {qaState.phase === 'done' && qaState.totalAds !== undefined && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-[11px] text-emerald-400 flex items-center gap-2">
-          <ShieldCheck className="w-3 h-3" />
-          QA complete — {qaState.totalAds} ads, {qaState.totalAdSets} ad sets checked.
-          {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
-            <span className="text-amber-400 ml-1">{qaState.violationCount} violation{qaState.violationCount !== 1 ? 's' : ''} found.</span>
-          )}
-        </div>
-      )}
+      {/* ── RIGHT: Results Panel ──────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
 
-      {/* ── Violations Panel ── */}
-      {qaState.phase === 'done' && qaState.violations && qaState.violations.length > 0 && (
-        <div className="bg-surface-1 border border-amber-500/30 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-amber-500/5 border-b border-amber-500/20">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={14} className="text-amber-400" />
-              <span className="text-[12px] font-700 text-amber-400">
-                Violations
-              </span>
-              <span className="text-[10px] text-muted-foreground">
-                {qaState.violations.length} ad{qaState.violations.length !== 1 ? 's' : ''} with settings that should be OFF
-              </span>
+        {/* Idle state */}
+        {qaState.phase === 'idle' && (
+          <div className="h-full flex flex-col items-center justify-center gap-4" style={{ color: "rgba(255,255,255,0.2)" }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <ShieldCheck size={24} style={{ color: "#00BEEF", opacity: 0.5 }} />
             </div>
-            {qaState.violations.length > 1 && (
-              <button
-                onClick={handleFixAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-700 bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition-all"
-              >
-                <Wrench size={11} />
-                Fix All
-              </button>
-            )}
+            <div className="text-center">
+              <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>Configure and run QA Verification</p>
+              <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.2)" }}>
+                Verify Advantage+ Creative settings, partnership ads, multi-advertiser status, and copy across your ads.
+              </p>
+            </div>
           </div>
+        )}
 
-          <div className="divide-y divide-border/50 max-h-[400px] overflow-y-auto">
-            {qaState.violations.map(v => {
-              const dofSettings = v.settings.filter(s => !MULTI_ADV_NAMES.has(s.name));
-              const multiAdvSettings = v.settings.filter(s => MULTI_ADV_NAMES.has(s.name));
-              const dofFixed = fixedCreativeIds.has(v.creativeId);
-              const dofFixing = fixingCreativeIds.has(v.creativeId);
-              const multiAdvFixed = fixedMultiAdvIds.has(v.creativeId);
-              const multiAdvFixing = fixingMultiAdvIds.has(v.creativeId);
-              const allFixed = (dofSettings.length === 0 || dofFixed) && (multiAdvSettings.length === 0 || multiAdvFixed);
+        {/* Running state */}
+        {qaState.phase === 'launching' && (
+          <div className="flex flex-col gap-4 p-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(0,190,239,0.15)", border: "1px solid rgba(0,190,239,0.3)" }}>
+                <Loader2 size={20} className="animate-spin" style={{ color: "#00BEEF" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>QA analysis in progress</p>
+                <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  Checking {selectedAdIds.size} ad{selectedAdIds.size !== 1 ? 's' : ''} against expected settings…
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg px-4 py-3" style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex items-center gap-2 text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                <Loader2 size={10} className="animate-spin" style={{ color: "#00BEEF" }} />
+                Fetching ad creative data from Meta API…
+              </div>
+            </div>
+          </div>
+        )}
 
-              return (
-                <div key={v.adId} className={`px-4 py-3 ${allFixed ? 'bg-emerald-500/5' : 'hover:bg-surface-2/20'} transition-colors`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        {allFixed
-                          ? <CheckCircle2 size={13} className="text-emerald-400 flex-shrink-0" />
-                          : <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" />
-                        }
-                        <span className="text-[11px] font-600 text-foreground truncate">{v.adName}</span>
-                        <a
-                          href={v.adsManagerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-0.5 text-[9px] text-cyan-400 hover:text-cyan-300 flex-shrink-0"
-                          title="Open in Ads Manager"
-                        >
-                          <ExternalLink size={9} />
-                          Ads Manager
-                        </a>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {dofSettings.map((s, i) => (
-                          <span key={`dof-${i}`} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-500 ${dofFixed ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                            {s.name}: {dofFixed ? 'fixed' : s.currentValue}
-                          </span>
-                        ))}
-                        {multiAdvSettings.map((s, i) => (
-                          <span key={`ma-${i}`} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-500 ${multiAdvFixed ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-violet-500/10 text-violet-400 border border-violet-500/20'}`}>
-                            {s.name}: {multiAdvFixed ? 'fixed' : s.currentValue}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-1 text-[9px] text-muted-foreground/60">
-                        Creative ID: {v.creativeId} · Format: {v.specKey}
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
-                      {dofSettings.length > 0 && (
-                        dofFixed ? (
-                          <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-600">
-                            <CheckCircle2 size={11} /> Creative Fixed
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleFixDof(v)}
-                            disabled={dofFixing}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-700 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/25 transition-all disabled:opacity-50"
-                          >
-                            {dofFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
-                            {dofFixing ? 'Fixing…' : 'Fix Creative'}
-                          </button>
-                        )
-                      )}
-                      {multiAdvSettings.length > 0 && (
-                        multiAdvFixed ? (
-                          <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-600">
-                            <CheckCircle2 size={11} /> Multi-Adv Fixed
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleFixMultiAdv(v)}
-                            disabled={multiAdvFixing}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-700 bg-violet-500/15 text-violet-400 border border-violet-500/30 hover:bg-violet-500/25 transition-all disabled:opacity-50"
-                          >
-                            {multiAdvFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
-                            {multiAdvFixing ? 'Fixing…' : 'Fix Multi-Adv'}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
+        {/* Error state */}
+        {qaState.phase === 'error' && (
+          <div className="flex flex-col gap-3">
+            <div className="rounded-xl p-5" style={{ background: "rgba(237,19,95,0.08)", border: "1px solid rgba(237,19,95,0.2)" }}>
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} style={{ color: "#ED135F" }} className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold" style={{ color: "#ED135F" }}>QA failed</p>
+                  <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>{qaState.errorMessage}</p>
                 </div>
-              );
-            })}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Cascading Selectors (only when account is selected) ── */}
-      {!hasCredentials ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <CreditCard className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-            <h3 className="text-[12px] font-700 text-muted-foreground/50">Select an Account</h3>
-            <p className="text-[11px] text-muted-foreground/30 mt-1">
-              Choose a Business Manager and Ad Account above to load campaigns.
-            </p>
+        {/* Done state */}
+        {qaState.phase === 'done' && (
+          <div className="flex flex-col gap-5">
+
+            {/* Header row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <CheckCircle2 size={16} style={{ color: "#00B37A" }} />
+              <span className="text-sm font-semibold" style={{ color: "#00B37A" }}>QA complete</span>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                {adAccountName || adAccountId}
+              </span>
+              {qaState.violationCount !== undefined && qaState.violationCount > 0 && (
+                <span
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: "rgba(251,191,36,0.12)", color: "#FBBF24", border: "1px solid rgba(251,191,36,0.3)" }}
+                >
+                  <AlertTriangle size={10} /> {qaState.violationCount} violation{qaState.violationCount !== 1 ? 's' : ''}
+                </span>
+              )}
+              {qaState.violationCount === 0 && (
+                <span
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: "rgba(0,179,122,0.12)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.25)" }}
+                >
+                  <CheckCircle2 size={10} /> All settings correct
+                </span>
+              )}
+              {/* Download button */}
+              {qaState.downloadUrl && (
+                <a
+                  href={qaState.downloadUrl}
+                  download="ad_qa_checklist.xlsx"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ml-auto"
+                  style={{ background: "rgba(0,179,122,0.12)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.25)" }}
+                >
+                  <FileDown size={11} /> Download Excel
+                </a>
+              )}
+            </div>
+
+            {/* Summary card */}
+            <div className="grid grid-cols-3 gap-3">
+              <SummaryCard label="Ads Checked" value={String(qaState.totalAds ?? 0)} color="#00BEEF" />
+              <SummaryCard label="Ad Sets Checked" value={String(qaState.totalAdSets ?? 0)} color="#00BEEF" />
+              <SummaryCard
+                label="Violations Found"
+                value={String(qaState.violationCount ?? 0)}
+                color={(qaState.violationCount ?? 0) > 0 ? "#FBBF24" : "#00B37A"}
+              />
+            </div>
+
+            {/* Violations panel */}
+            {qaState.violations && qaState.violations.length > 0 && (
+              <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(251,191,36,0.3)" }}>
+                <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(251,191,36,0.05)", borderBottom: "1px solid rgba(251,191,36,0.2)" }}>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={14} style={{ color: "#FBBF24" }} />
+                    <span className="text-xs font-bold" style={{ color: "#FBBF24" }}>Violations</span>
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      {qaState.violations.length} ad{qaState.violations.length !== 1 ? 's' : ''} with settings that should be OFF
+                    </span>
+                  </div>
+                  {qaState.violations.length > 1 && (
+                    <button
+                      onClick={handleFixAll}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-bold transition-all"
+                      style={{ background: "rgba(251,191,36,0.15)", color: "#FBBF24", border: "1px solid rgba(251,191,36,0.3)" }}
+                    >
+                      <Wrench size={11} /> Fix All
+                    </button>
+                  )}
+                </div>
+
+                <div className="divide-y divide-white/[0.06]">
+                  {qaState.violations.map(v => {
+                    const dofSettings = v.settings.filter(s => !MULTI_ADV_NAMES.has(s.name));
+                    const multiAdvSettings = v.settings.filter(s => MULTI_ADV_NAMES.has(s.name));
+                    const dofFixed = fixedCreativeIds.has(v.creativeId);
+                    const dofFixing = fixingCreativeIds.has(v.creativeId);
+                    const multiAdvFixed = fixedMultiAdvIds.has(v.creativeId);
+                    const multiAdvFixing = fixingMultiAdvIds.has(v.creativeId);
+                    const allFixed = (dofSettings.length === 0 || dofFixed) && (multiAdvSettings.length === 0 || multiAdvFixed);
+
+                    return (
+                      <div
+                        key={v.adId}
+                        className="px-4 py-3 transition-colors"
+                        style={{ background: allFixed ? "rgba(0,179,122,0.05)" : "transparent" }}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {allFixed
+                                ? <CheckCircle2 size={13} style={{ color: "#00B37A", flexShrink: 0 }} />
+                                : <AlertTriangle size={13} style={{ color: "#FBBF24", flexShrink: 0 }} />
+                              }
+                              <span className="text-xs font-semibold truncate" style={{ color: "rgba(255,255,255,0.85)" }}>{v.adName}</span>
+                              <a
+                                href={v.adsManagerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-0.5 flex-shrink-0"
+                                style={{ color: "#00BEEF", fontSize: "0.65rem" }}
+                                title="Open in Ads Manager"
+                              >
+                                <ExternalLink size={9} /> Ads Manager
+                              </a>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {dofSettings.map((s, i) => (
+                                <span
+                                  key={`dof-${i}`}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium"
+                                  style={dofFixed
+                                    ? { background: "rgba(0,179,122,0.1)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.2)" }
+                                    : { background: "rgba(251,191,36,0.1)", color: "#FBBF24", border: "1px solid rgba(251,191,36,0.2)" }
+                                  }
+                                >
+                                  {s.name}: {dofFixed ? 'fixed' : s.currentValue}
+                                </span>
+                              ))}
+                              {multiAdvSettings.map((s, i) => (
+                                <span
+                                  key={`ma-${i}`}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium"
+                                  style={multiAdvFixed
+                                    ? { background: "rgba(0,179,122,0.1)", color: "#00B37A", border: "1px solid rgba(0,179,122,0.2)" }
+                                    : { background: "rgba(167,139,250,0.1)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.2)" }
+                                  }
+                                >
+                                  {s.name}: {multiAdvFixed ? 'fixed' : s.currentValue}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-1 text-[9px]" style={{ color: "rgba(255,255,255,0.3)" }}>
+                              Creative ID: {v.creativeId} · Format: {v.specKey}
+                            </div>
+                          </div>
+                          <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
+                            {dofSettings.length > 0 && (
+                              dofFixed ? (
+                                <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
+                                  <CheckCircle2 size={11} /> Creative Fixed
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleFixDof(v)}
+                                  disabled={dofFixing}
+                                  className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                                  style={{ background: "rgba(0,190,239,0.15)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.3)" }}
+                                >
+                                  {dofFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
+                                  {dofFixing ? 'Fixing…' : 'Fix Creative'}
+                                </button>
+                              )
+                            )}
+                            {multiAdvSettings.length > 0 && (
+                              multiAdvFixed ? (
+                                <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
+                                  <CheckCircle2 size={11} /> Multi-Adv Fixed
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleFixMultiAdv(v)}
+                                  disabled={multiAdvFixing}
+                                  className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                                  style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+                                >
+                                  {multiAdvFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
+                                  {multiAdvFixing ? 'Fixing…' : 'Fix Multi-Adv'}
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* All clear panel */}
+            {qaState.violations && qaState.violations.length === 0 && (
+              <div className="rounded-xl p-5 flex items-center gap-3" style={{ background: "rgba(0,179,122,0.08)", border: "1px solid rgba(0,179,122,0.2)" }}>
+                <CheckCircle2 size={20} style={{ color: "#00B37A" }} />
+                <div>
+                  <p className="text-sm font-bold" style={{ color: "#00B37A" }}>All ads passed QA</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                    No Advantage+ Creative or multi-advertiser violations found across {qaState.totalAds} ad{(qaState.totalAds ?? 0) !== 1 ? 's' : ''}.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Inline QA Results Table */}
+            <QaResultsTable
+              adAccountName={adAccountName}
+              totalAds={qaState.totalAds ?? 0}
+              totalAdSets={qaState.totalAdSets ?? 0}
+              violations={qaState.violations ?? []}
+            />
+
           </div>
-        </div>
-      ) : (
-        <>
-          {/* ── Campaigns Section ── */}
-          <SelectorSection
-            title="Campaigns"
-            count={filteredCampaigns.length}
-            selectedCount={selectedCampaignIds.size}
-            open={campaignOpen}
-            onToggle={() => setCampaignOpen(!campaignOpen)}
-            loading={campaignsLoading}
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                  { value: 'ALL', label: 'All' },
-                ]}
-                value={campaignFilter}
-                onChange={v => setCampaignFilter(v as StatusFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllCampaigns} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllCampaigns} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-                <button onClick={() => refetchCampaigns()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
-                  <RefreshCw size={11} className={campaignsLoading ? 'animate-spin' : ''} />
-                </button>
-              </>
-            }
-            search={campaignSearch}
-            onSearch={setCampaignSearch}
-            searchPlaceholder="Search campaigns…"
-          >
-            {filteredCampaigns.map(c => (
-              <SelectableRow
-                key={c.id}
-                selected={selectedCampaignIds.has(c.id)}
-                onClick={() => toggleCampaign(c.id)}
-                label={c.name}
-                meta={`${c.status} · ${c.objective?.replace('OUTCOME_', '') || '—'}`}
-                id={c.id}
-              />
-            ))}
-            {filteredCampaigns.length === 0 && !campaignsLoading && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No campaigns found.
-              </div>
-            )}
-          </SelectorSection>
-
-          {/* ── Ad Sets Section ── */}
-          <SelectorSection
-            title="Ad Sets"
-            count={filteredAdSets.length}
-            selectedCount={selectedAdSetIds.size}
-            open={adSetOpen}
-            onToggle={() => setAdSetOpen(!adSetOpen)}
-            loading={adSetsLoading}
-            disabled={selectedCampaignIds.size === 0}
-            disabledMessage="Select campaigns first"
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ALL', label: 'All' },
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                ]}
-                value={adSetFilter}
-                onChange={v => setAdSetFilter(v as StatusFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllAdSets} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllAdSets} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-              </>
-            }
-            search={adSetSearch}
-            onSearch={setAdSetSearch}
-            searchPlaceholder="Search ad sets…"
-          >
-            {filteredAdSets.map(a => (
-              <SelectableRow
-                key={a.id}
-                selected={selectedAdSetIds.has(a.id)}
-                onClick={() => toggleAdSet(a.id)}
-                label={a.name}
-                meta={a.status}
-                id={a.id}
-              />
-            ))}
-            {filteredAdSets.length === 0 && !adSetsLoading && selectedCampaignIds.size > 0 && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No ad sets found.
-              </div>
-            )}
-          </SelectorSection>
-
-          {/* ── Ads Section ── */}
-          <SelectorSection
-            title="Ads"
-            count={filteredAds.length}
-            selectedCount={selectedAdIds.size}
-            open={adsOpen}
-            onToggle={() => setAdsOpen(!adsOpen)}
-            loading={adsLoading}
-            disabled={selectedAdSetIds.size === 0}
-            disabledMessage="Select ad sets first"
-            filter={
-              <FilterPills
-                options={[
-                  { value: 'ACTIVE', label: 'Active' },
-                  { value: 'PAUSED', label: 'Inactive' },
-                  { value: 'LAST_7_DAYS', label: 'Last 7 Days' },
-                  { value: 'ALL', label: 'All' },
-                ]}
-                value={adsFilter}
-                onChange={v => setAdsFilter(v as AdsFilter)}
-              />
-            }
-            actions={
-              <>
-                <button onClick={selectAllAds} className="text-[10px] text-cyan-400 hover:text-cyan-300">Select All</button>
-                <button onClick={deselectAllAds} className="text-[10px] text-muted-foreground hover:text-foreground">Clear</button>
-                {selectedAdSetArray.length > 0 && (
-                  <button onClick={() => refetchAds()} className="p-1 hover:bg-surface-2 rounded" title="Refresh">
-                    <RefreshCw size={11} className={adsLoading ? 'animate-spin' : ''} />
-                  </button>
-                )}
-              </>
-            }
-            search={adSearch}
-            onSearch={setAdSearch}
-            searchPlaceholder="Search ads…"
-          >
-            {filteredAds.map(a => (
-              <SelectableRow
-                key={a.id}
-                selected={selectedAdIds.has(a.id)}
-                onClick={() => toggleAd(a.id)}
-                label={a.name}
-                meta={`${a.status} · Created ${new Date(a.createdTime).toLocaleDateString()}`}
-                id={a.id}
-              />
-            ))}
-            {filteredAds.length === 0 && !adsLoading && selectedAdSetIds.size > 0 && (
-              <div className="text-[11px] text-muted-foreground/50 py-4 text-center">
-                No ads found.
-              </div>
-            )}
-          </SelectorSection>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-// ── Reusable sub-components ──────────────────────────────────────────────────
+// ── Summary Card ─────────────────────────────────────────────────────────────
+
+function SummaryCard({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="rounded-xl p-4 text-center" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <p className="text-2xl font-bold" style={{ color }}>{value}</p>
+      <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</p>
+    </div>
+  );
+}
+
+// ── Inline QA Results Table ───────────────────────────────────────────────────
+
+function QaResultsTable({
+  adAccountName, totalAds, totalAdSets, violations,
+}: {
+  adAccountName: string;
+  totalAds: number;
+  totalAdSets: number;
+  violations: QaViolation[];
+}) {
+  const passCount = totalAds - violations.length;
+  const violationAdIds = new Set(violations.map(v => v.adId));
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      {/* Header */}
+      <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+        <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          QA Results Summary
+        </p>
+      </div>
+
+      {/* Markdown-style readable summary */}
+      <div className="px-4 py-4 space-y-4">
+
+        {/* Account & scope */}
+        <div className="space-y-1">
+          <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.6)" }}>Account</p>
+          <p className="text-xs" style={{ color: "rgba(255,255,255,0.85)" }}>{adAccountName || '—'}</p>
+        </div>
+
+        {/* Scope stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Ads Checked</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: "#00BEEF" }}>{totalAds}</p>
+          </div>
+          <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Ad Sets Checked</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: "#00BEEF" }}>{totalAdSets}</p>
+          </div>
+          <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Passed</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: "#00B37A" }}>{passCount}</p>
+          </div>
+          <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Violations</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: violations.length > 0 ? "#FBBF24" : "#00B37A" }}>{violations.length}</p>
+          </div>
+        </div>
+
+        {/* Violation breakdown by type */}
+        {violations.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.6)" }}>Violation Breakdown</p>
+            {(() => {
+              const byType: Record<string, number> = {};
+              for (const v of violations) {
+                for (const s of v.settings) {
+                  byType[s.name] = (byType[s.name] ?? 0) + 1;
+                }
+              }
+              return Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([name, count]) => (
+                <div key={name} className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.55)" }}>{name}</span>
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(251,191,36,0.12)", color: "#FBBF24" }}
+                  >
+                    {count} ad{count !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+
+        {/* Checked ads list */}
+        {totalAds > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.6)" }}>
+              Ads Reviewed ({totalAds})
+            </p>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+              {violations.map(v => (
+                <div
+                  key={v.adId}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.15)" }}
+                >
+                  <AlertTriangle size={11} style={{ color: "#FBBF24", flexShrink: 0 }} />
+                  <span className="text-xs flex-1 truncate" style={{ color: "rgba(255,255,255,0.75)" }}>{v.adName}</span>
+                  <span className="text-[9px]" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    {v.settings.length} issue{v.settings.length !== 1 ? 's' : ''}
+                  </span>
+                  <a
+                    href={v.adsManagerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#00BEEF", flexShrink: 0 }}
+                    title="Open in Ads Manager"
+                  >
+                    <ExternalLink size={10} />
+                  </a>
+                </div>
+              ))}
+              {/* Passing ads placeholder note */}
+              {passCount > 0 && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: "rgba(0,179,122,0.05)", border: "1px solid rgba(0,179,122,0.12)" }}
+                >
+                  <CheckCircle2 size={11} style={{ color: "#00B37A", flexShrink: 0 }} />
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                    {passCount} ad{passCount !== 1 ? 's' : ''} passed all checks — see Excel report for full details
+                  </span>
+                </div>
+              )}
+              {passCount === totalAds && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: "rgba(0,179,122,0.05)", border: "1px solid rgba(0,179,122,0.12)" }}
+                >
+                  <CheckCircle2 size={11} style={{ color: "#00B37A", flexShrink: 0 }} />
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+                    All {totalAds} ads passed — see Excel report for full settings detail
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Download hint */}
+        <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+          Download the Excel report above for the full ad-by-ad checklist including landing pages, headlines, CTAs, and ad set targeting details.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Config Section ────────────────────────────────────────────────────────────
+
+function ConfigSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2.5">
+        <p className="text-xs font-bold" style={{ color: "rgba(255,255,255,0.5)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {title}
+        </p>
+      </div>
+      <div className="flex flex-col gap-3">{children}</div>
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs mb-1.5" style={{ color: "rgba(255,255,255,0.5)" }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ── Selector Section ──────────────────────────────────────────────────────────
 
 function SelectorSection({
   title, count, selectedCount, open, onToggle, loading, disabled, disabledMessage,
@@ -871,69 +1175,80 @@ function SelectorSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-surface-1 border border-border rounded-xl overflow-hidden ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.09)",
+        opacity: disabled ? 0.45 : 1,
+        pointerEvents: disabled ? 'none' : 'auto',
+      }}
+    >
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-2/30 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2.5 transition-colors"
+        style={{ background: open ? "rgba(255,255,255,0.04)" : "transparent" }}
       >
         <div className="flex items-center gap-2">
-          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <span className="text-[12px] font-700 text-foreground">{title}</span>
-          <span className="text-[10px] text-muted-foreground">
+          {open ? <ChevronUp size={13} style={{ color: "rgba(255,255,255,0.4)" }} /> : <ChevronDown size={13} style={{ color: "rgba(255,255,255,0.4)" }} />}
+          <span className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.7)" }}>{title}</span>
+          <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>
             {loading ? '…' : `${count} available`}
           </span>
           {selectedCount > 0 && (
-            <span className="text-[10px] font-600 text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded"
+              style={{ background: "rgba(0,190,239,0.15)", color: "#00BEEF" }}
+            >
               {selectedCount} selected
             </span>
           )}
         </div>
         {disabled && disabledMessage && (
-          <span className="text-[10px] text-muted-foreground/50 italic">{disabledMessage}</span>
+          <span className="text-[10px] italic" style={{ color: "rgba(255,255,255,0.3)" }}>{disabledMessage}</span>
         )}
       </button>
 
       {open && !disabled && (
-        <div className="border-t border-border">
-          {/* Filter + Actions bar */}
-          <div className="flex items-center justify-between px-4 py-2 bg-surface-2/20 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Filter size={10} className="text-muted-foreground/50" />
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+          {/* Filter + Actions */}
+          <div className="flex items-center justify-between px-3 py-2" style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-1.5">
+              <Filter size={9} style={{ color: "rgba(255,255,255,0.3)" }} />
               {filter}
             </div>
-            <div className="flex items-center gap-3">
-              {actions}
-            </div>
+            <div className="flex items-center gap-2">{actions}</div>
           </div>
 
           {/* Search */}
-          <div className="px-4 py-2 border-b border-border">
-            <div className="relative">
-              <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40" />
+          <div className="px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <Search size={10} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
               <input
                 value={search}
                 onChange={e => onSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-7 pr-3 py-1.5 text-[11px] bg-surface-2/40 border border-border rounded-lg outline-none focus:border-primary/50 placeholder:text-muted-foreground/30"
+                className="flex-1 min-w-0 bg-transparent outline-none text-xs"
+                style={{ color: "rgba(255,255,255,0.7)", fontFamily: "'Montserrat', sans-serif" }}
               />
             </div>
           </div>
 
           {/* List */}
-          <div className="max-h-[240px] overflow-y-auto">
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
             {loading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+              <div className="flex items-center justify-center py-5">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: "rgba(255,255,255,0.3)" }} />
               </div>
-            ) : (
-              children
-            )}
+            ) : children}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+// ── Filter Pills ──────────────────────────────────────────────────────────────
 
 function FilterPills({ options, value, onChange }: {
   options: { value: string; label: string }[];
@@ -946,11 +1261,11 @@ function FilterPills({ options, value, onChange }: {
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`px-2 py-0.5 rounded text-[10px] font-600 transition-all ${
-            value === opt.value
-              ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
-              : 'text-muted-foreground hover:text-foreground border border-transparent'
-          }`}
+          className="px-2 py-0.5 rounded text-[10px] font-semibold transition-all"
+          style={value === opt.value
+            ? { background: "rgba(0,190,239,0.15)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.3)" }
+            : { color: "rgba(255,255,255,0.4)", border: "1px solid transparent" }
+          }
         >
           {opt.label}
         </button>
@@ -958,6 +1273,8 @@ function FilterPills({ options, value, onChange }: {
     </div>
   );
 }
+
+// ── Selectable Row ────────────────────────────────────────────────────────────
 
 function SelectableRow({ selected, onClick, label, meta, id }: {
   selected: boolean;
@@ -969,17 +1286,21 @@ function SelectableRow({ selected, onClick, label, meta, id }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-surface-2/30 transition-colors border-b border-border/50 last:border-b-0 ${
-        selected ? 'bg-cyan-500/5' : ''
-      }`}
+      className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors"
+      style={{
+        background: selected ? "rgba(0,190,239,0.06)" : "transparent",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+      }}
+      onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = selected ? "rgba(0,190,239,0.06)" : "transparent"; }}
     >
       {selected
-        ? <CheckSquare size={14} className="text-cyan-400 flex-shrink-0" />
-        : <Square size={14} className="text-muted-foreground/30 flex-shrink-0" />
+        ? <CheckSquare size={13} style={{ color: "#00BEEF", flexShrink: 0 }} />
+        : <Square size={13} style={{ color: "rgba(255,255,255,0.2)", flexShrink: 0 }} />
       }
       <div className="flex-1 min-w-0">
-        <div className="text-[11px] font-600 text-foreground truncate">{label}</div>
-        <div className="text-[9px] text-muted-foreground/60 truncate">{meta} · {id}</div>
+        <div className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.8)" }}>{label}</div>
+        <div className="text-[9px] truncate" style={{ color: "rgba(255,255,255,0.35)" }}>{meta} · {id}</div>
       </div>
     </button>
   );
