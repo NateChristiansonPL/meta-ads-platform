@@ -277,7 +277,7 @@ async function runAdsQaWithViolations(
   ));
 
   // Batch 2: fetch all creatives
-  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,object_type";
+  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,object_type,child_attachments";
   const creativeBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${creativeFields}` }));
   const creativeResults = creativeIds.length ? await batchRequest(creativeBatch, accessToken) : [];
   const creativesData: Record<string, any> = {};
@@ -903,7 +903,7 @@ export async function fixAdDofSpec(params: {
 
   try {
     // ── Step 1: Fetch existing creative ──────────────────────────────────────
-    const fieldsToFetch = "id,name,object_story_spec,asset_feed_spec,url_tags,degrees_of_freedom_spec,object_type,account_id";
+    const fieldsToFetch = "id,name,object_story_spec,asset_feed_spec,child_attachments,portrait_customizations,url_tags,degrees_of_freedom_spec,object_type,account_id";
     console.log("[fixAdDofSpec] Step 1: Fetching creative", creativeId);
     const creativeResp = await axios.get(`${BASE_URL}/${creativeId}`, {
       params: { fields: fieldsToFetch, access_token: accessToken },
@@ -918,8 +918,12 @@ export async function fixAdDofSpec(params: {
       account_id: accountId,
       hasObjectStorySpec: !!existingCreative.object_story_spec,
       hasAssetFeedSpec: !!existingCreative.asset_feed_spec,
+      hasChildAttachments: !!existingCreative.child_attachments,
+      format: existingCreative.object_story_spec?.link_data?.child_attachments ? "carousel" : existingCreative.asset_feed_spec?.videos ? "video_pac" : "other",
     }));
 
+    // Carousel creatives always have object_story_spec (link_data.child_attachments lives inside it).
+    // PAC/video creatives use asset_feed_spec. We need at least one to reconstruct the creative.
     if (!existingCreative.object_story_spec && !existingCreative.asset_feed_spec) {
       return {
         success: false,
@@ -1015,6 +1019,16 @@ export async function fixAdDofSpec(params: {
 
     if (existingCreative.object_story_spec) {
       newCreativePayload.object_story_spec = existingCreative.object_story_spec;
+    }
+    // child_attachments — top-level on carousel creatives; must be copied or Meta
+    // creates a blank creative with no cards
+    if (existingCreative.child_attachments) {
+      newCreativePayload.child_attachments = existingCreative.child_attachments;
+    }
+    // portrait_customizations — carousel-specific top-level field controlling delivery mode
+    // (e.g. optimal_num_cards). Must be copied or Meta resets to default all-cards behaviour.
+    if (existingCreative.portrait_customizations) {
+      newCreativePayload.portrait_customizations = existingCreative.portrait_customizations;
     }
     if (existingCreative.url_tags) {
       newCreativePayload.url_tags = existingCreative.url_tags;
@@ -1188,16 +1202,22 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fix multi-advertiser violations in-place on the existing creative.
- * Unlike fixAdDofSpec, this does NOT create a new creative — it directly
- * updates contextual_multi_ads and asset_feed_spec.multi_advertiser_eligibility
- * on the existing creative ID, preserving the creative ID for all linked ads.
+ * Fix multi-advertiser (contextual_multi_ads) violations.
+ *
+ * Strategy mirrors fixAdDofSpec — try the least-invasive path first:
+ *   Step 1: Fetch the existing creative (includes object_type to detect SHARE-lock).
+ *   Step 2: Attempt an ad-level write with the existing creative_id + OPT_OUT override.
+ *   Step 3: Verify the write persisted by re-reading the ad's creative.
+ *           If persisted → return success with isSharedCreative: false (creative ID unchanged).
+ *   Step 4 (fallback — SHARE-locked only): Create a new creative with OPT_OUT baked in,
+ *           then reassign the ad. Returns isSharedCreative: true so the UI can surface
+ *           the learning-phase warning.
  */
 export async function fixMultiAdvertiserOnly(params: {
   adId: string;
   creativeId: string;
   accessToken: string;
-}): Promise<{ success: boolean; error?: string; debug?: unknown }> {
+}): Promise<{ success: boolean; isSharedCreative?: boolean; error?: string; debug?: unknown }> {
   const { adId, creativeId, accessToken } = params;
 
   try {
@@ -1210,8 +1230,8 @@ export async function fixMultiAdvertiserOnly(params: {
         access_token: accessToken,
         fields: [
           "id","name","object_story_spec","asset_feed_spec","degrees_of_freedom_spec",
-          "contextual_multi_ads","url_tags","call_to_action_type","image_hash",
-          "image_url","video_id","thumbnail_url","body","title","link_url",
+          "contextual_multi_ads","portrait_customizations","url_tags","call_to_action_type",
+          "image_hash","image_url","video_id","thumbnail_url","body","title","link_url",
           "object_type","status","account_id",
         ].join(","),
       },
@@ -1249,13 +1269,16 @@ export async function fixMultiAdvertiserOnly(params: {
     const enrollStatus = verifiedCreative?.contextual_multi_ads?.enroll_status;
     console.log("[fixMultiAdv] Verified after update:", JSON.stringify(verifiedCreative));
 
-    // If it's already fixed, we're done
+    // If it's already fixed, creative ID was not changed — we're done
     if (enrollStatus === "OPT_OUT") {
-      return { success: true, debug: { method: "ad_level_update", verifiedAfter: verifiedCreative } };
+      return { success: true, isSharedCreative: false, debug: { method: "ad_level_update", verifiedAfter: verifiedCreative } };
     }
 
     // Step 4: SHARE-lock fallback — create a brand new creative with OPT_OUT, then point the ad to it
-    console.log("[fixMultiAdv] Step 4: SHARE-lock detected, creating new creative with OPT_OUT");
+    // The ad-level write did not persist, which means the creative is SHARE-locked.
+    // This will assign a new creative ID to this ad and may restart the learning phase.
+    const isSharedCreativeMA = existingCreative?.object_type === "SHARE";
+    console.log("[fixMultiAdv] Step 4: Direct write did not persist (object_type=%s). Creating new creative.", existingCreative?.object_type);
     if (!adAccountId) {
       return { success: false, error: "Could not determine ad account ID for creative duplication.", debug: { verifiedAfter: verifiedCreative } };
     }
@@ -1269,6 +1292,8 @@ export async function fixMultiAdvertiserOnly(params: {
     if (existingCreative.object_story_spec) newCreativePayload.object_story_spec = existingCreative.object_story_spec;
     if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
     if (existingCreative.degrees_of_freedom_spec) newCreativePayload.degrees_of_freedom_spec = existingCreative.degrees_of_freedom_spec;
+    // portrait_customizations — carousel delivery mode; omitting resets to Meta default
+    if (existingCreative.portrait_customizations) newCreativePayload.portrait_customizations = existingCreative.portrait_customizations;
     if (existingCreative.url_tags) newCreativePayload.url_tags = existingCreative.url_tags;
 
     const createFormBody = new URLSearchParams();
@@ -1307,7 +1332,7 @@ export async function fixMultiAdvertiserOnly(params: {
     console.log("[fixMultiAdv] Final verified:", JSON.stringify(finalCreative));
 
     if (finalCreative?.contextual_multi_ads?.enroll_status === "OPT_OUT") {
-      return { success: true, debug: { method: "new_creative", newCreativeId: newCreativeIdCreated, verifiedAfter: finalCreative } };
+      return { success: true, isSharedCreative: isSharedCreativeMA, debug: { method: "new_creative", newCreativeId: newCreativeIdCreated, verifiedAfter: finalCreative } };
     }
 
     return {
