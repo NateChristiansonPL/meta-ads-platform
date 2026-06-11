@@ -1041,6 +1041,7 @@ export const appRouter = router({
       .input(z.object({
         adId: z.string().min(1),
         creativeId: z.string().min(1),
+        specKey: z.string().optional(),
         tokenId: z.number().int().positive().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1063,6 +1064,7 @@ export const appRouter = router({
         const result = await fixMultiAdvertiserOnly({
           adId: input.adId,
           creativeId: input.creativeId,
+          specKey: input.specKey ?? "STATIC_NO_PAC",
           accessToken: metaAccessToken,
         });
 

@@ -28,6 +28,7 @@ interface QaViolation {
   specKey: string;
   settings: Array<{ name: string; currentValue: string; expectedValue: string }>;
   adsManagerUrl: string;
+  isSharedCreative: boolean;
 }
 
 type StatusFilter = 'ACTIVE' | 'PAUSED' | 'ALL';
@@ -334,7 +335,6 @@ function QaVerificationContent() {
 
   const hasDofSettings = (v: QaViolation) => v.settings.some(s => !MULTI_ADV_NAMES.has(s.name));
   const hasMultiAdvSettings = (v: QaViolation) => v.settings.some(s => MULTI_ADV_NAMES.has(s.name));
-
   const fixViolation = trpc.runs.fixAdDofViolation.useMutation();
   const fixMultiAdv = trpc.runs.fixMultiAdvertiserViolation.useMutation();
 
@@ -362,6 +362,7 @@ function QaVerificationContent() {
       const result = await fixMultiAdv.mutateAsync({
         adId: violation.adId,
         creativeId: violation.creativeId,
+        specKey: violation.specKey,
         tokenId: tokenId ?? undefined,
       });
       console.log('[fixMultiAdv] Full debug:', JSON.stringify(result?.debug));
@@ -904,41 +905,45 @@ function QaVerificationContent() {
                               Creative ID: {v.creativeId} · Format: {v.specKey}
                             </div>
                           </div>
+
+                          {/* ── Action column ── */}
                           <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
-                            {dofSettings.length > 0 && (
-                              dofFixed ? (
-                                <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
-                                  <CheckCircle2 size={11} /> Creative Fixed
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => handleFixDof(v)}
-                                  disabled={dofFixing}
-                                  className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
-                                  style={{ background: "rgba(0,190,239,0.15)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.3)" }}
-                                >
-                                  {dofFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
-                                  {dofFixing ? 'Fixing…' : 'Fix Creative'}
-                                </button>
-                              )
-                            )}
-                            {multiAdvSettings.length > 0 && (
-                              multiAdvFixed ? (
-                                <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
-                                  <CheckCircle2 size={11} /> Multi-Adv Fixed
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => handleFixMultiAdv(v)}
-                                  disabled={multiAdvFixing}
-                                  className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
-                                  style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
-                                >
-                                  {multiAdvFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
-                                  {multiAdvFixing ? 'Fixing…' : 'Fix Multi-Adv'}
-                                </button>
-                              )
-                            )}
+                            <>
+                                {dofSettings.length > 0 && (
+                                  dofFixed ? (
+                                    <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
+                                      <CheckCircle2 size={11} /> Creative Fixed
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleFixDof(v)}
+                                      disabled={dofFixing}
+                                      className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                                      style={{ background: "rgba(0,190,239,0.15)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.3)" }}
+                                    >
+                                      {dofFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
+                                      {dofFixing ? 'Fixing…' : 'Fix Creative'}
+                                    </button>
+                                  )
+                                )}
+                                {multiAdvSettings.length > 0 && (
+                                  multiAdvFixed ? (
+                                    <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
+                                      <CheckCircle2 size={11} /> Multi-Adv Fixed
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleFixMultiAdv(v)}
+                                      disabled={multiAdvFixing}
+                                      className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all disabled:opacity-50"
+                                      style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+                                    >
+                                      {multiAdvFixing ? <Loader2 size={11} className="animate-spin" /> : <Wrench size={11} />}
+                                      {multiAdvFixing ? 'Fixing…' : 'Fix Multi-Adv'}
+                                    </button>
+                                  )
+                                )}
+                              </>
                           </div>
                         </div>
                       </div>

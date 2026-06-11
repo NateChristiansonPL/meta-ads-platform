@@ -1211,9 +1211,10 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
 export async function fixMultiAdvertiserOnly(params: {
   adId: string;
   creativeId: string;
+  specKey: string;
   accessToken: string;
 }): Promise<{ success: boolean; isSharedCreative?: boolean; error?: string; debug?: unknown }> {
-  const { adId, creativeId, accessToken } = params;
+  const { adId, creativeId, specKey, accessToken } = params;
 
   try {
     const adUrl = `${BASE_URL}/${adId}`;
@@ -1286,7 +1287,9 @@ export async function fixMultiAdvertiserOnly(params: {
     // Copy over the core creative fields if they exist
     if (existingCreative.object_story_spec) newCreativePayload.object_story_spec = existingCreative.object_story_spec;
     if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
-    if (existingCreative.degrees_of_freedom_spec) newCreativePayload.degrees_of_freedom_spec = existingCreative.degrees_of_freedom_spec;
+    // Use buildFullDofSpec instead of copying the existing DOF — the existing creative
+    // may contain deprecated fields like standard_enhancements that Meta rejects on create.
+    newCreativePayload.degrees_of_freedom_spec = buildFullDofSpec(specKey);
     // portrait_customizations — carousel delivery mode; omitting resets to Meta default
     if (existingCreative.portrait_customizations) newCreativePayload.portrait_customizations = existingCreative.portrait_customizations;
     if (existingCreative.url_tags) newCreativePayload.url_tags = existingCreative.url_tags;
