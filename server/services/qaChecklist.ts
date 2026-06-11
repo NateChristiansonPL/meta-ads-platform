@@ -277,7 +277,7 @@ async function runAdsQaWithViolations(
   ));
 
   // Batch 2: fetch all creatives
-  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id";
+  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,object_type";
   const creativeBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${creativeFields}` }));
   const creativeResults = creativeIds.length ? await batchRequest(creativeBatch, accessToken) : [];
   const creativesData: Record<string, any> = {};
@@ -400,6 +400,7 @@ async function runAdsQaWithViolations(
         specKey,
         settings,
         adsManagerUrl: `https://www.facebook.com/adsmanager/manage/ads?act=${cleanAccountId}&selected_ad_ids=${adId}`,
+        isSharedCreative: c.object_type === "SHARE",
       });
     }
 
@@ -733,6 +734,9 @@ export interface QaViolation {
   specKey: string;
   settings: Array<{ name: string; currentValue: string; expectedValue: string }>;
   adsManagerUrl: string;
+  /** True when object_type === "SHARE" — the creative is shared across multiple ads.
+   *  Fixing via API will create a new creative ID and may restart the learning phase. */
+  isSharedCreative: boolean;
 }
 
 export interface QaChecklistResult {
@@ -871,84 +875,150 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
- * Fix an ad's DOF spec by creating a NEW creative with corrected degrees_of_freedom_spec
- * and reassigning the ad to use the new creative.
+ * Fix an ad's DOF spec.
  *
- * Three-step approach (same pattern as the campaign builder's ad creation flow):
- * 1. Fetch the existing creative's object_story_spec + url_tags from Meta
- * 2. Create a NEW creative under the ad account with the same content + corrected DOF spec
- * 3. Update the ad to point to the new creative ID
+ * Strategy — try the least-invasive approach first, escalate only if needed:
  *
- * This avoids the shared-creative problem (multiple ads using the same creative)
- * and ensures Meta actually persists the DOF changes (unlike the creative_id + DOF approach
- * which Meta silently ignores).
+ *   Step 1: Fetch the existing creative (content + DOF + object_type).
+ *   Step 2: Attempt a direct write to POST /{creativeId} with just degrees_of_freedom_spec
+ *           + audios fix. This works for non-SHARE creatives and preserves the creative ID
+ *           for every ad using it.
+ *   Step 3: Verify the DOF actually persisted by re-reading the creative. Meta silently
+ *           ignores writes on SHARE-locked creatives (object_type=SHARE), so we can't
+ *           trust the HTTP 200 alone.
+ *   Step 4 (fallback — only if verify fails): Create a NEW creative with the corrected DOF
+ *           baked in, then reassign the ad. This is the nuclear option — it changes the
+ *           creative ID and breaks the link to any sibling ads sharing the same creative.
+ *           Only reached for SHARE-locked creatives where direct write is impossible.
  */
 export async function fixAdDofSpec(params: {
   adId: string;
   creativeId: string;
   specKey: string;
   accessToken: string;
-}): Promise<{ success: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
+}): Promise<{ success: boolean; isSharedCreative?: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
 
   const dofSpec = buildFullDofSpec(specKey);
 
   try {
-    // Step 1: Fetch the ad's account_id and existing creative content
-    console.log("[fixAdDofSpec] Step 1: Fetching ad", adId, "for account_id");
-    const adResp = await axios.get(`${BASE_URL}/${adId}`, {
-      params: { fields: "account_id", access_token: accessToken },
-      timeout: 30000,
-    });
-    const accountId = adResp.data.account_id;
-    if (!accountId) {
-      return {
-        success: false,
-        error: "Could not fetch account_id from ad.",
-        debug: { url: `${BASE_URL}/${adId}`, body: { fields: "account_id" }, response: adResp.data },
-      };
-    }
-    console.log("[fixAdDofSpec] Account ID:", accountId);
-
-    // Fetch existing creative content
-    const fieldsToFetch = "object_story_spec,url_tags,name,asset_feed_spec";
-    console.log("[fixAdDofSpec] Fetching creative", creativeId, "fields:", fieldsToFetch);
+    // ── Step 1: Fetch existing creative ──────────────────────────────────────
+    const fieldsToFetch = "id,name,object_story_spec,asset_feed_spec,url_tags,degrees_of_freedom_spec,object_type,account_id";
+    console.log("[fixAdDofSpec] Step 1: Fetching creative", creativeId);
     const creativeResp = await axios.get(`${BASE_URL}/${creativeId}`, {
       params: { fields: fieldsToFetch, access_token: accessToken },
       timeout: 30000,
     });
     const existingCreative = creativeResp.data;
-    console.log("[fixAdDofSpec] Existing creative:", JSON.stringify({
+    const accountId = existingCreative?.account_id;
+    const objectType = existingCreative?.object_type;
+    console.log("[fixAdDofSpec] Creative fetched:", JSON.stringify({
       id: existingCreative.id,
+      object_type: objectType,
+      account_id: accountId,
       hasObjectStorySpec: !!existingCreative.object_story_spec,
-      hasUrlTags: !!existingCreative.url_tags,
       hasAssetFeedSpec: !!existingCreative.asset_feed_spec,
-      name: existingCreative.name,
     }));
 
-    if (!existingCreative.object_story_spec) {
+    if (!existingCreative.object_story_spec && !existingCreative.asset_feed_spec) {
       return {
         success: false,
-        error: "Could not fetch object_story_spec from existing creative. Cannot create replacement.",
+        error: "Could not fetch object_story_spec or asset_feed_spec from creative — cannot fix or duplicate.",
         debug: { url: `${BASE_URL}/${creativeId}`, body: { fields: fieldsToFetch }, response: existingCreative },
       };
     }
 
-    // Step 2: Create a NEW creative under the ad account with corrected DOF spec
+    // ── Step 1b: Pre-flight shared-creative warning ─────────────────────────────
+    // object_type === "SHARE" means this creative is linked to a published post and
+    // shared across multiple ads. Meta silently ignores direct DOF writes on these.
+    // We still attempt the write (in case Meta's behaviour changes), but we surface
+    // isSharedCreative so the UI can warn the user before they click Fix.
+    const isSharedCreative = objectType === "SHARE";
+    if (isSharedCreative) {
+      console.log("[fixAdDofSpec] Creative is SHARE-locked — direct write will likely be ignored. Will fall back to new creative if needed.");
+    }
+
+    // ── Step 2: Attempt direct write to the existing creative ─────────────────
+    // Build the direct-write payload: only fields Meta accepts on creative update
+    const directWritePayload: Record<string, unknown> = {
+      degrees_of_freedom_spec: dofSpec,
+    };
+    // Fix audios in-place if asset_feed_spec is present
+    if (existingCreative.asset_feed_spec) {
+      directWritePayload.asset_feed_spec = {
+        ...existingCreative.asset_feed_spec,
+        audios: [{ type: "opted_out" }],
+      };
+    }
+
+    const directWriteUrl = `${BASE_URL}/${creativeId}`;
+    console.log("[fixAdDofSpec] Step 2: Attempting direct write to creative", creativeId);
+    try {
+      await axios.post(directWriteUrl, {
+        ...directWritePayload,
+        access_token: accessToken,
+      }, { timeout: 30000 });
+    } catch (writeErr: any) {
+      // Non-fatal — if Meta rejects the write (e.g. permission error) we log and fall through to fallback
+      console.warn("[fixAdDofSpec] Direct write rejected by Meta:", writeErr?.response?.data?.error?.message || writeErr?.message);
+    }
+
+    // ── Step 3: Verify the write actually took ────────────────────────────────
+    // Meta returns HTTP 200 on SHARE-locked creatives but silently ignores the changes.
+    // Re-reading is the only reliable way to confirm.
+    console.log("[fixAdDofSpec] Step 3: Verifying direct write persisted on creative", creativeId);
+    const verifyResp = await axios.get(`${BASE_URL}/${creativeId}`, {
+      params: { fields: "id,degrees_of_freedom_spec,asset_feed_spec", access_token: accessToken },
+      timeout: 30000,
+    });
+    const verifiedDof = verifyResp.data?.degrees_of_freedom_spec;
+    const verifiedAudios = verifyResp.data?.asset_feed_spec?.audios;
+
+    // Check: at minimum, all enroll_statuses in creative_features_spec should now be OPT_OUT
+    const dofVerified = verifiedDof && (() => {
+      const features = verifiedDof.creative_features_spec || {};
+      return Object.values(features).every((v: any) => !v.enroll_status || v.enroll_status === "OPT_OUT");
+    })();
+    const audiosVerified = !existingCreative.asset_feed_spec ||
+      (verifiedAudios?.length === 1 && verifiedAudios[0]?.type === "opted_out");
+
+    if (dofVerified && audiosVerified) {
+      console.log("[fixAdDofSpec] Direct write verified — creative ID preserved:", creativeId);
+      return {
+        success: true,
+        isSharedCreative: false,
+        debug: {
+          url: directWriteUrl,
+          body: { method: "direct_write", creativeId },
+          response: { dofVerified, audiosVerified, verifiedDof },
+        },
+      };
+    }
+
+    // ── Step 4: Fallback — create new creative + reassign ─────────────────────
+    // Reached only when direct write was silently ignored (SHARE-locked creative).
+    console.log("[fixAdDofSpec] Step 4: Direct write did not persist (SHARE-locked). Creating new creative.");
+    if (!accountId) {
+      return {
+        success: false,
+        error: "Creative write did not persist and account_id is unavailable — cannot create replacement.",
+        debug: { url: directWriteUrl, body: directWritePayload, response: verifyResp.data },
+      };
+    }
+
     const newCreativePayload: Record<string, unknown> = {
       name: existingCreative.name ? `${existingCreative.name} (DOF fixed)` : `Creative ${creativeId} (DOF fixed)`,
-      object_story_spec: existingCreative.object_story_spec,
       degrees_of_freedom_spec: dofSpec,
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
       multi_advertiser_eligibility: "INELIGIBLE",
     };
 
-    // Preserve url_tags if present
+    if (existingCreative.object_story_spec) {
+      newCreativePayload.object_story_spec = existingCreative.object_story_spec;
+    }
     if (existingCreative.url_tags) {
       newCreativePayload.url_tags = existingCreative.url_tags;
     }
-
-    // Fix asset_feed_spec.audios to turn off "Add Music"
     if (existingCreative.asset_feed_spec) {
       newCreativePayload.asset_feed_spec = {
         ...existingCreative.asset_feed_spec,
@@ -957,10 +1027,7 @@ export async function fixAdDofSpec(params: {
     }
 
     const createUrl = `${BASE_URL}/act_${accountId}/adcreatives`;
-    console.log("[fixAdDofSpec] Step 2: Creating new creative at:", createUrl);
-    console.log("[fixAdDofSpec] DOF spec keys:", Object.keys(dofSpec));
-    console.log("[fixAdDofSpec] creative_features_spec field count:", Object.keys((dofSpec as any).creative_features_spec || {}).length);
-
+    console.log("[fixAdDofSpec] Creating new creative at:", createUrl);
     const createResp = await axios.post(createUrl, {
       ...newCreativePayload,
       access_token: accessToken,
@@ -976,23 +1043,24 @@ export async function fixAdDofSpec(params: {
     }
     console.log("[fixAdDofSpec] New creative created:", newCreativeId);
 
-    // Step 3: Update the ad to point to the new creative
+    // Reassign the ad to the new creative
     const updateAdUrl = `${BASE_URL}/${adId}`;
-    console.log("[fixAdDofSpec] Step 3: Updating ad", adId, "to use new creative", newCreativeId);
+    console.log("[fixAdDofSpec] Reassigning ad", adId, "to new creative", newCreativeId);
     const updateResp = await axios.post(updateAdUrl, {
       creative: JSON.stringify({ creative_id: newCreativeId }),
       access_token: accessToken,
     }, { timeout: 60000 });
-    console.log("[fixAdDofSpec] Ad update response:", JSON.stringify(updateResp.data));
+    console.log("[fixAdDofSpec] Ad reassign response:", JSON.stringify(updateResp.data));
 
     return {
       success: true,
+      isSharedCreative: true,
       debug: {
         url: updateAdUrl,
         body: {
-          step1: "Fetched creative content",
-          step2: `Created new creative ${newCreativeId} at ${createUrl}`,
-          step3: `Updated ad ${adId} to use creative ${newCreativeId}`,
+          method: "new_creative_fallback",
+          reason: "Direct write not persisted on SHARE-locked creative",
+          originalCreativeId: creativeId,
           newCreativeId,
         },
         response: updateResp.data,
@@ -1008,7 +1076,7 @@ export async function fixAdDofSpec(params: {
       success: false,
       error: metaMsg,
       debug: {
-        url: `${BASE_URL}/${adId}`,
+        url: `${BASE_URL}/${creativeId}`,
         body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
