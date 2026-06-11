@@ -277,7 +277,7 @@ async function runAdsQaWithViolations(
   ));
 
   // Batch 2: fetch all creatives
-  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,object_type,child_attachments";
+  const creativeFields = "id,name,status,object_story_spec,asset_feed_spec,degrees_of_freedom_spec,url_tags,effective_object_story_id,object_type";
   const creativeBatch = creativeIds.map(id => ({ method: "GET", relative_url: `${id}?fields=${creativeFields}` }));
   const creativeResults = creativeIds.length ? await batchRequest(creativeBatch, accessToken) : [];
   const creativesData: Record<string, any> = {};
@@ -329,7 +329,7 @@ async function runAdsQaWithViolations(
 
     const { format, isPac } = determineFormatAndPac(c);
     const specKey = getSpecKey(format, isPac);
-    const dofViolations = compareDof(c.degrees_of_freedom_spec || {}, EXPECTED_SPECS[specKey]);
+    const dofViolations = compareDof(c.degrees_of_freedom_spec ?? null, EXPECTED_SPECS[specKey]);
 
     // Check asset_feed_spec.audios — "Add Music" is enabled if audios is missing,
     // empty, or contains anything other than [{"type":"opted_out"}]
