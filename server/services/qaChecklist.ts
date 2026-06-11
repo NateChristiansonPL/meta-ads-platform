@@ -903,7 +903,7 @@ export async function fixAdDofSpec(params: {
 
   try {
     // ── Step 1: Fetch existing creative ──────────────────────────────────────
-    const fieldsToFetch = "id,name,object_story_spec,asset_feed_spec,child_attachments,portrait_customizations,url_tags,degrees_of_freedom_spec,object_type,account_id";
+    const fieldsToFetch = "id,name,object_story_spec,asset_feed_spec,portrait_customizations,url_tags,degrees_of_freedom_spec,object_type,account_id";
     console.log("[fixAdDofSpec] Step 1: Fetching creative", creativeId);
     const creativeResp = await axios.get(`${BASE_URL}/${creativeId}`, {
       params: { fields: fieldsToFetch, access_token: accessToken },
@@ -918,7 +918,7 @@ export async function fixAdDofSpec(params: {
       account_id: accountId,
       hasObjectStorySpec: !!existingCreative.object_story_spec,
       hasAssetFeedSpec: !!existingCreative.asset_feed_spec,
-      hasChildAttachments: !!existingCreative.child_attachments,
+      isCarousel: !!existingCreative.object_story_spec?.link_data?.child_attachments,
       format: existingCreative.object_story_spec?.link_data?.child_attachments ? "carousel" : existingCreative.asset_feed_spec?.videos ? "video_pac" : "other",
     }));
 
@@ -1019,11 +1019,6 @@ export async function fixAdDofSpec(params: {
 
     if (existingCreative.object_story_spec) {
       newCreativePayload.object_story_spec = existingCreative.object_story_spec;
-    }
-    // child_attachments — top-level on carousel creatives; must be copied or Meta
-    // creates a blank creative with no cards
-    if (existingCreative.child_attachments) {
-      newCreativePayload.child_attachments = existingCreative.child_attachments;
     }
     // portrait_customizations — carousel-specific top-level field controlling delivery mode
     // (e.g. optimal_num_cards). Must be copied or Meta resets to default all-cards behaviour.
