@@ -1177,22 +1177,25 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
     dha_optimization:                     offWithMeta,
   };
 
-  // creative_sourcing_spec — from ads_qa.py
+  // creative_sourcing_spec — included when creating a new creative via
+  // POST /act_{accountId}/adcreatives. Meta accepts it on creative creation
+  // but rejects it on ad-level updates (POST /{adId}) — see buildWritableDofSpec
+  // for the direct-write path which intentionally omits this.
   const creative_sourcing_spec: Record<string, unknown> = {
-    app_info_spec:              off,
-    brand:                      off,
-    dynamic_site_links_spec:    off,
-    featured_offering_spec:     { enroll_status: "OPT_OUT", media: [] },
-    website_media_spec:         off,
-    website_summary_spec:       off,
+    app_info_spec:               off,
+    brand:                       off,
+    catalog:                     off,
+    dynamic_site_links_spec:     off,
+    featured_offering_spec:      { enroll_status: "OPT_OUT", media: [] },
+    site_links_data_consented:   off,
+    website_media_spec:          off,
+    website_summary_spec:        off,
     destination_screenshot_spec: off,
   };
 
-  // NOTE: creative_sourcing_spec is NOT accepted by Meta's API when updating via
-  // the ad ID or creative ID — it throws "Unexpected key creative_sourcing_spec".
-  // Only creative_features_spec is writable.
   return {
     creative_features_spec,
+    creative_sourcing_spec,
   };
 }
 

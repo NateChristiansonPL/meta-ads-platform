@@ -286,7 +286,6 @@ export default function CampaignBuilderAdmin() {
     { id: "full",     label: "Full Build",  sub: "Campaigns + ad sets + ads" },
     { id: "ads-only", label: "Ads Only",    sub: "Use existing ad set IDs" },
     { id: "update",   label: "Update Ads",  sub: "Swap creative on live ads" },
-    { id: "qa",       label: "QA Checklist", sub: "Verify ads after launch" },
   ];
 
   // ── Header actions ───────────────────────────────────────────────────────────
@@ -445,8 +444,7 @@ export default function CampaignBuilderAdmin() {
               Undo
             </button>
 
-            {/* Tabs (hidden in QA mode) */}
-            {state.buildMode !== 'qa' && (
+            {/* Tabs */}
             <div className="flex items-center gap-0.5">
               {TABS.map(tab => (
                 <button
@@ -472,7 +470,6 @@ export default function CampaignBuilderAdmin() {
                 </button>
               ))}
             </div>
-            )}
           </div>
         )}
 
@@ -492,15 +489,8 @@ export default function CampaignBuilderAdmin() {
             />
           )}
 
-          {/* QA Checklist mode */}
-          {viewMode === "spreadsheet" && state.buildMode === 'qa' && (
-            <div className="h-full overflow-auto">
-              <QaChecklistTab settings={state.settings} />
-            </div>
-          )}
-
           {/* Spreadsheet tabs */}
-          {viewMode === "spreadsheet" && state.buildMode !== 'qa' && (
+          {viewMode === "spreadsheet" && (
             <>
               {activeTab === "campaigns" && (
                 <div className="h-full overflow-auto">
