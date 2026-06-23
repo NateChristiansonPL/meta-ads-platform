@@ -24,8 +24,9 @@
  *       - catalog               (seen with action_metadata.type=MANUAL in PAC/video ads)
  *       - site_links_data_consented  (seen with scope=DATA_CONSENT_ELIGIBLE; Meta activates
  *                                     based on data consent eligibility)
- *     NOTE: buildWritableDofSpec and buildFullDofSpec intentionally omit creative_sourcing_spec
- *     — Meta rejects it with "Unexpected key" on write operations. Detection-only change.
+ *     NOTE: creative_sourcing_spec must be a TOP-LEVEL sibling on the creative, NOT nested
+ *     inside degrees_of_freedom_spec. buildFullDofSpec returns { dof, sourcing } separately.
+ *     buildWritableDofSpec (direct write path) still omits sourcing — Meta rejects it there.
  */
 
 import axios from "axios";
@@ -899,7 +900,7 @@ export async function fixAdDofSpec(params: {
 }): Promise<{ success: boolean; isSharedCreative?: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
 
-  const dofSpec = buildFullDofSpec(specKey);
+  const { dof: dofSpec, sourcing: sourcingSpec } = buildFullDofSpec(specKey);
 
   try {
     // ── Step 1: Fetch existing creative ──────────────────────────────────────
@@ -967,6 +968,22 @@ export async function fixAdDofSpec(params: {
       console.warn("[fixAdDofSpec] Direct write rejected by Meta:", writeErr?.response?.data?.error?.message || writeErr?.message);
     }
 
+    // ── Step 2b: Attempt sourcing spec direct write ───────────────────────────
+    // creative_sourcing_spec is a top-level field on the creative (sibling of degrees_of_freedom_spec).
+    // Meta may or may not accept it on a direct creative update — wrapped in its own try/catch
+    // so a rejection here never blocks the DOF fix or the verify step.
+    try {
+      await axios.post(directWriteUrl, {
+        creative_sourcing_spec: sourcingSpec,
+        access_token: accessToken,
+      }, { timeout: 30000 });
+      console.log("[fixAdDofSpec] Step 2b: Sourcing spec write sent.");
+    } catch (sourcingErr: any) {
+      // Non-fatal — if Meta rejects sourcing writes on direct update, the fallback new-creative
+      // path (Step 4) will handle it with creative_sourcing_spec at the top level.
+      console.warn("[fixAdDofSpec] Step 2b: Sourcing spec write rejected (non-fatal):", sourcingErr?.response?.data?.error?.message || sourcingErr?.message);
+    }
+
     // ── Step 3: Verify the write actually took ────────────────────────────────
     // Meta returns HTTP 200 on SHARE-locked creatives but silently ignores the changes.
     // Re-reading is the only reliable way to confirm.
@@ -1012,7 +1029,8 @@ export async function fixAdDofSpec(params: {
 
     const newCreativePayload: Record<string, unknown> = {
       name: existingCreative.name ? `${existingCreative.name} (DOF fixed)` : `Creative ${creativeId} (DOF fixed)`,
-      degrees_of_freedom_spec: dofSpec,
+      degrees_of_freedom_spec: dofSpec,          // only creative_features_spec inside
+      creative_sourcing_spec: sourcingSpec,       // top-level sibling, NOT inside dof
       contextual_multi_ads: { enroll_status: "OPT_OUT" },
       multi_advertiser_eligibility: "INELIGIBLE",
     };
@@ -1086,7 +1104,7 @@ export async function fixAdDofSpec(params: {
       error: metaMsg,
       debug: {
         url: `${BASE_URL}/${creativeId}`,
-        body: { degrees_of_freedom_spec: dofSpec, access_token: "[REDACTED]" },
+        body: { degrees_of_freedom_spec: dofSpec, creative_sourcing_spec: sourcingSpec, access_token: "[REDACTED]" },
         response: metaError || err?.response?.data,
       },
     };
@@ -1094,14 +1112,12 @@ export async function fixAdDofSpec(params: {
 }
 
 /**
- * Full DOF spec matching ads_qa.py EXPECTED_SPECS.
- * Includes all ~55 creative_features_spec fields with action_metadata wrappers
- * AND creative_sourcing_spec. This is what Meta expects when updating via the ad ID.
+ * Returns { dof, sourcing } where:
+ *   dof     → degrees_of_freedom_spec (creative_features_spec only) — goes INSIDE degrees_of_freedom_spec
+ *   sourcing → creative_sourcing_spec — goes as a TOP-LEVEL sibling on the creative, NOT inside dof
  *
- * Updated to include 6 additional fields from Graph API v25.0 reference:
- *   music_generation, text_extraction_for_headline, text_extraction_for_tap_target,
- *   profile_extension, customize_product_recommendation, text_overlay_translation.
- * Removed video_highlight (singular) — only video_highlights (plural) is in v25.0.
+ * Meta rejects creative_sourcing_spec when nested inside degrees_of_freedom_spec.
+ * Callers must place each at the correct level on the creative payload.
  */
 function buildFullDofSpec(specKey: string): Record<string, unknown> {
   const off = { enroll_status: "OPT_OUT" };
@@ -1193,9 +1209,12 @@ function buildFullDofSpec(specKey: string): Record<string, unknown> {
     destination_screenshot_spec: off,
   };
 
+  // creative_sourcing_spec is a TOP-LEVEL sibling on the creative object —
+  // NOT nested inside degrees_of_freedom_spec. Return them separately so
+  // callers can place each at the correct level.
   return {
-    creative_features_spec,
-    creative_sourcing_spec,
+    dof: { creative_features_spec },
+    sourcing: creative_sourcing_spec,
   };
 }
 
@@ -1292,7 +1311,10 @@ export async function fixMultiAdvertiserOnly(params: {
     if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
     // Use buildFullDofSpec instead of copying the existing DOF — the existing creative
     // may contain deprecated fields like standard_enhancements that Meta rejects on create.
-    newCreativePayload.degrees_of_freedom_spec = buildFullDofSpec(specKey);
+    // creative_sourcing_spec must be top-level on the creative, NOT inside degrees_of_freedom_spec.
+    const { dof: maDofSpec, sourcing: maSourcingSpec } = buildFullDofSpec(specKey);
+    newCreativePayload.degrees_of_freedom_spec = maDofSpec;
+    newCreativePayload.creative_sourcing_spec = maSourcingSpec;
     // portrait_customizations — carousel delivery mode; omitting resets to Meta default
     if (existingCreative.portrait_customizations) newCreativePayload.portrait_customizations = existingCreative.portrait_customizations;
     if (existingCreative.url_tags) newCreativePayload.url_tags = existingCreative.url_tags;
