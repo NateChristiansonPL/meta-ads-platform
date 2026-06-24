@@ -173,6 +173,8 @@ function QaVerificationContent() {
   const [fixingCreativeIds, setFixingCreativeIds] = useState<Set<string>>(new Set());
   const [fixedMultiAdvIds, setFixedMultiAdvIds] = useState<Set<string>>(new Set());
   const [fixingMultiAdvIds, setFixingMultiAdvIds] = useState<Set<string>>(new Set());
+  // Creatives that require manual fix in Ads Manager (existing-post / partnership ads)
+  const [manualFixIds, setManualFixIds] = useState<Set<string>>(new Set());
 
   // ── Data fetching ──
   const { data: campaignData, isLoading: campaignsLoading, refetch: refetchCampaigns } =
@@ -299,6 +301,7 @@ function QaVerificationContent() {
     setFixingCreativeIds(new Set());
     setFixedMultiAdvIds(new Set());
     setFixingMultiAdvIds(new Set());
+    setManualFixIds(new Set());
     try {
       const result = await runQaDirect.mutateAsync({
         adAccountId,
@@ -328,6 +331,7 @@ function QaVerificationContent() {
     setFixingCreativeIds(new Set());
     setFixedMultiAdvIds(new Set());
     setFixingMultiAdvIds(new Set());
+    setManualFixIds(new Set());
   };
 
   // ── Fix violation handlers ──
@@ -341,14 +345,18 @@ function QaVerificationContent() {
   const handleFixDof = async (violation: QaViolation) => {
     setFixingCreativeIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
     try {
-      await fixViolation.mutateAsync({
+      const result = await fixViolation.mutateAsync({
         adId: violation.adId,
         creativeId: violation.creativeId,
         specKey: violation.specKey,
         tokenId: tokenId ?? undefined,
       });
-      setFixedCreativeIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
-      toast.success(`Creative settings fixed: ${violation.adName}`);
+      if ((result as any)?.requiresManualFix) {
+        setManualFixIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
+      } else {
+        setFixedCreativeIds(prev => { const next = new Set(prev); next.add(violation.creativeId); return next; });
+        toast.success(`Creative settings fixed: ${violation.adName}`);
+      }
     } catch (err) {
       toast.error(`Fix failed for ${violation.adName}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -848,6 +856,7 @@ function QaVerificationContent() {
                     const dofFixing = fixingCreativeIds.has(v.creativeId);
                     const multiAdvFixed = fixedMultiAdvIds.has(v.creativeId);
                     const multiAdvFixing = fixingMultiAdvIds.has(v.creativeId);
+                    const requiresManualFix = manualFixIds.has(v.creativeId);
                     const allFixed = (dofSettings.length === 0 || dofFixed) && (multiAdvSettings.length === 0 || multiAdvFixed);
 
                     return (
@@ -914,6 +923,24 @@ function QaVerificationContent() {
                                     <span className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#00B37A" }}>
                                       <CheckCircle2 size={11} /> Creative Fixed
                                     </span>
+                                  ) : requiresManualFix ? (
+                                    <div className="flex flex-col gap-1 items-end">
+                                      <div
+                                        className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg"
+                                        style={{ background: "rgba(251,191,36,0.08)", color: "rgba(251,191,36,0.8)", border: "1px solid rgba(251,191,36,0.2)" }}
+                                      >
+                                        Existing post — fix manually
+                                      </div>
+                                      <a
+                                        href={v.adsManagerUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-[10px] px-3 py-1.5 rounded-lg font-semibold transition-all"
+                                        style={{ background: "rgba(0,190,239,0.1)", color: "#00BEEF", border: "1px solid rgba(0,190,239,0.25)" }}
+                                      >
+                                        <ExternalLink size={10} /> Fix in Meta
+                                      </a>
+                                    </div>
                                   ) : (
                                     <button
                                       onClick={() => handleFixDof(v)}

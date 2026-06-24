@@ -876,6 +876,64 @@ function buildWritableDofSpec(_specKey: string): Record<string, unknown> {
 }
 
 /**
+ * Strip read-only computed fields that Meta returns on read but rejects on write.
+ * Covers all known redundant pairs across object_story_spec sub-objects and
+ * asset_feed_spec arrays. Call this before creating any new creative payload.
+ */
+function sanitizeObjectStorySpec(oss: any): any {
+  if (!oss) return oss;
+  const result = { ...oss };
+
+  // link_data — picture is a computed URL; image_hash is the writable field
+  if (result.link_data) {
+    const { picture, ...linkDataClean } = result.link_data;
+    result.link_data = linkDataClean;
+
+    // child_attachments — each carousel card may also have picture
+    if (Array.isArray(result.link_data.child_attachments)) {
+      result.link_data = {
+        ...result.link_data,
+        child_attachments: result.link_data.child_attachments.map((card: any) => {
+          const { picture: _pic, ...cardClean } = card;
+          return cardClean;
+        }),
+      };
+    }
+  }
+
+  // video_data — image_url and thumbnail_url are computed; keep image_hash and video_id
+  if (result.video_data) {
+    const { image_url, thumbnail_url, ...videoDataClean } = result.video_data;
+    result.video_data = videoDataClean;
+  }
+
+  return result;
+}
+
+function sanitizeAssetFeedSpec(afs: any): any {
+  if (!afs) return afs;
+  const result = { ...afs };
+
+  // images[] — url is computed; hash is the writable field
+  if (Array.isArray(result.images)) {
+    result.images = result.images.map((img: any) => {
+      const { url: _url, ...imgClean } = img;
+      return imgClean;
+    });
+  }
+
+  // videos[] — thumbnail_url is computed
+  if (Array.isArray(result.videos)) {
+    result.videos = result.videos.map((vid: any) => {
+      const { thumbnail_url: _thu, ...vidClean } = vid;
+      return vidClean;
+    });
+  }
+
+  return result;
+}
+
+/**
  * Fix an ad's DOF spec.
  *
  * Strategy — try the least-invasive approach first, escalate only if needed:
@@ -897,7 +955,7 @@ export async function fixAdDofSpec(params: {
   creativeId: string;
   specKey: string;
   accessToken: string;
-}): Promise<{ success: boolean; isSharedCreative?: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
+}): Promise<{ success: boolean; isSharedCreative?: boolean; requiresManualFix?: boolean; error?: string; debug?: { url: string; body: unknown; response?: unknown } }> {
   const { adId, creativeId, specKey, accessToken } = params;
 
   const { dof: dofSpec, sourcing: sourcingSpec } = buildFullDofSpec(specKey);
@@ -923,14 +981,14 @@ export async function fixAdDofSpec(params: {
       format: existingCreative.object_story_spec?.link_data?.child_attachments ? "carousel" : existingCreative.asset_feed_spec?.videos ? "video_pac" : "other",
     }));
 
-    // Carousel creatives always have object_story_spec (link_data.child_attachments lives inside it).
-    // PAC/video creatives use asset_feed_spec. We need at least one to reconstruct the creative.
-    if (!existingCreative.object_story_spec && !existingCreative.asset_feed_spec) {
-      return {
-        success: false,
-        error: "Could not fetch object_story_spec or asset_feed_spec from creative — cannot fix or duplicate.",
-        debug: { url: `${BASE_URL}/${creativeId}`, body: { fields: fieldsToFetch }, response: existingCreative },
-      };
+    // Detect existing-post and partnership ad creatives — these return neither
+    // object_story_spec nor asset_feed_spec because their content is owned by a
+    // Page post or creator partnership, not the ad account. The DOF direct write
+    // (Step 2) will be attempted, but if it doesn't persist there is no fallback —
+    // we cannot reconstruct or duplicate these creatives via API.
+    const isExistingPostCreative = !existingCreative.object_story_spec && !existingCreative.asset_feed_spec;
+    if (isExistingPostCreative) {
+      console.log("[fixAdDofSpec] Existing-post or partnership creative detected — attempting direct write only, no fallback available.");
     }
 
     // ── Step 1b: Pre-flight shared-creative warning ─────────────────────────────
@@ -1016,6 +1074,18 @@ export async function fixAdDofSpec(params: {
       };
     }
 
+    // If this is an existing-post or partnership creative and the direct write didn't
+    // persist, there is no fallback — cannot reconstruct or duplicate the creative.
+    // Return requiresManualFix so the UI surfaces a "fix in Ads Manager" note.
+    if (isExistingPostCreative) {
+      return {
+        success: false,
+        requiresManualFix: true,
+        error: "This ad uses an existing post or partnership creative that cannot be auto-fixed via API. Please update the Advantage+ Creative settings manually in Ads Manager.",
+        debug: { url: directWriteUrl, body: directWritePayload, response: verifyResp.data },
+      };
+    }
+
     // ── Step 4: Fallback — create new creative + reassign ─────────────────────
     // Reached only when direct write was silently ignored (SHARE-locked creative).
     console.log("[fixAdDofSpec] Step 4: Direct write did not persist (SHARE-locked). Creating new creative.");
@@ -1036,7 +1106,7 @@ export async function fixAdDofSpec(params: {
     };
 
     if (existingCreative.object_story_spec) {
-      newCreativePayload.object_story_spec = existingCreative.object_story_spec;
+      newCreativePayload.object_story_spec = sanitizeObjectStorySpec(existingCreative.object_story_spec);
     }
     // portrait_customizations — carousel-specific top-level field controlling delivery mode
     // (e.g. optimal_num_cards). Must be copied or Meta resets to default all-cards behaviour.
@@ -1048,7 +1118,7 @@ export async function fixAdDofSpec(params: {
     }
     if (existingCreative.asset_feed_spec) {
       newCreativePayload.asset_feed_spec = {
-        ...existingCreative.asset_feed_spec,
+        ...sanitizeAssetFeedSpec(existingCreative.asset_feed_spec),
         audios: [{ type: "opted_out" }],
       };
     }
@@ -1307,8 +1377,10 @@ export async function fixMultiAdvertiserOnly(params: {
       contextual_multi_ads: { enroll_status: "OPT_OUT", action_metadata: { type: "STICKY_OPT_OUT" } },
     };
     // Copy over the core creative fields if they exist
-    if (existingCreative.object_story_spec) newCreativePayload.object_story_spec = existingCreative.object_story_spec;
-    if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = existingCreative.asset_feed_spec;
+    if (existingCreative.object_story_spec) {
+      newCreativePayload.object_story_spec = sanitizeObjectStorySpec(existingCreative.object_story_spec);
+    }
+    if (existingCreative.asset_feed_spec) newCreativePayload.asset_feed_spec = sanitizeAssetFeedSpec(existingCreative.asset_feed_spec);
     // Use buildFullDofSpec instead of copying the existing DOF — the existing creative
     // may contain deprecated fields like standard_enhancements that Meta rejects on create.
     // creative_sourcing_spec must be top-level on the creative, NOT inside degrees_of_freedom_spec.
