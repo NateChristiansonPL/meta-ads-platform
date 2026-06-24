@@ -132,7 +132,7 @@ export const appRouter = router({
 
   tokens: router({
     listActive: protectedProcedure.query(async () => getActiveTokens()),
-    listAll: adminProcedure.query(async () => getAllTokens()),
+    listAll: protectedProcedure.query(async () => getAllTokens()),
 
     add: adminProcedure
       .input(z.object({
